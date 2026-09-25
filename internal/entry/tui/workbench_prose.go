@@ -102,7 +102,7 @@ func (m model) nextStepText() string {
 	case situationCancelled:
 		return "创作已取消。输入 /continue 从现有内容继续。"
 	case situationCompleted:
-		return "续写：/goal <总章数>，回车即继续。"
+		return "全书完成。输入 /continue 续写，由 AI 决定写多少；/goal 章数 可固定篇幅。"
 	case situationPaused:
 		return "创作已暂停。输入 /continue 回车继续。"
 	default:

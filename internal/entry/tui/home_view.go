@@ -45,10 +45,10 @@ func (m model) homeFrame() homeFrame {
 		field := m.home.chapterInput
 		field.Width = max(1, inner-20)
 		field.SetCursor(field.Position())
-		field.Prompt = "目标章数  "
+		field.Prompt = "篇幅章数  "
 		add(field.View())
 	} else {
-		line, hits := homeActions([]homeAction{{focusChapters, fmt.Sprintf("目标 %d 章", m.home.chapters)}, {focusApproval, approvalLabel(m.home.approval)}, {focusRefine, "更多设定"}}, x, len(lines), m.home.focus)
+		line, hits := homeActions([]homeAction{{focusChapters, lengthChoice(m.home.chapters)}, {focusApproval, approvalLabel(m.home.approval)}, {focusRefine, "更多设定"}}, x, len(lines), m.home.focus)
 		primary := benchTheme.Accent.Bold(true).Render("开始创作 ↵")
 		if m.home.focus == focusStart {
 			primary = benchTheme.Selected.Render("开始创作 ↵")
@@ -103,9 +103,12 @@ func (m model) homeFrame() homeFrame {
 			if title == "" {
 				title = entry.id
 			}
-			progress := fmt.Sprintf("%d/%d", entry.written, entry.target)
+			progress, bar := fmt.Sprintf("%d/%d", entry.written, entry.target), progressBar(entry.written, entry.target, 6)
+			if entry.target == 0 { // 篇幅交给 AI 且尚未收官（D63）：只有已写章数
+				progress, bar = fmt.Sprintf("%d 章", entry.written), progressBar(0, 0, 6)
+			}
 			state := entry.state
-			right := progressBar(entry.written, entry.target, 6) + "  " + progress + "  " + state
+			right := bar + "  " + progress + "  " + state
 			titleWidth := max(4, inner-lipgloss.Width(right)-5)
 			label := truncate(title, titleWidth)
 			label = label + strings.Repeat(" ", max(1, inner-3-lipgloss.Width(label)-lipgloss.Width(right))) + right
@@ -140,11 +143,19 @@ func (m model) homeFrame() homeFrame {
 		hint = "输入筛选 · Enter 选择作品 · Esc 清除搜索"
 	}
 	if m.home.editingChapters {
-		hint = "输入目标章数 · Enter 确认 · Esc 取消"
+		hint = "输入章数固定篇幅，留空或 0 由 AI 决定 · Enter 确认 · Esc 取消"
 	}
 	add(benchTheme.Muted.Render(hint))
 	frame.text = strings.Join(fitBlock(strings.Join(lines, "\n"), w, h), "\n")
 	return frame
+}
+
+// lengthChoice 是首页的篇幅选项文案：0 表示交给 AI（D63）。
+func lengthChoice(chapters int) string {
+	if chapters == 0 {
+		return "篇幅 AI 决定"
+	}
+	return fmt.Sprintf("固定 %d 章", chapters)
 }
 
 func homeControl(text string, selected bool) string {
@@ -202,9 +213,12 @@ func (m model) handleHomeInline(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			h.err = ""
 			return m, nil
 		case tea.KeyEnter:
-			n, err := strconv.Atoi(strings.TrimSpace(h.chapterInput.Value()))
-			if err != nil || n < 1 {
-				h.err = "请输入正整数章数"
+			n, err := 0, error(nil)
+			if value := strings.TrimSpace(h.chapterInput.Value()); value != "" {
+				n, err = strconv.Atoi(value)
+			}
+			if err != nil || n < 0 {
+				h.err = "请输入章数；留空或 0 表示由 AI 决定"
 				return m, nil
 			}
 			h.chapters = n

@@ -314,7 +314,7 @@ func (m model) idleSceneText() string {
 	case situationNoRun:
 		return "还没有开始创作 · /continue 开始"
 	case situationCompleted:
-		return "全书完成 · /goal 提高目标续写"
+		return "全书完成 · /continue 续写"
 	case situationPaused:
 		return "已暂停 · /continue 继续"
 	case situationFailed:

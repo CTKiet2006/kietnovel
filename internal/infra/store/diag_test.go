@@ -236,7 +236,7 @@ func TestDiagAggregatesCoverHiddenTasksAndCurrentAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.db.Exec(`INSERT INTO creation_runs SELECT 'new-run',content_digest,project_id,goal,strategy,preset,'running','',0,created_at_unix_ms+1,updated_at_unix_ms FROM creation_runs WHERE id='run:book-1'`)
+	_, err = s.db.Exec(`INSERT INTO creation_runs SELECT 'new-run',content_digest,project_id,goal,strategy,preset,'running','',0,'',created_at_unix_ms+1,updated_at_unix_ms FROM creation_runs WHERE id='run:book-1'`)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -108,7 +108,7 @@ func (r *Runtime) Analyze(
 	if !ok {
 		return nil, fmt.Errorf("%w: model is not bound", change.ErrSemanticUnavailable)
 	}
-	var report change.SemanticImpactReport
+	var report model.SemanticImpactReport
 	if _, err := llm.Structured(ctx, binding, llm.Call{
 		System: "你是小说变更影响分析器。判断候选变更与已经发生的故事事实、人物动机和因果链是否冲突。consistent 时 findings/options 必须为空；conflict 或 uncertain 时必须给出 rewrite_affected、reinterpret_future、abandon 三种明确选项。不得替用户作决定。",
 		Input:  string(input),

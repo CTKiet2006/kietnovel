@@ -114,40 +114,52 @@ func (v InitializeProjectInput) Validate() error {
 }
 
 // DevelopPlanInput / RevisePlanInput 的 RequestedChapters 是滚动规划的窗口目标：
-// 提交边界按它校验 chapter 节点数量（§6.3）。
+// 提交边界按它与故事罗盘校验 chapter 节点数量（§6.3 D63）。FixedChapters 为 0 表示
+// 篇幅交给 AI，正数表示用户固定的全书章数。
 type DevelopPlanInput struct {
 	Intent            string `json:"intent"`
-	TargetChapters    int    `json:"target_chapters"`
+	FixedChapters     int    `json:"fixed_chapters,omitempty"`
 	RequestedChapters int    `json:"requested_chapters"`
 	Goal              string `json:"goal,omitempty"`
 }
 
 func (v DevelopPlanInput) Validate() error {
-	if strings.TrimSpace(v.Intent) == "" || v.TargetChapters <= 0 ||
-		v.RequestedChapters <= 0 || v.RequestedChapters > v.TargetChapters {
-		return fmt.Errorf("intent, positive target and requested chapters within target are required: %w", ErrInvalid)
+	if strings.TrimSpace(v.Intent) == "" {
+		return fmt.Errorf("intent is required: %w", ErrInvalid)
 	}
-	return nil
+	return validatePlanRequest(v.FixedChapters, 0, v.RequestedChapters)
 }
 
 // RevisePlanInput 的 Basis 是扩窗所依据的窗口审阅裁定基线（D51）：相干要求或正文
-// 再变化时扩窗任务失效，先重审再扩。
+// 再变化时扩窗任务失效，先重审再扩。PendingRequirements 是尚未兑现、作用域延伸到
+// 新窗口的要求原文（D62），供规划安排落点。
 type RevisePlanInput struct {
-	Intent            string        `json:"intent"`
-	TargetChapters    int           `json:"target_chapters"`
-	ExistingChapters  int           `json:"existing_chapters"`
-	RequestedChapters int           `json:"requested_chapters"`
-	ReviewNotes       []string      `json:"review_notes,omitempty"`
-	Basis             EvidenceBasis `json:"basis,omitzero"`
-	Goal              string        `json:"goal,omitempty"`
+	Intent              string        `json:"intent"`
+	FixedChapters       int           `json:"fixed_chapters,omitempty"`
+	ExistingChapters    int           `json:"existing_chapters"`
+	RequestedChapters   int           `json:"requested_chapters"`
+	ReviewNotes         []string      `json:"review_notes,omitempty"`
+	PendingRequirements []string      `json:"pending_requirements,omitempty"`
+	Basis               EvidenceBasis `json:"basis,omitzero"`
+	Goal                string        `json:"goal,omitempty"`
 }
 
 func (v RevisePlanInput) Validate() error {
-	if strings.TrimSpace(v.Intent) == "" || v.TargetChapters <= 0 || v.ExistingChapters < 0 ||
-		v.RequestedChapters <= v.ExistingChapters || v.RequestedChapters > v.TargetChapters {
-		return fmt.Errorf("intent, positive target and requested chapters beyond existing are required: %w", ErrInvalid)
+	if strings.TrimSpace(v.Intent) == "" {
+		return fmt.Errorf("intent is required: %w", ErrInvalid)
+	}
+	if err := validatePlanRequest(v.FixedChapters, v.ExistingChapters, v.RequestedChapters); err != nil {
+		return err
 	}
 	return v.Basis.Validate()
+}
+
+// validatePlanRequest：请求必须越过已有章数，固定篇幅时不超过全书章数。
+func validatePlanRequest(fixed, existing, requested int) error {
+	if fixed < 0 || existing < 0 || requested <= existing || (fixed > 0 && requested > fixed) {
+		return fmt.Errorf("requested chapters %d must exceed existing %d and stay within fixed %d: %w", requested, existing, fixed, ErrInvalid)
+	}
+	return nil
 }
 
 // ReviseCanonInput 核验来源于某章的事实（§4.4 D41 / §4.5）：FactIDs 是正文改动后待核验
@@ -222,12 +234,20 @@ func (v RewriteAffectedInput) Validate() error {
 }
 
 // ReviewRangeInput 的 Basis 由装配层构造：裁定继承它，有效性按基线判定（D48）。
+// Requirements 是本窗口要逐项核验的要求（D62），裁定必须恰好逐项声明。
 type ReviewRangeInput struct {
 	ChapterIDs   []string      `json:"chapter_ids"`
-	VerifyIntent bool          `json:"verify_intent"`
-	Directives   []Directive   `json:"directives,omitempty"`
+	Requirements []Requirement `json:"requirements,omitempty"`
 	Basis        EvidenceBasis `json:"basis"`
 	Goal         string        `json:"goal,omitempty"`
+}
+
+// Requirement 是审阅要核验的一项要求：用户要求或意图条目（D62）。Settle 表示本窗口
+// 必须给出结论（satisfied 或 violated），不得 pending。
+type Requirement struct {
+	ID     string `json:"id"`
+	Text   string `json:"text"`
+	Settle bool   `json:"settle,omitempty"`
 }
 
 func (v ReviewRangeInput) Validate() error {
@@ -237,8 +257,15 @@ func (v ReviewRangeInput) Validate() error {
 	if err := validateDistinctStrings("review chapters", v.ChapterIDs); err != nil {
 		return err
 	}
-	if err := validateTaskDirectives(v.Directives); err != nil {
-		return err
+	seen := make(map[string]struct{}, len(v.Requirements))
+	for i, requirement := range v.Requirements {
+		if strings.TrimSpace(requirement.ID) == "" || strings.TrimSpace(requirement.Text) == "" {
+			return fmt.Errorf("review requirement %d requires id and text: %w", i, ErrInvalid)
+		}
+		if _, ok := seen[requirement.ID]; ok {
+			return fmt.Errorf("duplicate review requirement %q: %w", requirement.ID, ErrInvalid)
+		}
+		seen[requirement.ID] = struct{}{}
 	}
 	return validateEvidenceBasis("review", v.Basis)
 }
@@ -297,11 +324,17 @@ func TaskDirectives(input TaskInput) []Directive {
 		return value.Directives
 	case *RewriteChapterInput:
 		return value.Directives
-	case *ReviewRangeInput:
-		return value.Directives
 	default:
 		return nil
 	}
+}
+
+// RepairChapters 返回自动修订任务（KindSpec.Repair）针对的章节，修订预算按章计（D63）。
+func RepairChapters(input TaskInput) []string {
+	if value, ok := input.(*RewriteChapterInput); ok {
+		return []string{value.ChapterID}
+	}
+	return nil
 }
 
 // TaskBasis 返回任务输入携带的证据基线（D48/D51）：不带基线的种类返回零值，

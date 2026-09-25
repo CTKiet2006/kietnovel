@@ -41,18 +41,18 @@ func TestBasisForIncludesDependencyClosureAndScopes(t *testing.T) {
 		t.Fatalf("review basis: %v", err)
 	}
 	// 目标正文 + 结构依赖闭包（章节计划及其祖先、随章实体）+ Intent，各取最后变化 revision。
+	// 不钉 Canon（D62）：事实原地更新，账本一致性归事实核验。
 	want := []string{
-		"canon:chapter-chapter-plan-1-outcome@3",
 		"entity:hero@2", "intent:root@1", "manuscript:chapter-chapter-plan-1@3",
 		"plan:arc-1@2", "plan:chapter-plan-1@2", "plan:volume-1@2",
 	}
 	if got := basisKeys(basis); !slices.Equal(got, want) {
 		t.Fatalf("basis documents = %v, want %v", got, want)
 	}
-	if len(basis.Scopes) != 2 || basis.Scopes[1].Kind != model.ScopeDirective ||
-		basis.Scopes[1].Target.ChapterNumber != 1 ||
-		!slices.Equal(basis.Scopes[1].Target.PlanNodeIDs, []string{"chapter-plan-1", "arc-1", "volume-1"}) ||
-		basis.Scopes[1].Digest != model.ScopeDigest(nil) {
+	if len(basis.Scopes) != 1 || basis.Scopes[0].Kind != model.ScopeDirective ||
+		basis.Scopes[0].Target.ChapterNumber != 1 ||
+		!slices.Equal(basis.Scopes[0].Target.PlanNodeIDs, []string{"chapter-plan-1", "arc-1", "volume-1"}) ||
+		basis.Scopes[0].Digest != model.ScopeDigest(nil) {
 		t.Fatalf("basis scopes = %#v", basis.Scopes)
 	}
 	if _, err := novelapp.ReviewBasis(project, []string{"chapter-missing"}); err == nil {

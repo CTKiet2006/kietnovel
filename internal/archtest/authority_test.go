@@ -16,6 +16,7 @@ import (
 // change.Store 契约（domain/change/ports.go）里的写方法不得出现在 app 生产代码。
 var authorityWriteMethods = []string{
 	"SaveProposal", "SaveExecutionProposal", "CommitProposal", "CommitExecutionProposal", "RejectProposal",
+	"UpdatePendingProposal",
 }
 
 func TestAppPackagesWriteAuthorityOnlyThroughChangeEngine(t *testing.T) {

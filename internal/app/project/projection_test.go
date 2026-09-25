@@ -37,7 +37,7 @@ func newProjectionFixture(t *testing.T) *projectionFixture {
 	if _, err := repo.CreateProject(ctx, CreateProjectCommand{
 		ProjectID: fixtureProject, ChangeID: "create", UserID: fixtureUser, Reason: "创建作品",
 		Draft: ProjectDraft{
-			Intent: model.Intent{Premise: "凡人修仙", TargetChapters: 1},
+			Intent: model.Intent{Premise: "凡人修仙"},
 			Plan: []model.PlanNode{
 				{ID: "v1", Kind: model.PlanVolume, Title: "第一卷", Summary: "起"},
 				{ID: "a1", ParentID: "v1", Kind: model.PlanArc, Title: "第一弧", Summary: "承"},

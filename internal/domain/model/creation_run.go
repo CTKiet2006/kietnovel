@@ -44,15 +44,16 @@ func (g CreationRunGoal) Equal(other CreationRunGoal) bool {
 	return g.Kind == other.Kind && bytes.Equal(g.Payload, other.Payload)
 }
 
-// NovelGoal 是小说目标的载荷：一句话前提与目标章数。
+// NovelGoal 是小说目标的载荷：一句话前提与全书章数。TargetChapters 为 0 表示篇幅
+// 交给 AI（由故事罗盘收官承诺，D63），正数表示用户固定。
 type NovelGoal struct {
 	Premise        string `json:"premise"`
-	TargetChapters int    `json:"target_chapters"`
+	TargetChapters int    `json:"target_chapters,omitempty"`
 }
 
 func (g NovelGoal) Validate() error {
-	if strings.TrimSpace(g.Premise) == "" || g.TargetChapters <= 0 {
-		return fmt.Errorf("creation run premise and positive target chapters are required: %w", ErrInvalid)
+	if strings.TrimSpace(g.Premise) == "" || g.TargetChapters < 0 {
+		return fmt.Errorf("creation run premise is required and target chapters cannot be negative: %w", ErrInvalid)
 	}
 	return nil
 }
@@ -143,9 +144,12 @@ type CreationRun struct {
 	State       CreationRunState    `json:"state"`
 	StateReason string              `json:"state_reason,omitempty"`
 	// CompletedRevision 把“完成”绑定到具体 Revision（D29）：之后的任何修改都是新一轮创作。
-	CompletedRevision Revision  `json:"completed_revision,omitempty"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	CompletedRevision Revision `json:"completed_revision,omitempty"`
+	// WaitingOperationID 是运行停下等待其审批的任务（D64），决定卡据此呈现稿件：转入
+	// waiting_user 时写入，暂停时保留，其余转移清空。
+	WaitingOperationID string    `json:"waiting_operation_id,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 func (r CreationRun) Validate() error {
@@ -172,11 +176,39 @@ func (r CreationRun) Validate() error {
 	if r.State != RunCompleted && r.CompletedRevision != InitialRevision {
 		return fmt.Errorf("only completed creation runs bind a revision: %w", ErrInvalid)
 	}
+	if r.WaitingOperationID != "" && r.State != RunWaitingUser && r.State != RunPaused {
+		return fmt.Errorf("a %s creation run cannot wait on an operation: %w", r.State, ErrInvalid)
+	}
 	if r.CreatedAt.IsZero() || r.UpdatedAt.IsZero() || r.UpdatedAt.Before(r.CreatedAt) {
 		return fmt.Errorf("creation run timestamps are invalid: %w", ErrInvalid)
 	}
 	return nil
 }
+
+// RunTransition 是一次运行状态转移。WaitingOperationID 只随转入 waiting_user 写入；转入
+// paused 保留原值，其余转移清空。
+type RunTransition struct {
+	From, To           CreationRunState
+	Reason             string
+	CompletedRevision  Revision
+	WaitingOperationID string
+}
+
+func (t RunTransition) Validate() error {
+	if !CanTransitionCreationRun(t.From, t.To) {
+		return fmt.Errorf("creation run cannot go %s -> %s: %w", t.From, t.To, ErrStateConflict)
+	}
+	if (t.To == RunCompleted) != (t.CompletedRevision > InitialRevision) {
+		return fmt.Errorf("completed creation run must bind a revision, other states must not: %w", ErrInvalid)
+	}
+	if t.WaitingOperationID != "" && t.To != RunWaitingUser {
+		return fmt.Errorf("only waiting_user records the awaited operation: %w", ErrInvalid)
+	}
+	return nil
+}
+
+// KeepsWaiting 报告转移是否保留运行原有的等待任务。
+func (t RunTransition) KeepsWaiting() bool { return t.To == RunPaused }
 
 // Run 事件（§6.3）：目标与运行策略的每次修改都是版本化事件；
 // Operation 创建时绑定当时的策略版本（最近一次策略事件的序号）。
@@ -201,7 +233,7 @@ func CanTransitionCreationRun(from, to CreationRunState) bool {
 		return to == RunWaitingUser || to == RunPaused || to == RunCompleted ||
 			to == RunFailed || to == RunCancelled
 	case RunWaitingUser:
-		return to == RunRunning || to == RunPaused || to == RunFailed || to == RunCancelled
+		return to == RunRunning || to == RunPaused || to == RunCancelled
 	case RunPaused:
 		return to == RunRunning || to == RunCancelled
 	default:

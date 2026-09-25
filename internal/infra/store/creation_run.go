@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/voocel/ainovel-cli/internal/domain/model"
@@ -14,7 +13,7 @@ import (
 
 const creationRunColumns = `
 	id, project_id, goal, strategy, preset, state, state_reason, completed_revision,
-	created_at_unix_ms, updated_at_unix_ms`
+	waiting_operation_id, created_at_unix_ms, updated_at_unix_ms`
 
 const activeRunStates = `'running', 'waiting_user', 'paused'`
 
@@ -52,6 +51,18 @@ func (s *Store) CreateCreationRun(ctx context.Context, run model.CreationRun) (m
 		return model.CreationRun{}, fmt.Errorf("begin creation run insert: %w", err)
 	}
 	defer tx.Rollback()
+	// 每个作品同时最多一个进行中的运行（唯一索引兜底），同 ID 重放走下面的幂等分支；
+	// 写事务从 BEGIN 起持锁，先查后插是原子的。
+	var active bool
+	if err := tx.QueryRowContext(ctx, `
+		SELECT NOT EXISTS (SELECT 1 FROM creation_runs WHERE id = ?)
+			AND EXISTS (SELECT 1 FROM creation_runs WHERE project_id = ? AND state IN (`+activeRunStates+`))`,
+		run.ID, run.ProjectID).Scan(&active); err != nil {
+		return model.CreationRun{}, fmt.Errorf("check active creation run: %w", err)
+	}
+	if active {
+		return model.CreationRun{}, fmt.Errorf("project %q already has an active creation run: %w", run.ProjectID, model.ErrStateConflict)
+	}
 	result, err := tx.ExecContext(ctx, `
 		INSERT INTO creation_runs (
 			id, content_digest, project_id, goal, strategy, preset, state,
@@ -61,10 +72,6 @@ func (s *Store) CreateCreationRun(ctx context.Context, run model.CreationRun) (m
 		run.ID, digest, run.ProjectID, goal, strategy, preset, run.State, run.StateReason,
 		run.CompletedRevision, run.CreatedAt.UnixMilli(), run.UpdatedAt.UnixMilli())
 	if err != nil {
-		if strings.Contains(err.Error(), "creation_runs.project_id") {
-			return model.CreationRun{}, fmt.Errorf(
-				"project %q already has an active creation run: %w", run.ProjectID, model.ErrStateConflict)
-		}
 		return model.CreationRun{}, fmt.Errorf("insert creation run: %w", err)
 	}
 	rows, err := result.RowsAffected()
@@ -136,23 +143,19 @@ func (s *Store) CountCreationRuns(ctx context.Context, projectID string) (int, e
 func (s *Store) TransitionCreationRun(
 	ctx context.Context,
 	id string,
-	from, to model.CreationRunState,
-	reason string,
-	completedRevision model.Revision,
+	transition model.RunTransition,
 	now time.Time,
 ) (model.CreationRun, error) {
-	if !model.CanTransitionCreationRun(from, to) {
-		return model.CreationRun{}, fmt.Errorf("creation run cannot go %s -> %s: %w", from, to, model.ErrStateConflict)
-	}
-	if (to == model.RunCompleted) != (completedRevision > model.InitialRevision) {
-		return model.CreationRun{}, fmt.Errorf(
-			"completed creation run must bind a revision, other states must not: %w", model.ErrInvalid)
+	if err := transition.Validate(); err != nil {
+		return model.CreationRun{}, err
 	}
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE creation_runs
-		SET state = ?, state_reason = ?, completed_revision = ?, updated_at_unix_ms = ?
+		SET state = ?, state_reason = ?, completed_revision = ?,
+			waiting_operation_id = CASE WHEN ? THEN waiting_operation_id ELSE ? END, updated_at_unix_ms = ?
 		WHERE id = ? AND state = ?`,
-		to, reason, completedRevision, now.UnixMilli(), id, from)
+		transition.To, transition.Reason, transition.CompletedRevision,
+		transition.KeepsWaiting(), transition.WaitingOperationID, now.UnixMilli(), id, transition.From)
 	if err != nil {
 		return model.CreationRun{}, fmt.Errorf("transition creation run: %w", err)
 	}
@@ -165,11 +168,11 @@ func (s *Store) TransitionCreationRun(
 		if err != nil {
 			return model.CreationRun{}, err
 		}
-		if current.State == to {
+		if current.State == transition.To {
 			return current, nil
 		}
 		return model.CreationRun{}, fmt.Errorf(
-			"creation run %q is %s, expected %s: %w", id, current.State, from, model.ErrStateConflict)
+			"creation run %q is %s, expected %s: %w", id, current.State, transition.From, model.ErrStateConflict)
 	}
 	return s.GetCreationRun(ctx, id)
 }
@@ -315,7 +318,7 @@ func scanCreationRun(row *sql.Row) (model.CreationRun, error) {
 	var goal, strategy, preset []byte
 	var createdAt, updatedAt int64
 	err := row.Scan(&run.ID, &run.ProjectID, &goal, &strategy, &preset, &run.State,
-		&run.StateReason, &run.CompletedRevision, &createdAt, &updatedAt)
+		&run.StateReason, &run.CompletedRevision, &run.WaitingOperationID, &createdAt, &updatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.CreationRun{}, model.ErrNotFound
 	}

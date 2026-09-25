@@ -21,7 +21,10 @@ const (
 
 // 模型能读写的故事文档种类只有这一份枚举。此前 proposal_submit 写了枚举、authority_read
 // 是裸 string，模型就去猜 story_context / project_rules 这类不存在的种类。
-const storyDocumentKinds = `["intent", "plan", "entity", "canon", "manuscript"]`
+const storyDocumentKinds = `["intent", "compass", "plan", "entity", "canon", "manuscript"]`
+
+// 可作依赖（depends_on）的种类：罗盘不作任何文档的依赖（D63）。
+const dependencyDocumentKinds = `["intent", "plan", "entity", "canon", "manuscript"]`
 
 // authority_read 三个 Worker 各抄一份，且三份都没写取值域。集中一处并补齐说明。
 const authorityReadSchema = `{
@@ -29,7 +32,7 @@ const authorityReadSchema = `{
 	"properties": {
 		"kind": {"type": "string", "enum": ` + storyDocumentKinds + `,
 			"description": "故事文档种类，只能取列出的这几种"},
-		"id": {"type": "string", "description": "文档 ID；intent 用 root，其余用该文档自己的 id（如 ch-001）"},
+		"id": {"type": "string", "description": "文档 ID；intent、compass 用 root，其余用该文档自己的 id（如 ch-001）"},
 		"revision": {"type": "integer", "minimum": 1,
 			"description": "必填。要读的版本，不能超过任务基线 Revision；任务输入里给了基线就用它"}
 	},
@@ -45,11 +48,9 @@ const reviewFindingSchema = `{
 		"chapter_id": {"type": "string",
 			"description": "必须是本次请求范围内的章节之一（任务输入的 chapter_ids）；跨章问题挂到最相关的那一章，没有 all 这种写法"},
 		"severity": {"type": "string", "enum": ["blocking", "note"],
-			"description": "blocking=有要求未满足，必须用 directive_id 或 intent 指出是哪一项；note=仅供参考的观察，禁止带 directive_id 或 intent"},
+			"description": "blocking=必须修改的问题（被违反的要求用 requirement 指出是哪一项）；note=仅供参考的观察，禁止带 requirement"},
 		"note": {"type": "string", "description": "结论与依据"},
-		"directive_id": {"type": "string", "description": "仅 blocking 可用，且与 intent 二选一，不能同时给"},
-		"intent": {"type": "string", "enum": ["required_present", "forbidden_absent", "ending_consistent"],
-			"description": "仅 blocking 可用，且与 directive_id 二选一，不能同时给"}
+		"requirement": {"type": "string", "description": "仅 blocking 可用：逐字取自任务输入 requirements 的 id，且该项在裁定 checks 中声明为 violated"}
 	},
 	"required": ["chapter_id", "severity", "note"],
 	"additionalProperties": false
@@ -61,24 +62,16 @@ const verdictSubmitSchema = `{
 		"status": {"type": "string", "enum": ["pass", "blocked"],
 			"description": "pass=审阅记录里没有 blocking 发现；blocked=至少一条"},
 		"review_key": {"type": "string", "minLength": 1, "description": "workspace_put_review 用过的 key"},
-		"intent": {"type": "object",
-			"description": "任务要求核验意图（verify_intent）时必填：三个维度各自是否满足",
-			"properties": {
-				"required_present": {"type": "boolean"},
-				"forbidden_absent": {"type": "boolean"},
-				"ending_consistent": {"type": "boolean"}
-			},
-			"required": ["required_present", "forbidden_absent", "ending_consistent"],
-			"additionalProperties": false},
-		"directives": {"type": "array",
-			"description": "逐条声明任务输入 directives 的核验结果，不多不少；任务没带 directives 就省略本字段，不要自拟",
+		"checks": {"type": "array",
+			"description": "逐项声明任务输入 requirements 的核验结论，不多不少；任务没带 requirements 就省略本字段，不要自拟",
 			"items": {"type": "object",
 				"properties": {
-					"directive_id": {"type": "string", "description": "逐字取自任务输入的 directives"},
-					"satisfied": {"type": "boolean"},
+					"id": {"type": "string", "description": "逐字取自任务输入的 requirements"},
+					"status": {"type": "string", "enum": ["satisfied", "violated", "pending"],
+						"description": "satisfied=本窗口正文已兑现；violated=被违反，审阅记录里必须有 blocking 发现用 requirement 链接它；pending=仅凭本窗口正文还无法判断（如尚未到期），settle 为 true 的项不得使用"},
 					"note": {"type": "string", "description": "判断依据"}
 				},
-				"required": ["directive_id", "satisfied"],
+				"required": ["id", "status"],
 				"additionalProperties": false}}
 	},
 	"required": ["status", "review_key"],
@@ -150,12 +143,12 @@ func BuiltinCapabilities() ([]CapabilityDefinition, error) {
 				Tools: []ToolSchema{
 					tool(ToolAuthorityRead, "读取指定 Revision 的权威故事文档", authorityReadSchema),
 					tool(ToolWorkspacePutReview, "把审阅过程记录写入当前 Operation Workspace。findings 只记真正的问题；"+
-						"逐项核验结论（含「已满足」）走 verdict_submit 的 directives / intent，不要写成 note 发现",
+						"逐项核验结论（含「已满足」「待定」）走 verdict_submit 的 checks，不要写成 note 发现",
 						`{"type":"object","properties":{"key":{"type":"string"},`+
 							`"findings":{"type":"array","items":`+reviewFindingSchema+`}},`+
 							`"required":["key","findings"],"additionalProperties":false}`),
 					tool(ToolVerdictSubmit, "提交审阅裁定：引用 workspace_put_review 写好的审阅记录。章节范围与发现由宿主按任务输入和记录填入。"+
-						"每个未满足的要求或意图维度，都要在审阅记录里有一条 blocking 发现通过 directive_id / intent 链接到它", verdictSubmitSchema),
+						"每个 violated 的要求，都要在审阅记录里有一条 blocking 发现通过 requirement 链接到它", verdictSubmitSchema),
 				},
 				InputContract: json.RawMessage(`{"type":"object","required":["chapter_ids"]}`), OutputContract: json.RawMessage(`{"type":"object","required":["verdict"]}`),
 				StopCondition: "已提交覆盖请求范围的结构化裁定（verdict_submit），或返回明确错误",
@@ -231,7 +224,7 @@ func writerTools() []ToolSchema {
 		tool(ToolAuthorityRead, "读取指定 Revision 的权威故事文档", authorityReadSchema),
 		tool(ToolWorkspaceList, "列出当前 Operation Workspace 的持久化工件和版本", `{"type":"object","properties":{},"additionalProperties":false}`),
 		tool(ToolWorkspaceRead, "读取当前 Operation Workspace 的工件", `{"type":"object","properties":{"key":{"type":"string"}},"required":["key"],"additionalProperties":false}`),
-		tool(ToolWorkspacePutChapter, "写入章节工作稿：整篇覆盖，同一章全程用同一个 key", `{"type":"object","properties":{"key":{"type":"string","description":"工作稿键，一章一个，全程不要改"},"chapter":{"type":"object","properties":{"id":{"type":"string"},"plan_node_id":{"type":"string"},"number":{"type":"integer"},"title":{"type":"string"},"author":{"type":"string","enum":["ai"]},"blocks":{"type":"array","minItems":1,"items":{"type":"object","properties":{"id":{"type":"string"},"text":{"type":"string"}},"required":["id","text"],"additionalProperties":false}},"depends_on":{"type":"array","description":"本章依赖的权威文档（实体、既有事实等），照抄读到的形状即可","items":{"type":"object","properties":{"kind":{"type":"string","enum":`+storyDocumentKinds+`},"id":{"type":"string"}},"required":["kind","id"],"additionalProperties":false}}},"required":["id","plan_node_id","number","title","author","blocks"],"additionalProperties":false}},"required":["key","chapter"],"additionalProperties":false}`),
+		tool(ToolWorkspacePutChapter, "写入章节工作稿：整篇覆盖，同一章全程用同一个 key", `{"type":"object","properties":{"key":{"type":"string","description":"工作稿键，一章一个，全程不要改"},"chapter":{"type":"object","properties":{"id":{"type":"string"},"plan_node_id":{"type":"string"},"number":{"type":"integer"},"title":{"type":"string"},"author":{"type":"string","enum":["ai"]},"blocks":{"type":"array","minItems":1,"items":{"type":"object","properties":{"id":{"type":"string"},"text":{"type":"string"}},"required":["id","text"],"additionalProperties":false}},"depends_on":{"type":"array","description":"本章依赖的权威文档（实体、既有事实等），照抄读到的形状即可","items":{"type":"object","properties":{"kind":{"type":"string","enum":`+dependencyDocumentKinds+`},"id":{"type":"string"}},"required":["kind","id"],"additionalProperties":false}}},"required":["id","plan_node_id","number","title","author","blocks"],"additionalProperties":false}},"required":["key","chapter"],"additionalProperties":false}`),
 		tool(ToolWorkspaceReplaceBlock, "按稳定 block_id 和版本前提修改一个章节块", `{"type":"object","properties":{"key":{"type":"string"},"block_id":{"type":"string"},"text":{"type":"string"},"expected_version":{"type":"integer","minimum":0,"description":"必须等于该 key 的当前版本（workspace_list 返回）"}},"required":["key","block_id","text","expected_version"],"additionalProperties":false}`),
 		proposalTool([]string{"workspace_key"}),
 	}
@@ -243,7 +236,7 @@ func writerTools() []ToolSchema {
 const patchesSchema = `{
 	"type": "array",
 	"minItems": 0,
-	"description": "文档补丁列表。content 的形状由 document.kind 决定，禁止未列出的字段——plan: {id,kind,parent_id,order,title,summary}，kind 取 volume/arc/chapter/beat，volume 必须省略 parent_id、其余必填，document.id 必须等于 content.id，每个计划节点单独一个 patch，章节目标数按 kind=chapter 的节点个数统计；entity: {id,kind,name,aliases}，kind 取 character/location/item/organization，角色、地点、物品、组织都是实体；manuscript: {id,plan_node_id,number,title,author,blocks:[{id,text}]}，author 固定为 ai；canon: {id,kind,subject_id,predicate,new_value,old_value,source_chapter_id,effective_chapter_id}，subject_id 必须是已存在或同一 Proposal 中新建的 entity 的 id，kind 取 event/state/relationship/world_rule/foreshadow，predicate 必须落在对应受控前缀（event./state./relation./rule./foreshadow.）内，更新已有事实沿用原 id 并省略 old_value，宿主从冻结任务基线补齐；显式提供的 old_value 仍须逐字精确匹配，包括标点。不得为同一事实另起新 id，新事实不得带 old_value；随正文提交时 source_chapter_id 必须是本次提交的正文章节，重写章节必须重申报该章全部既有事实（不变的事实通过顶层 confirm_canon 按 ID 确认，其余更新或删除），event 类事实跨章只追加、不得改动其他章的事件；effective_chapter_id 是状态类事实在故事中的生效章节，只在插叙/回忆时填写、缺省等于来源章，状态的生效位置不得早于现值，倒叙内容记为 event；intent: 完整 Intent 文档。",
+	"description": "文档补丁列表。content 的形状由 document.kind 决定，禁止未列出的字段——plan: {id,kind,parent_id,order,title,summary,depends_on}，kind 取 volume/arc/chapter/beat，volume 必须省略 parent_id、其余必填，depends_on 可选、形状同读到的文档引用 {kind,id} 且不得引用 compass，document.id 必须等于 content.id，每个计划节点单独一个 patch，章节目标数按 kind=chapter 的节点个数统计，只有规划任务可以增删 chapter 节点；compass: {scale_max,ending,final}，document.id 固定为 root，只有规划任务可写，scale_max 是全书篇幅上限（章），ending 是终局方向，final 是收官承诺（全书章数，未收官时省略）——任务输入有 fixed_chapters 时篇幅由用户固定，不得提交 compass；篇幅交给 AI（无 fixed_chapters）时首次规划必须给出，之后只在有变化时提交；未收官时蓝图章节总数必须小于 scale_max，临近上限就声明 final 收官，确需更长再上调 scale_max（需用户同意）；给出 final 后蓝图恰好规划到第 final 章；entity: {id,kind,name,aliases}，kind 取 character/location/item/organization，角色、地点、物品、组织都是实体；manuscript: {id,plan_node_id,number,title,author,blocks:[{id,text}]}，author 固定为 ai；canon: {id,kind,subject_id,predicate,new_value,old_value,source_chapter_id,effective_chapter_id,resolved}，subject_id 必须是已存在或同一 Proposal 中新建的 entity 的 id，新建实体不得与已有实体同名，kind 取 event/state/relationship/world_rule/foreshadow，predicate 必须落在对应受控前缀（event./state./relation./rule./foreshadow.）内；state/world_rule/foreshadow 以 subject_id+predicate 为身份，同键即同一事实，宿主自动并入已有节点，一次提交每个键只写一条；更新时省略 old_value，宿主从冻结任务基线补齐，显式提供的 old_value 仍须逐字精确匹配，包括标点，新事实不得带 old_value；resolved 只用于 foreshadow，回收伏笔时按同键提交 resolved:true；想撤销本章对某状态的改动就把值改回原值，不要 delete（delete 会删除整个事实）；随正文提交时 source_chapter_id 必须是本次提交的正文章节，重写章节必须重申报该章全部既有事实（不变的事实通过顶层 confirm_canon 按 ID 确认，其余更新或删除），event 类事实跨章只追加、不得改动其他章的事件；effective_chapter_id 是状态类事实在故事中的生效章节，只在插叙/回忆时填写、缺省等于来源章，状态的生效位置不得早于现值，倒叙内容记为 event；intent: 完整 Intent 文档。",
 	"items": {
 		"type": "object",
 		"properties": {
@@ -271,7 +264,7 @@ func proposalTool(extraRequired []string) ToolSchema {
 		"patches":       json.RawMessage(patchesSchema),
 		"confirm_canon": map[string]any{"type": "array", "items": map[string]any{"type": "string", "minLength": 1}, "uniqueItems": true, "description": "明确确认不变的既有事实 ID；宿主从任务基线复制原值，与 patches 中的事实不得重复。"},
 	}
-	description := `把最终候选提交为 Proposal，不直接修改权威状态。规划类提交每个计划节点一个 plan patch。更新既有 canon 时省略 old_value，由宿主从冻结任务基线补齐；若显式提供则必须精确匹配（包括标点）。未改变的事实用 confirm_canon:["事实ID"] 确认，宿主复制基线原文，无需重抄；不要同时在 patches 重复这些事实。`
+	description := `把最终候选提交为 Proposal，不直接修改权威状态。规划类提交每个计划节点一个 plan patch。state/world_rule/foreshadow 同一 subject_id+predicate 即同一事实，宿主按键并入已有节点。更新既有 canon 时省略 old_value，由宿主从冻结任务基线补齐；若显式提供则必须精确匹配（包括标点）。未改变的事实用 confirm_canon:["事实ID"] 确认，宿主复制基线原文，无需重抄；不要同时在 patches 重复这些事实。`
 	for _, field := range extraRequired {
 		switch field {
 		case "workspace_key":

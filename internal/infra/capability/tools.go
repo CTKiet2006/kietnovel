@@ -207,7 +207,8 @@ func (r *Runtime) toolExecutor(
 			if err := r.validateSubmissionArtifact(ctx, operation, workspaceKeys, args.ReviewKey, args.Patches); err != nil {
 				return nil, err
 			}
-			if err := r.validatePlanTarget(ctx, operation, args.Patches); err != nil {
+			// 宿主规范化在草稿一致性检查之后（草稿里的 depends_on 由模型声明，不作数）。
+			if args.Patches, err = model.NormalizeSubmission(args.Patches); err != nil {
 				return nil, err
 			}
 			proposal := model.Proposal{
@@ -220,8 +221,8 @@ func (r *Runtime) toolExecutor(
 			if err := proposal.Validate(); err != nil {
 				return nil, err
 			}
-			// 确定性结构校验（事实身份、old_value、依赖、D41）在工具边界当场反馈，收尾的
-			// PrepareExecution 只兜底：否则模型看到"提交成功"，任务却在收尾失败且无从自纠。
+			// 确定性校验（结构、事实、任务提交契约，D41/D63/D64）在工具边界当场反馈，收尾的
+			// PrepareExecution 执行同一份：否则模型看到"提交成功"，任务却在收尾失败且无从自纠。
 			if err := r.changes.Validate(ctx, proposal); err != nil {
 				return nil, err
 			}
@@ -236,10 +237,9 @@ func (r *Runtime) toolExecutor(
 	case prompt.ToolVerdictSubmit:
 		return func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
 			var args struct {
-				Status     string                        `json:"status"`
-				ReviewKey  string                        `json:"review_key"`
-				Intent     *model.IntentVerification     `json:"intent"`
-				Directives []model.DirectiveVerification `json:"directives"`
+				Status    string                   `json:"status"`
+				ReviewKey string                   `json:"review_key"`
+				Checks    []model.RequirementCheck `json:"checks"`
 			}
 			if err := decodeToolArgs(raw, &args); err != nil {
 				return nil, err
@@ -257,7 +257,7 @@ func (r *Runtime) toolExecutor(
 			verdict := model.ReviewVerdict{
 				Status: args.Status, Revision: operation.Snapshot.BaseRevision,
 				ChapterIDs: input.ChapterIDs, ReviewKey: args.ReviewKey, Basis: input.Basis.Normalize(),
-				Intent: args.Intent, Directives: args.Directives, Findings: findings,
+				Checks: args.Checks, Findings: findings,
 			}
 			if err := model.ValidateReviewVerdictForOperation(operation, verdict); err != nil {
 				return nil, err

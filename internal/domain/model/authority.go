@@ -46,4 +46,8 @@ func (t AuthorityTarget) Key() string {
 	return string(t.Kind) + ":" + t.ID + "/" + t.Scope
 }
 
-var ErrInvalid = errors.New("invalid domain value")
+var (
+	ErrInvalid = errors.New("invalid domain value")
+	// ErrStructuralConflict 是创作领域不变量被破坏：引用缺失、依赖成环、事实连续性等。
+	ErrStructuralConflict = errors.New("structural story conflict")
+)

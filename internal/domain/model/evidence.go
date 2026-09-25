@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strconv"
@@ -27,65 +26,10 @@ type DocumentBasis struct {
 type ScopeBasis struct {
 	Kind   string          `json:"kind"`
 	Target DirectiveTarget `json:"target"`
-	Canon  *CanonScope     `json:"canon,omitempty"`
 	Digest string          `json:"digest"`
 }
 
 const ScopeDirective = "directive"
-const ScopeCanon = "canon"
-
-// CanonScope describes the facts relevant to a reviewed range. Chapter IDs include
-// facts recorded by those chapters; subjects include earlier facts about the same
-// entities. Later story facts are excluded, including those about the same entity.
-type CanonScope struct {
-	ChapterIDs     []string `json:"chapter_ids"`
-	SubjectIDs     []string `json:"subject_ids,omitempty"`
-	ThroughChapter int      `json:"through_chapter"`
-}
-
-func ReviewCanonScope(chapters []ManuscriptChapter, ids []string) CanonScope {
-	scope := CanonScope{ChapterIDs: slices.Clone(ids)}
-	for _, chapter := range chapters {
-		if !slices.Contains(ids, chapter.ID) {
-			continue
-		}
-		scope.ThroughChapter = max(scope.ThroughChapter, chapter.Number)
-		for _, ref := range chapter.DependsOn {
-			if ref.Kind == DocumentEntity {
-				scope.SubjectIDs = append(scope.SubjectIDs, ref.ID)
-			}
-		}
-	}
-	slices.Sort(scope.ChapterIDs)
-	scope.ChapterIDs = slices.Compact(scope.ChapterIDs)
-	slices.Sort(scope.SubjectIDs)
-	scope.SubjectIDs = slices.Compact(scope.SubjectIDs)
-	return scope
-}
-
-// CanonScopeRefs is shared by prompt assembly and evidence verification. Source
-// facts are always included; other facts must be relevant and effective by the
-// end of the range. Planning world rules apply to every range.
-func CanonScopeRefs(facts []CanonFact, chapters []ManuscriptChapter, scope CanonScope) []DocumentRef {
-	numbers := make(map[string]int, len(chapters))
-	for _, chapter := range chapters {
-		numbers[chapter.ID] = chapter.Number
-	}
-	var refs []DocumentRef
-	for _, fact := range facts {
-		own := slices.Contains(scope.ChapterIDs, fact.SourceChapterID)
-		relevant := own || fact.Kind == CanonWorldRule || slices.Contains(scope.SubjectIDs, fact.SubjectID)
-		position := fact.EffectiveChapter()
-		if fact.IsEvent() {
-			position = fact.SourceChapterID
-		}
-		if relevant && (own || position == "" || numbers[position] <= scope.ThroughChapter) {
-			refs = append(refs, DocumentRef{Kind: DocumentCanon, ID: fact.ID})
-		}
-	}
-	slices.SortFunc(refs, func(a, b DocumentRef) int { return strings.Compare(a.Key(), b.Key()) })
-	return refs
-}
 
 // BasisField 是任务输入里承载基线的 JSON 字段名：基线是内核判定有效性的依据，
 // 不进入模型提示词。
@@ -114,19 +58,6 @@ func (b EvidenceBasis) Validate() error {
 	for _, scope := range b.Scopes {
 		switch scope.Kind {
 		case ScopeDirective:
-			if scope.Canon != nil {
-				return fmt.Errorf("directive scope cannot carry a Canon target: %w", ErrInvalid)
-			}
-		case ScopeCanon:
-			if scope.Canon == nil || len(scope.Canon.ChapterIDs) == 0 || scope.Canon.ThroughChapter <= 0 {
-				return fmt.Errorf("Canon scope requires chapters and a positive cutoff: %w", ErrInvalid)
-			}
-			if err := validateDistinctStrings("Canon scope chapters", scope.Canon.ChapterIDs); err != nil {
-				return err
-			}
-			if err := validateDistinctStrings("Canon scope subjects", scope.Canon.SubjectIDs); err != nil {
-				return err
-			}
 		default:
 			return fmt.Errorf("unknown scope kind %q: %w", scope.Kind, ErrInvalid)
 		}
@@ -201,10 +132,6 @@ func (b EvidenceBasis) Covers(required EvidenceBasis) bool {
 }
 
 func (s ScopeBasis) targetKey() string {
-	if s.Kind == ScopeCanon {
-		encoded, _ := json.Marshal(s.Canon)
-		return s.Kind + "\x00" + string(encoded)
-	}
 	return s.Kind + "\x00" + strconv.Itoa(s.Target.ChapterNumber) + "\x00" + strings.Join(s.Target.PlanNodeIDs, ",")
 }
 

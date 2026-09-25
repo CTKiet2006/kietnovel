@@ -69,8 +69,5 @@ func EffectiveThinking(binding models.Binding) agentcore.ThinkingLevel {
 
 // ThinkingPolicy 是模型可接受的思考档位；不支持思考的模型只剩自动。
 func ThinkingPolicy(chat agentcore.ChatModel) agentllm.ThinkingPolicy {
-	if provider, ok := chat.(agentllm.CapabilityProvider); ok && provider.Capabilities().Thinking.Supported == agentllm.SupportNo {
-		return agentllm.ThinkingPolicy{Available: []agentcore.ThinkingLevel{agentllm.ThinkingAuto}}
-	}
 	return agentllm.ThinkingPolicyFor(chat)
 }

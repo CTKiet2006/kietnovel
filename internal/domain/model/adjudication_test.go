@@ -54,11 +54,13 @@ func TestAdjudicationValidateAndFindingID(t *testing.T) {
 func TestReviewVerdictAdjudicatedClearsItems(t *testing.T) {
 	verdict := ReviewVerdict{
 		Status: ReviewBlocked, Revision: 3, ChapterIDs: []string{"chapter-1", "chapter-2"}, ReviewKey: "review",
-		Intent:     &IntentVerification{RequiredPresent: false, ForbiddenAbsent: true, EndingConsistent: true},
-		Directives: []DirectiveVerification{{DirectiveID: "hook", Satisfied: false}, {DirectiveID: "rain", Satisfied: true}},
+		Checks: []RequirementCheck{
+			{ID: "directive:hook", Status: CheckViolated}, {ID: "intent:required:0", Status: CheckViolated},
+			{ID: "directive:rain", Status: CheckSatisfied}, {ID: "intent:ending", Status: CheckPending},
+		},
 		Findings: []ReviewFinding{
-			{ChapterID: "chapter-1", Severity: FindingBlocking, Note: "没有钩子", DirectiveID: "hook"},
-			{ChapterID: "chapter-2", Severity: FindingBlocking, Note: "主角没登场", Intent: IntentRequiredPresent},
+			{ChapterID: "chapter-1", Severity: FindingBlocking, Note: "没有钩子", Requirement: "directive:hook"},
+			{ChapterID: "chapter-2", Severity: FindingBlocking, Note: "主角没登场", Requirement: "intent:required:0"},
 			{ChapterID: "chapter-2", Severity: FindingNote, Note: "节奏略慢"},
 		},
 	}
@@ -67,46 +69,63 @@ func TestReviewVerdictAdjudicatedClearsItems(t *testing.T) {
 		t.Fatalf("no adjudication must keep the verdict: %#v", none)
 	}
 	partial := verdict.Adjudicated("review", map[string]struct{}{"review/0": {}})
-	if partial.Status != ReviewBlocked || len(partial.Findings) != 2 || !partial.Directives[0].Satisfied || partial.IntentSatisfied() {
+	if partial.Status != ReviewBlocked || len(partial.Findings) != 2 ||
+		partial.CheckStatus("directive:hook") != CheckSatisfied || partial.CheckStatus("intent:required:0") != CheckViolated {
 		t.Fatalf("partial acceptance = %#v", partial)
 	}
 	full := verdict.Adjudicated("review", map[string]struct{}{"review/0": {}, "review/1": {}, "review/2": {}})
 	if full.Status != ReviewPass || len(full.Findings) != 1 || full.Findings[0].Severity != FindingNote ||
-		!full.IntentSatisfied() || !full.DirectivesSatisfied() {
+		full.CheckStatus("intent:required:0") != CheckSatisfied {
 		t.Fatalf("full acceptance = %#v", full)
 	}
-	if verdict.Status != ReviewBlocked || len(verdict.Findings) != 3 || verdict.Directives[0].Satisfied {
+	// 接受发现只翻被违反的项：pending 表示还没到期，不因裁决变成满足。
+	if full.CheckStatus("intent:ending") != CheckPending {
+		t.Fatalf("pending check must stay pending, got %q", full.CheckStatus("intent:ending"))
+	}
+	if verdict.Status != ReviewBlocked || len(verdict.Findings) != 3 || verdict.Checks[0].Status != CheckViolated {
 		t.Fatal("original verdict must stay untouched")
 	}
 }
 
-func TestReviewVerdictRequiresItemLinks(t *testing.T) {
+func TestReviewVerdictRequiresCheckLinks(t *testing.T) {
 	operation := Operation{
 		Kind: OperationReviewRange, Snapshot: ExecutionSnapshot{BaseRevision: 3},
-		Input: []byte(`{"chapter_ids":["chapter-1"],"verify_intent":true,"basis":{"documents":[{"ref":{"kind":"manuscript","id":"chapter-1"},"revision":2}]}}`),
+		Input: []byte(`{"chapter_ids":["chapter-1"],"requirements":[` +
+			`{"id":"intent:required:0","text":"主角登场"},{"id":"intent:forbidden:0","text":"不写感情线","settle":true}],` +
+			`"basis":{"documents":[{"ref":{"kind":"manuscript","id":"chapter-1"},"revision":2}]}}`),
 	}
 	basis := EvidenceBasis{Documents: []DocumentBasis{{Ref: DocumentRef{Kind: DocumentManuscript, ID: "chapter-1"}, Revision: 2}}}
-	verdict := func(status string, intent *IntentVerification, findings ...ReviewFinding) ReviewVerdict {
+	verdict := func(status, required, forbidden string, findings ...ReviewFinding) ReviewVerdict {
 		if findings == nil {
 			findings = []ReviewFinding{}
 		}
-		return ReviewVerdict{Status: status, Revision: 3, ChapterIDs: []string{"chapter-1"}, ReviewKey: "review", Basis: basis, Intent: intent, Findings: findings}
+		var checks []RequirementCheck
+		for _, check := range []RequirementCheck{{ID: "intent:required:0", Status: required}, {ID: "intent:forbidden:0", Status: forbidden}} {
+			if check.Status != "" {
+				checks = append(checks, check)
+			}
+		}
+		return ReviewVerdict{Status: status, Revision: 3, ChapterIDs: []string{"chapter-1"}, ReviewKey: "review", Basis: basis, Checks: checks, Findings: findings}
 	}
-	unmet := &IntentVerification{RequiredPresent: false, ForbiddenAbsent: true, EndingConsistent: true}
-	met := &IntentVerification{RequiredPresent: true, ForbiddenAbsent: true, EndingConsistent: true}
-	linked := ReviewFinding{ChapterID: "chapter-1", Severity: FindingBlocking, Note: "主角没登场", Intent: IntentRequiredPresent}
+	linked := ReviewFinding{ChapterID: "chapter-1", Severity: FindingBlocking, Note: "主角没登场", Requirement: "intent:required:0"}
+	plain := ReviewFinding{ChapterID: "chapter-1", Severity: FindingBlocking, Note: "x"}
 	cases := []struct {
 		name    string
 		verdict ReviewVerdict
 		wantErr bool
 	}{
-		{"blocked without intent declaration", verdict(ReviewBlocked, nil, ReviewFinding{ChapterID: "chapter-1", Severity: FindingBlocking, Note: "x"}), true},
-		{"unmet intent unlinked", verdict(ReviewBlocked, unmet, ReviewFinding{ChapterID: "chapter-1", Severity: FindingBlocking, Note: "x"}), true},
-		{"unmet intent linked", verdict(ReviewBlocked, unmet, linked), false},
-		{"link to satisfied intent", verdict(ReviewBlocked, met, linked), true},
-		{"note carries link", verdict(ReviewPass, met, ReviewFinding{ChapterID: "chapter-1", Severity: FindingNote, Note: "x", Intent: IntentRequiredPresent}), true},
-		{"unknown intent dimension", verdict(ReviewBlocked, unmet, ReviewFinding{ChapterID: "chapter-1", Severity: FindingBlocking, Note: "x", Intent: "mood"}), true},
-		{"pass with declaration", verdict(ReviewPass, met), false},
+		{"pending allowed when not settle", verdict(ReviewPass, CheckPending, CheckSatisfied), false},
+		{"settle item pending", verdict(ReviewPass, CheckSatisfied, CheckPending), true},
+		{"missing check", verdict(ReviewPass, CheckSatisfied, ""), true},
+		{"extra check", ReviewVerdict{Status: ReviewPass, Revision: 3, ChapterIDs: []string{"chapter-1"}, ReviewKey: "review", Basis: basis, Findings: []ReviewFinding{},
+			Checks: []RequirementCheck{{ID: "intent:required:0", Status: CheckSatisfied}, {ID: "intent:forbidden:0", Status: CheckSatisfied}, {ID: "mood", Status: CheckSatisfied}}}, true},
+		{"unknown status", verdict(ReviewPass, "done", CheckSatisfied), true},
+		{"violated unlinked", verdict(ReviewBlocked, CheckViolated, CheckSatisfied, plain), true},
+		{"violated linked", verdict(ReviewBlocked, CheckViolated, CheckSatisfied, linked), false},
+		{"pass with violated", verdict(ReviewPass, CheckViolated, CheckSatisfied), true},
+		{"link to pending", verdict(ReviewBlocked, CheckPending, CheckSatisfied, linked), true},
+		{"note carries link", verdict(ReviewPass, CheckSatisfied, CheckSatisfied, ReviewFinding{ChapterID: "chapter-1", Severity: FindingNote, Note: "x", Requirement: "intent:required:0"}), true},
+		{"all satisfied", verdict(ReviewPass, CheckSatisfied, CheckSatisfied), false},
 	}
 	for _, tc := range cases {
 		err := ValidateReviewVerdictForOperation(operation, tc.verdict)

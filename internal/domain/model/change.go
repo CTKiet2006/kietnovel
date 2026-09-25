@@ -1,6 +1,7 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -16,6 +17,7 @@ type DocumentKind string
 const (
 	DocumentIntent         DocumentKind = "intent"
 	DocumentPlan           DocumentKind = "plan"
+	DocumentCompass        DocumentKind = "compass"
 	DocumentEntity         DocumentKind = "entity"
 	DocumentCanon          DocumentKind = "canon"
 	DocumentManuscript     DocumentKind = "manuscript"
@@ -95,6 +97,9 @@ type Author struct {
 	ID   string     `json:"id"`
 }
 
+// Machine 报告作者是否是机器（AI 或扩展）：它们的提交受创作边界约束，用户由自己背书。
+func (a Author) Machine() bool { return a.Kind == AuthorAI || a.Kind == AuthorExtension }
+
 type ApprovalState string
 
 const (
@@ -104,7 +109,7 @@ const (
 )
 
 // ImpactReport 的两个语义字段承载不同的报告：Semantic 是面向用户三选一的
-// 语义影响报告（change.SemanticImpactReport），Compliance 是自动批准前对
+// 语义影响报告（SemanticImpactReport），Compliance 是自动批准前对
 // locked/guided 约束的独立合规裁定（SemanticComplianceReport）。二者 schema
 // 不兼容，禁止复用同一字段。
 type ImpactReport struct {
@@ -159,10 +164,11 @@ func (p Proposal) Validate() error {
 	if p.BaseRevision < InitialRevision {
 		return fmt.Errorf("base revision cannot be negative: %w", ErrInvalid)
 	}
+	// 系统只作裁决人（审批策略），不撰写提案。
 	switch p.Author.Kind {
-	case AuthorUser, AuthorAI, AuthorExtension, AuthorSystem:
+	case AuthorUser, AuthorAI, AuthorExtension:
 	default:
-		return fmt.Errorf("unknown author kind %q: %w", p.Author.Kind, ErrInvalid)
+		return fmt.Errorf("proposal author must be user, ai or extension, got %q: %w", p.Author.Kind, ErrInvalid)
 	}
 	if strings.TrimSpace(p.Author.ID) == "" {
 		return fmt.Errorf("author id is required: %w", ErrInvalid)
@@ -217,6 +223,21 @@ func (p Proposal) Validate() error {
 		return fmt.Errorf("created_at is required: %w", ErrInvalid)
 	}
 	return nil
+}
+
+// SameSubmission 报告两份提案是否是同一份提交：只允许基线与结构、合规影响不同。
+// 待裁决稿件的重定位与合规证据回写只能改这些，补丁、作者、理由与身份一律不变。
+func SameSubmission(a, b Proposal) bool {
+	normalize := func(p Proposal) []byte {
+		p.BaseRevision, p.Impact.Structural, p.Impact.Compliance = 0, nil, nil
+		raw, err := json.Marshal(p)
+		if err != nil {
+			return nil
+		}
+		return raw
+	}
+	left, right := normalize(a), normalize(b)
+	return left != nil && bytes.Equal(left, right)
 }
 
 func (c ChangeSet) Validate() error {

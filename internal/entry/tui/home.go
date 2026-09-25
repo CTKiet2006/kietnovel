@@ -43,7 +43,7 @@ type homeState struct {
 	chapterInput    textinput.Model
 	editingChapters bool
 	premise         textinput.Model
-	chapters        int
+	chapters        int // 篇幅：正数固定章数，0 交给 AI
 	approval        domainmodel.ApprovalPolicy
 	focus           int
 	mode            homeMode
@@ -100,7 +100,7 @@ var formFields = []struct{ label, placeholder string }{
 func newHomeState() homeState {
 	premise := newInput("一句话说想写什么，回车开写")
 	premise.Focus()
-	return homeState{premise: premise, chapters: 3, approval: domainmodel.ApprovalAuto, search: newInput("搜索作品标题或 ID"), chapterInput: newInput("目标章数")}
+	return homeState{premise: premise, approval: domainmodel.ApprovalAuto, search: newInput("搜索作品标题或 ID"), chapterInput: newInput("留空由 AI 决定")}
 }
 
 // loadLibraryCmd 读取作品库：每本书的目标、进度与运行状态。
@@ -253,7 +253,10 @@ func (m model) handleHomeKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.beginLibrarySearch()
 		case focusChapters:
 			home.editingChapters = true
-			home.chapterInput.SetValue(strconv.Itoa(home.chapters))
+			home.chapterInput.SetValue("")
+			if home.chapters > 0 {
+				home.chapterInput.SetValue(strconv.Itoa(home.chapters))
+			}
 			home.chapterInput.CursorEnd()
 			home.premise.Blur()
 			return m, home.chapterInput.Focus()
@@ -293,7 +296,7 @@ func (m model) handleHomeKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		switch home.focus {
 		case focusChapters:
-			home.chapters = max(1, home.chapters+delta)
+			home.chapters = max(0, home.chapters+delta) // 0 即交给 AI（D63）
 			return m, nil
 		case focusApproval:
 			index := 0
@@ -346,7 +349,6 @@ func (m model) handleFormKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			Required:          splitList(home.form[2].Value()),
 			Forbidden:         splitList(home.form[3].Value()),
 			EndingDirection:   strings.TrimSpace(home.form[4].Value()),
-			TargetChapters:    home.chapters,
 		}
 		return m.createProject(&intent)
 	}

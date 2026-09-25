@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"strings"
 
 	projectdoc "github.com/voocel/ainovel-cli/internal/app/project"
 	"github.com/voocel/ainovel-cli/internal/domain/creation"
@@ -44,12 +43,14 @@ type novelItem struct {
 	plan      model.PlanNode // chapter/rewrite：章节计划
 	chapterID string         // rewrite/canon：目标正文章节
 	facts     []string       // canon：待核验的事实 ID；空表示该章未入账
-	chapters  []string       // review：范围内全部正文章节
+	chapters  []string       // review：窗口内正文章节
 	notes     []string       // rewrite：审阅意见；extend：上一窗口的审阅意见
 	revision  model.Revision // review：绑定的 Revision；rewrite：所依据裁定的 Revision（槽位 ID）
-	// verifyIntent 标记终审（§6.4 完成条件 3）：pass 必须携带逐项意图核验声明；
-	// 阶段审阅不要求（必须出现的要素可能落在后续章节）。
-	verifyIntent bool
+	// requirements 是窗口要逐项核验的要求（D62）；pending 是扩窗时仍待兑现的要求原文。
+	requirements []model.Requirement
+	pending      []string
+	// concluded：extend 时已覆盖的末章是作为全书结局写成的，这次扩窗是续写（D63）。
+	concluded bool
 	// directives 是命中本任务作用域的用户要求（§4.9），随任务输入进入指令平面。
 	directives []model.Directive
 	// basis 是任务基线（D48/D51）：review 为裁定将继承的证据基线，write/rewrite 为本章要求
@@ -57,111 +58,111 @@ type novelItem struct {
 	basis model.EvidenceBasis
 }
 
-// Next 的顺序即小说的推进规则：蓝图超目标先停下 → 完成契约（D29）→ 先审后扩（§6.3）
-// → 终审通过即完成（§6.4）→ 阻塞发现按预算重写 → 否则发起审阅。
+// Next 的顺序即小说的推进规则：蓝图超出固定篇幅先停下 → 事实缺口先核验（D41）→ 审阅
+// 闸门（D62：写满一个窗口先审、先审后扩，阻塞发现按预算重写，到期要求必须兑现）→ 完成
+// 契约（D29/§6.4）→ 写章或扩窗（D63：全书章数未知或蓝图未到末章时扩窗）。
 func (Policy) Next(project projectdoc.Snapshot, run model.CreationRun, evidence Evidence) (creation.Step, error) {
 	goal, err := model.DecodeNovelGoal(run.Goal)
 	if err != nil {
 		return creation.Step{}, err
 	}
-	if planCount := len(chapterPlansInOrder(project.Plan)); planCount > goal.TargetChapters {
+	length := lengthOf(project, goal.TargetChapters)
+	if planCount := len(model.ChapterPlansInOrder(project.Plan)); length.Fixed > 0 && planCount > length.Fixed {
 		return creation.Step{Wait: fmt.Sprintf(
-			"蓝图包含 %d 个有效章节节点，但目标是 %d 章；请先裁剪蓝图或调整目标",
-			planCount, goal.TargetChapters,
+			"蓝图包含 %d 个有效章节节点，但篇幅固定为 %d 章；请先裁剪蓝图或调整篇幅",
+			planCount, length.Fixed,
 		)}, nil
 	}
 	var item novelItem
-	var reviewScope []string
-	unmet := completionUnmet(project, goal)
 	if gaps := CanonGaps(project); len(gaps) > 0 {
 		// 事实缺口优先（§4.4 D41 / §4.5）：待核验事实与未入账章节先核验，
 		// 旧事实不得继续指导后续创作与审阅。
 		gap := gaps[0]
 		item = novelItem{kind: workVerifyCanon, chapterID: gap.ChapterID, number: gap.Number, facts: gap.Pending, revision: gap.Revision}
-	} else if unmet == "" {
-		// 完成契约（§6.4）：内容齐全不等于完成，必须有基线仍成立的审阅通过证据；
-		// 相干文档或要求再变化时旧证据随基线自动失效。
-		reviewScope = goalManuscriptIDs(project, goal)
 	} else {
-		var ok bool
-		if item, ok = nextNovelItem(project, goal); !ok {
-			return creation.Step{}, fmt.Errorf("creation run %q has unmet goal but no work item: %w", run.ID, model.ErrInvalid)
+		// 完成契约（§6.4）：内容齐全不等于完成，全书每章都要有基线仍成立的通过裁定、
+		// 每项要求都已兑现；相干文档或要求再变化时旧证据随基线自动失效。
+		unmet := completionUnmet(project, length)
+		through := length.Final
+		if unmet != "" {
+			var ok bool
+			if item, ok = nextNovelItem(project, length); !ok {
+				return creation.Step{}, fmt.Errorf("creation run %q has unmet goal but no work item: %w", run.ID, model.ErrInvalid)
+			}
+			through = item.reviewedThrough(run.Strategy.PlanWindowChapters)
 		}
-		// 先审后扩（§6.3）：扩窗前必须有覆盖当前窗口且仍然有效的阶段审阅证据，
-		// 让每段新规划都建立在已审阅的正文之上。
-		if item.kind == workExtendPlan {
-			reviewScope = manuscriptIDsUpTo(project, item.covered)
+		ledger := newReviewLedger(project, length.Final, evidence.Verdicts)
+		// AI 定的收官不得让用户要求落空（D63）：固定篇幅是用户自己划的边界，AI 的收官
+		// 承诺不是——作用域落在全书之外的要求交给用户裁决，而不是静默跳过后完成。
+		if length.Fixed == 0 && len(ledger.dropped) > 0 {
+			directive := ledger.dropped[0]
+			return creation.Step{Wait: fmt.Sprintf(
+				"AI 承诺全书 %d 章收官，要求「%s」（作用域 %s）因此落空；请退役或调整这条要求，或固定更长的篇幅",
+				length.Final, directive.Text, directive.Scope,
+			)}, nil
 		}
-	}
-	if reviewScope != nil {
-		verdict := latestVerdict(evidence.Verdicts, func(verdict model.ReviewVerdict) bool {
-			return verdictCovers(verdict, reviewScope)
-		})
+		review, blocked := ledger.gate(through, run.Strategy.PlanWindowChapters)
 		switch {
-		case verdict != nil && verdict.Status == model.ReviewPass && unmet == "":
-			// 完成条件 3（§6.4）：Intent 的必须出现/禁止出现/结局方向与用户要求
-			// 必须被显式核验为满足——笼统的 pass 不构成完成证据。
-			if !verdict.IntentSatisfied() || !verdict.DirectivesSatisfied() {
-				return creation.Step{Fail: "审阅通过但未逐项核验意图或用户要求，需要人工检查"}, nil
-			}
-			return creation.Step{Done: fmt.Sprintf("全书 %d 章完成并通过审阅", goal.TargetChapters)}, nil
-		case verdict != nil && verdict.Status == model.ReviewPass:
-			// 窗口审阅通过：意见随扩窗输入进入下一段规划（更新上下文 → 继续规划）；
-			// 扩窗以该裁定为基线（D51），裁定失效则扩窗任务失效。
-			item.notes, item.basis = verdictNotes(*verdict), verdict.Basis
-		case verdict != nil:
-			if evidence.RepairsUsed >= run.Strategy.AutoRepairBudget {
-				return creation.Step{Wait: fmt.Sprintf(
-					"自动修订预算 %d 次已用尽，需要你查看审阅意见后决断",
-					run.Strategy.AutoRepairBudget,
-				)}, nil
-			}
-			item = rewriteItem(project, *verdict)
+		case blocked != nil:
+			item = rewriteItem(project, *blocked)
 			if item.chapterID == "" {
 				return creation.Step{Fail: "审阅发现指向了不存在的章节，需要人工检查"}, nil
 			}
-		default:
-			basis, err := ReviewBasis(project, reviewScope)
+			if evidence.Repairs[item.chapterID] >= run.Strategy.AutoRepairBudget {
+				return creation.Step{Wait: fmt.Sprintf(
+					"第 %d 章《%s》的自动修订预算（每章 %d 次）已用尽，需要你查看审阅意见后决断",
+					item.number, item.plan.Title, run.Strategy.AutoRepairBudget,
+				)}, nil
+			}
+		case review != nil:
+			basis, err := ReviewBasis(project, review)
 			if err != nil {
 				return creation.Step{}, err
 			}
-			item = novelItem{
-				kind: workReview, chapters: reviewScope, revision: project.Revision,
-				basis: basis, verifyIntent: unmet == "",
-			}
+			item = novelItem{kind: workReview, chapters: review, requirements: ledger.window(review), revision: project.Revision, basis: basis}
+		case unmet == "":
+			return creation.Step{Done: fmt.Sprintf("全书 %d 章完成并通过审阅", length.Final)}, nil
+		case item.kind == workExtendPlan:
+			// 先审后扩（§6.3）：窗口意见与待兑现要求随扩窗输入进入下一段规划；扩窗以
+			// 覆盖末章的裁定为基线（D51），裁定失效则扩窗任务失效。
+			last := ledger.current[ledger.chapters[item.covered-1].ID]
+			item.notes, item.basis = verdictNotes(ledger.effective[last.Key]), last.Verdict.Basis
+			item.pending, item.concluded = ledger.pending(item.covered), ledger.concluded(item.covered)
 		}
 	}
 	item.directives = coveringDirectives(project, item)
-	work, err := item.work(run, goal)
+	work, err := item.work(run, goal.Premise, length)
 	if err != nil {
 		return creation.Step{}, err
 	}
 	return creation.Step{Work: &work}, nil
 }
 
-// TargetChapters 是当前目标章数：最近一轮创作的小说目标优先，其次作品意图，
-// 都没有时至少覆盖已有正文。续跑沿用目标与工作台呈现共用这一条规则。
-func TargetChapters(project projectdoc.Snapshot, run *model.CreationRun) int {
-	if run != nil {
-		if goal, err := model.DecodeNovelGoal(run.Goal); err == nil {
-			return goal.TargetChapters
-		}
+// reviewedThrough 是开始本条目前必须审过的章数（D62）：写第 n 章前审完已写满的窗口
+// （蓝图一次铺满也按窗口节奏审），扩窗前审完已覆盖章节。
+func (item novelItem) reviewedThrough(window int) int {
+	switch item.kind {
+	case workWriteChapter:
+		return (item.number - 1) / window * window
+	case workExtendPlan:
+		return item.covered
+	default:
+		return 0
 	}
-	if project.Intent.TargetChapters > 0 {
-		return project.Intent.TargetChapters
-	}
-	return max(1, len(project.Manuscript))
 }
 
-// completionUnmet 是完成契约的最小落点（D29）：在同一 Revision 上验证蓝图覆盖
-// 目标章数且每章有正文。队列为空不等于完成。返回空串表示契约满足。
-func completionUnmet(project projectdoc.Snapshot, goal model.NovelGoal) string {
-	plans := chapterPlansInOrder(project.Plan)
-	if len(plans) != goal.TargetChapters {
-		return fmt.Sprintf("蓝图有 %d 章，目标 %d 章", len(plans), goal.TargetChapters)
+// completionUnmet 是完成契约的最小落点（D29/D63）：全书章数已知（用户固定或收官承诺），
+// 在同一 Revision 上蓝图恰好覆盖它且每章有正文。队列为空不等于完成。返回空串表示满足。
+func completionUnmet(project projectdoc.Snapshot, length Length) string {
+	if length.Final == 0 {
+		return "全书尚未收官"
+	}
+	plans := model.ChapterPlansInOrder(project.Plan)
+	if len(plans) != length.Final {
+		return fmt.Sprintf("蓝图有 %d 章，全书 %d 章", len(plans), length.Final)
 	}
 	written := manuscriptsByPlanNode(project.Manuscript)
-	for index, plan := range plans[:goal.TargetChapters] {
+	for index, plan := range plans {
 		if _, ok := written[plan.ID]; !ok {
 			return fmt.Sprintf("第 %d 章《%s》还没有正文", index+1, plan.Title)
 		}
@@ -169,20 +170,23 @@ func completionUnmet(project projectdoc.Snapshot, goal model.NovelGoal) string {
 	return ""
 }
 
-func nextNovelItem(project projectdoc.Snapshot, goal model.NovelGoal) (novelItem, bool) {
-	plans := chapterPlansInOrder(project.Plan)
+func nextNovelItem(project projectdoc.Snapshot, length Length) (novelItem, bool) {
+	plans := model.ChapterPlansInOrder(project.Plan)
 	if len(plans) == 0 {
 		return novelItem{kind: workDevelopPlan}, true
 	}
-	// 先写满当前窗口再扩窗（§6.3）：窗口末尾的阶段审阅意见要能流进下一段规划。
-	covered := min(len(plans), goal.TargetChapters)
+	// 先写满当前窗口再扩窗（§6.3）：窗口审阅意见要能流进下一段规划。
+	covered := len(plans)
+	if length.Final > 0 {
+		covered = min(covered, length.Final)
+	}
 	written := manuscriptsByPlanNode(project.Manuscript)
 	for index, plan := range plans[:covered] {
 		if _, ok := written[plan.ID]; !ok {
 			return novelItem{kind: workWriteChapter, number: index + 1, plan: plan, basis: chapterBasis(project, index+1, plan.ID)}, true
 		}
 	}
-	if len(plans) < goal.TargetChapters {
+	if length.Final == 0 || covered < length.Final {
 		return novelItem{kind: workExtendPlan, covered: covered}, true
 	}
 	return novelItem{}, false
@@ -222,10 +226,12 @@ func chapterBasis(project projectdoc.Snapshot, number int, planID string) model.
 	return model.EvidenceBasis{Scopes: []model.ScopeBasis{directiveScope(project, directiveTarget(project, number, planID))}}
 }
 
-// ReviewBasis 是审阅证据的基线：范围内正文及其依赖闭包，加每章命中的要求作用域。
+// ReviewBasis 是窗口审阅的证据基线（D62）：窗口正文与衔接正文及其依赖闭包，加每章
+// 命中的要求作用域。不钉 Canon：事实随故事推进原地更新（D61），钉住会让每写一章都
+// 废掉之前的窗口；账本与正文的一致性由事实核验负责（D41）。
 func ReviewBasis(project projectdoc.Snapshot, chapters []string) (model.EvidenceBasis, error) {
 	byID := manuscriptsByID(project.Manuscript)
-	targets := make([]model.DocumentRef, 0, len(chapters))
+	targets := make([]model.DocumentRef, 0, len(chapters)+1)
 	scopes := make([]model.ScopeBasis, 0, len(chapters))
 	for _, id := range chapters {
 		chapter, ok := byID[id]
@@ -235,50 +241,27 @@ func ReviewBasis(project projectdoc.Snapshot, chapters []string) (model.Evidence
 		targets = append(targets, model.DocumentRef{Kind: model.DocumentManuscript, ID: id})
 		scopes = append(scopes, directiveScope(project, directiveTarget(project, chapter.Number, chapter.PlanNodeID)))
 	}
-	canonTarget := model.ReviewCanonScope(project.Manuscript, chapters)
-	targets = append(targets, model.CanonScopeRefs(project.Canon, project.Manuscript, canonTarget)...)
-	scopes = append(scopes, canonScope(project, canonTarget))
+	if seam := seamChapter(project, chapters); seam != "" {
+		targets = append(targets, model.DocumentRef{Kind: model.DocumentManuscript, ID: seam})
+	}
 	return basisFor(project, targets, scopes)
 }
 
-func verdictCovers(verdict model.ReviewVerdict, chapters []string) bool {
-	if len(verdict.ChapterIDs) != len(chapters) {
-		return false
-	}
-	reviewed := make(map[string]struct{}, len(verdict.ChapterIDs))
-	for _, id := range verdict.ChapterIDs {
-		reviewed[id] = struct{}{}
-	}
-	for _, id := range chapters {
-		if _, ok := reviewed[id]; !ok {
-			return false
-		}
-	}
-	return true
-}
-
-func reviewOperationID(runID string, revision model.Revision) string {
-	return runQuickID(runID, "review", "r"+strconv.FormatInt(int64(revision), 10))
-}
-
-func goalManuscriptIDs(project projectdoc.Snapshot, goal model.NovelGoal) []string {
-	return manuscriptIDsUpTo(project, goal.TargetChapters)
-}
-
-// manuscriptIDsUpTo 取前 count 个章节计划对应的正文 ID，按章节顺序排列。
-func manuscriptIDsUpTo(project projectdoc.Snapshot, count int) []string {
-	plans := chapterPlansInOrder(project.Plan)
-	if len(plans) > count {
-		plans = plans[:count]
-	}
+// seamChapter 是窗口之前最近的已写正文：衔接检查用，与 derive 装配的"上一章"同一口径。
+func seamChapter(project projectdoc.Snapshot, chapters []string) string {
 	written := manuscriptsByPlanNode(project.Manuscript)
-	ids := make([]string, 0, len(plans))
-	for _, plan := range plans {
-		if chapter, ok := written[plan.ID]; ok {
-			ids = append(ids, chapter.ID)
+	seam := ""
+	for _, plan := range model.ChapterPlansInOrder(project.Plan) {
+		chapter, ok := written[plan.ID]
+		if !ok {
+			continue
 		}
+		if slices.Contains(chapters, chapter.ID) {
+			return seam
+		}
+		seam = chapter.ID
 	}
-	return ids
+	return ""
 }
 
 // verdictNotes 摘出裁定中全部发现的意见文本：pass 裁定的 note 级发现
@@ -289,22 +272,6 @@ func verdictNotes(verdict model.ReviewVerdict) []string {
 		notes = append(notes, finding.Note)
 	}
 	return notes
-}
-
-func chapterPlansInOrder(plan []model.PlanNode) []model.PlanNode {
-	chapters := make([]model.PlanNode, 0, len(plan))
-	for _, node := range plan {
-		if node.Kind == model.PlanChapter {
-			chapters = append(chapters, node)
-		}
-	}
-	slices.SortFunc(chapters, func(left, right model.PlanNode) int {
-		if left.Order != right.Order {
-			return left.Order - right.Order
-		}
-		return strings.Compare(left.ID, right.ID)
-	})
-	return chapters
 }
 
 func manuscriptsByID(manuscript []model.ManuscriptChapter) map[string]model.ManuscriptChapter {
@@ -324,28 +291,13 @@ func manuscriptsByPlanNode(manuscript []model.ManuscriptChapter) map[string]mode
 }
 
 // coveringDirectives 装配命中本任务的用户要求（§4.9）：写/重写按目标章命中，
-// 审阅取范围内各章的并集，规划面向未来取全部 active。它只做装配，不参与推导。
+// 规划面向未来取全部 active。它只做装配，不参与推导。
 func coveringDirectives(project projectdoc.Snapshot, item novelItem) []model.Directive {
 	switch item.kind {
 	case workWriteChapter, workRewrite:
 		return model.ActiveDirectivesFor(project.Directives, directiveTarget(project, item.number, item.plan.ID))
-	case workReview:
-		chapters := manuscriptsByID(project.Manuscript)
-		union := make(map[string]model.Directive)
-		for _, id := range item.chapters {
-			if chapter, ok := chapters[id]; ok {
-				for _, directive := range model.ActiveDirectivesFor(project.Directives, directiveTarget(project, chapter.Number, chapter.PlanNodeID)) {
-					union[directive.ID] = directive
-				}
-			}
-		}
-		merged := make([]model.Directive, 0, len(union))
-		for _, directive := range union {
-			merged = append(merged, directive)
-		}
-		model.SortDirectives(merged)
-		return merged
-	case workVerifyCanon:
+	case workReview, workVerifyCanon:
+		// 审阅的要求以三态核验项投递（D62），事实核验不涉及要求。
 		return nil
 	default:
 		return model.ActiveDirectives(project.Directives)
@@ -353,25 +305,37 @@ func coveringDirectives(project projectdoc.Snapshot, item novelItem) []model.Dir
 }
 
 // work 把推导出的条目装配成要驱动的 Operation：槽位 ID、种类、类型化输入与各落点文案。
-func (item novelItem) work(run model.CreationRun, goal model.NovelGoal) (creation.WorkItem, error) {
+// 规划任务的 ID 带上篇幅输入：篇幅或罗盘变化后是新任务，不复用旧输入（D63）。
+func (item novelItem) work(run model.CreationRun, premise string, length Length) (creation.WorkItem, error) {
 	work := creation.WorkItem{Reasons: item.reasons()}
+	window := run.Strategy.PlanWindowChapters
 	switch item.kind {
 	case workDevelopPlan:
-		work.ID, work.Kind = runQuickID(run.ID, "plan"), model.OperationDevelopPlan
+		requested := length.developTo(window)
+		work.ID, work.Kind = runQuickID(run.ID, "plan", planInputID(requested, length.Fixed)), model.OperationDevelopPlan
 		work.Input = model.DevelopPlanInput{
-			Intent: goal.Premise, TargetChapters: goal.TargetChapters,
-			RequestedChapters: min(run.Strategy.PlanWindowChapters, goal.TargetChapters),
-			Goal:              "设计可直接用于连续创作的卷、故事弧与章节节点；先展开请求数量的 chapter 节点（滚动规划的首个窗口），保持稳定 ID 和合法父子关系",
+			Intent: premise, FixedChapters: length.Fixed, RequestedChapters: requested,
+			Goal: "设计可直接用于连续创作的卷、故事弧与章节节点；先展开请求数量的 chapter 节点（滚动规划的首个窗口），保持稳定 ID 和合法父子关系；" + length.planningGoal(),
 		}
 	case workExtendPlan:
-		work.ID, work.Kind = runQuickID(run.ID, "plan", "extend", strconv.Itoa(item.covered)), model.OperationRevisePlan
+		requested := length.extendTo(item.covered, window)
+		goal := "增量扩展章节计划到请求数量：保持已有节点与 ID 稳定，只补充后续 chapter 节点并挂在合法父节点下；结合上一窗口的审阅意见调整后续走向，为 pending_requirements 中尚未兑现的要求安排落点；" + length.planningGoal()
+		if item.concluded {
+			goal += fmt.Sprintf("；第 %d 章已作为全书结局写成，这是续写：在这个结局之后开启新的篇章、接住已完成的故事，不重复收尾", item.covered)
+			if length.Fixed == 0 {
+				goal += "，并在 compass.ending 写下续写部分的终局方向"
+			}
+		}
+		work.ID = runQuickID(run.ID, "plan", "extend", strconv.Itoa(item.covered), planInputID(requested, length.Fixed))
+		work.Kind = model.OperationRevisePlan
 		work.Input = model.RevisePlanInput{
-			Intent: goal.Premise, TargetChapters: goal.TargetChapters,
-			ExistingChapters:  item.covered,
-			RequestedChapters: min(item.covered+run.Strategy.PlanWindowChapters, goal.TargetChapters),
-			ReviewNotes:       item.notes,
-			Basis:             item.basis,
-			Goal:              "增量扩展章节计划到请求数量：保持已有节点与 ID 稳定，只补充后续 chapter 节点并挂在合法父节点下；结合上一窗口的审阅意见调整后续走向",
+			Intent: premise, FixedChapters: length.Fixed,
+			ExistingChapters:    item.covered,
+			RequestedChapters:   requested,
+			ReviewNotes:         item.notes,
+			PendingRequirements: item.pending,
+			Basis:               item.basis,
+			Goal:                goal,
 		}
 	case workWriteChapter:
 		work.ID, work.Kind = runQuickID(run.ID, "chapter", item.plan.ID), model.OperationWriteChapter
@@ -380,18 +344,12 @@ func (item novelItem) work(run model.CreationRun, goal model.NovelGoal) (creatio
 			Goal: "完成本章工作稿并提交带稳定章节 ID、稳定 block_id 与大纲依赖的正式候选；严格满足 directives 列出的每条创作要求（用户原话），字数约束按 constraints 执行",
 		}
 	case workReview:
-		goal := "阶段审阅范围内全部正文：检查跨章连续性与 Intent 方向一致性，产出结构化裁定与发现；意见将进入下一段规划"
-		if item.verifyIntent {
-			goal = "终审范围内全部正文：逐项核验 Intent 的必须出现、禁止出现与结局方向并在裁定中声明，检查跨章连续性；意图未满足即为阻塞发现"
+		goal := "审阅本窗口正文：检查与上一章的衔接、窗口内的连续性与 Intent 方向，产出结构化裁定与发现；上一章正文只用于衔接检查，不在审阅范围"
+		if len(item.requirements) > 0 {
+			goal += "；逐项核验 requirements：已兑现为 satisfied，被违反为 violated 并用阻塞发现链接，仅凭本窗口正文还无法判断为 pending；settle 为 true 的项必须给出 satisfied 或 violated"
 		}
-		if len(item.directives) > 0 {
-			goal += "；逐项核验 directives 中的每条用户要求是否满足并在裁定 directives 中声明，未满足即为阻塞发现"
-		}
-		work.ID, work.Kind = reviewOperationID(run.ID, item.revision), model.OperationReviewRange
-		work.Input = model.ReviewRangeInput{
-			ChapterIDs: item.chapters, VerifyIntent: item.verifyIntent, Directives: item.directives,
-			Basis: item.basis, Goal: goal,
-		}
+		work.ID, work.Kind = reviewOperationID(run.ID, item.chapters, item.revision, item.requirements), model.OperationReviewRange
+		work.Input = model.ReviewRangeInput{ChapterIDs: item.chapters, Requirements: item.requirements, Basis: item.basis, Goal: goal}
 	case workVerifyCanon:
 		reason := fmt.Sprintf("第 %d 章正文在事实入账后被修改，需要核验来源事实", item.number)
 		if len(item.facts) == 0 {
@@ -427,7 +385,7 @@ func (item novelItem) reasons() creation.WorkReasons {
 		}
 	case workExtendPlan:
 		return creation.WorkReasons{
-			Waiting: "后续章节的蓝图已拟好，等你确认后继续",
+			Waiting: "后续章节的蓝图已拟好（可能含篇幅上限调整），等你确认后继续",
 			Failure: "后续章节的蓝图这次没能扩展完成",
 			Stuck:   "蓝图扩展任务已结束但章节数没有增加，需要人工检查规划",
 		}
@@ -435,7 +393,7 @@ func (item novelItem) reasons() creation.WorkReasons {
 		return creation.WorkReasons{
 			Waiting: "审阅在等你确认后继续",
 			Failure: "审阅这次没能完成",
-			Stuck:   "审阅任务已结束但没有留下有效裁定，需要人工检查",
+			Stuck:   "审阅已结束但窗口仍未通过或要求仍未兑现，需要人工检查",
 		}
 	case workVerifyCanon:
 		return creation.WorkReasons{

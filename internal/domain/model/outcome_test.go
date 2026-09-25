@@ -7,39 +7,31 @@ import (
 	"time"
 )
 
-func TestReviewVerdictDirectiveCoverageAndPassGate(t *testing.T) {
-	// §4.9：任务输入携带的每条要求都必须被恰好声明一次；pass 要求全部满足，
-	// 未满足只能以阻塞发现表达。
+func TestReviewVerdictRequirementCoverage(t *testing.T) {
+	// D62：任务输入携带的每项要求都必须被恰好声明一次，不得漏项、越界或重复。
 	operation := Operation{
 		Kind: OperationReviewRange, Snapshot: ExecutionSnapshot{BaseRevision: 3},
-		Input: json.RawMessage(`{"chapter_ids":["chapter-1"],"directives":[{"id":"hook","scope":"project","text":"结尾留钩子","status":"active"},{"id":"rain","scope":"project","text":"要下雨","status":"active"}],"basis":{"documents":[{"ref":{"kind":"manuscript","id":"chapter-1"},"revision":2}]}}`),
+		Input: json.RawMessage(`{"chapter_ids":["chapter-1"],"requirements":[{"id":"directive:hook","text":"结尾留钩子"},{"id":"directive:rain","text":"要下雨"}],"basis":{"documents":[{"ref":{"kind":"manuscript","id":"chapter-1"},"revision":2}]}}`),
 	}
 	basis := EvidenceBasis{Documents: []DocumentBasis{{Ref: DocumentRef{Kind: DocumentManuscript, ID: "chapter-1"}, Revision: 2}}}
-	base := func(status string, directives []DirectiveVerification, findings []ReviewFinding) ReviewVerdict {
-		if findings == nil {
-			findings = []ReviewFinding{}
-		}
+	base := func(checks ...RequirementCheck) ReviewVerdict {
 		return ReviewVerdict{
-			Status: status, Revision: 3, ChapterIDs: []string{"chapter-1"}, ReviewKey: "review", Basis: basis,
-			Directives: directives, Findings: findings,
+			Status: ReviewPass, Revision: 3, ChapterIDs: []string{"chapter-1"}, ReviewKey: "review", Basis: basis,
+			Checks: checks, Findings: []ReviewFinding{},
 		}
 	}
-	blocking := []ReviewFinding{{ChapterID: "chapter-1", Severity: FindingBlocking, Note: "结尾没有钩子"}}
-	linked := []ReviewFinding{{ChapterID: "chapter-1", Severity: FindingBlocking, Note: "结尾没有钩子", DirectiveID: "hook"}}
+	hook := RequirementCheck{ID: "directive:hook", Status: CheckSatisfied}
+	rain := RequirementCheck{ID: "directive:rain", Status: CheckPending}
 	cases := []struct {
 		name    string
 		verdict ReviewVerdict
 		wantErr bool
 	}{
-		{"missing all", base(ReviewPass, nil, nil), true},
-		{"missing one", base(ReviewPass, []DirectiveVerification{{DirectiveID: "hook", Satisfied: true}}, nil), true},
-		{"outside requested", base(ReviewPass, []DirectiveVerification{{DirectiveID: "hook", Satisfied: true}, {DirectiveID: "other", Satisfied: true}}, nil), true},
-		{"duplicated", base(ReviewPass, []DirectiveVerification{{DirectiveID: "hook", Satisfied: true}, {DirectiveID: "hook", Satisfied: true}}, nil), true},
-		{"pass with unmet", base(ReviewPass, []DirectiveVerification{{DirectiveID: "hook", Satisfied: false}, {DirectiveID: "rain", Satisfied: true}}, nil), true},
-		{"blocked with unmet unlinked", base(ReviewBlocked, []DirectiveVerification{{DirectiveID: "hook", Satisfied: false}, {DirectiveID: "rain", Satisfied: true}}, blocking), true},
-		{"blocked with unmet linked", base(ReviewBlocked, []DirectiveVerification{{DirectiveID: "hook", Satisfied: false}, {DirectiveID: "rain", Satisfied: true}}, linked), false},
-		{"link to satisfied directive", base(ReviewBlocked, []DirectiveVerification{{DirectiveID: "hook", Satisfied: true}, {DirectiveID: "rain", Satisfied: true}}, linked), true},
-		{"pass all satisfied", base(ReviewPass, []DirectiveVerification{{DirectiveID: "rain", Satisfied: true}, {DirectiveID: "hook", Satisfied: true}}, nil), false},
+		{"missing all", base(), true},
+		{"missing one", base(hook), true},
+		{"outside requested", base(hook, RequirementCheck{ID: "directive:other", Status: CheckSatisfied}), true},
+		{"duplicated", base(hook, hook), true},
+		{"all declared", base(rain, hook), false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -58,10 +50,10 @@ func TestReviewVerdictDirectiveCoverageAndPassGate(t *testing.T) {
 		Kind: OperationReviewRange, Snapshot: ExecutionSnapshot{BaseRevision: 3},
 		Input: json.RawMessage(`{"chapter_ids":["chapter-1"],"basis":{"documents":[{"ref":{"kind":"manuscript","id":"chapter-1"},"revision":2}]}}`),
 	}
-	if err := ValidateReviewVerdictForOperation(plain, base(ReviewPass, []DirectiveVerification{{DirectiveID: "hook", Satisfied: true}}, nil)); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("unrequested directive verification err = %v", err)
+	if err := ValidateReviewVerdictForOperation(plain, base(hook)); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unrequested check err = %v", err)
 	}
-	if err := ValidateReviewVerdictForOperation(plain, base(ReviewPass, nil, nil)); err != nil {
+	if err := ValidateReviewVerdictForOperation(plain, base()); err != nil {
 		t.Fatalf("plain pass err = %v", err)
 	}
 }

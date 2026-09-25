@@ -28,11 +28,11 @@ func (m *thinkingModel) GenerateStream(ctx context.Context, messages []agentcore
 	return m.planRuntimeModel.GenerateStream(ctx, messages, tools, opts...)
 }
 
-func (m *thinkingModel) Capabilities() agentllm.Capabilities {
+func (m *thinkingModel) Capabilities() (agentllm.Capabilities, bool) {
 	if m.noThinking {
-		return agentllm.Capabilities{Thinking: agentllm.ThinkingCapabilities{Supported: agentllm.SupportNo}}
+		return agentllm.Capabilities{}, true
 	}
-	return agentllm.Capabilities{ProviderBaseline: true, Thinking: agentllm.ThinkingCapabilities{Supported: agentllm.SupportYes}}
+	return agentllm.Capabilities{Thinking: true, DisableThinking: true, ThinkingEffort: true}, true
 }
 
 // TestExecuteUsesRoleBindingAndRecordsRunStart：模型按 Worker 角色取绑定（D57），思考
@@ -60,7 +60,7 @@ func TestExecuteUsesRoleBindingAndRecordsRunStart(t *testing.T) {
 		payload, _ := json.Marshal(map[string]any{"reason": "规划", "patches": []domainmodel.Patch{patch(volume), patch(arc), patch(chapter)}})
 		return payload
 	}
-	task := json.RawMessage(`{"intent":"规划开篇","target_chapters":3,"requested_chapters":1}`)
+	task := json.RawMessage(`{"intent":"规划开篇","fixed_chapters":3,"requested_chapters":1}`)
 	runID := createRuntimeTestRun(t, ctx, authorityStore, "book-plan", now)
 	profile := seedRuntimeProfile(t, ctx, authorityStore, "book-plan", worker, task, 1)
 

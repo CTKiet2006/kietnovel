@@ -18,19 +18,6 @@ func (s *Store) ClaimNextOperation(ctx context.Context, workerID string, leaseDu
 	return s.claimOperation(ctx, "", workerID, nil, leaseDuration, now)
 }
 
-// ClaimNextOperationForExecutor 只领取按该执行器身份冻结的任务（D45）。
-func (s *Store) ClaimNextOperationForExecutor(
-	ctx context.Context,
-	workerID, executor string,
-	leaseDuration time.Duration,
-	now time.Time,
-) (model.Operation, error) {
-	if strings.TrimSpace(executor) == "" {
-		return model.Operation{}, fmt.Errorf("executor identity is required: %w", model.ErrInvalid)
-	}
-	return s.claimOperation(ctx, "", workerID, []string{executor}, leaseDuration, now)
-}
-
 func (s *Store) ClaimOperationForExecutor(
 	ctx context.Context,
 	id, workerID, executor string,
@@ -43,7 +30,7 @@ func (s *Store) ClaimOperationForExecutor(
 	return s.claimOperation(ctx, id, workerID, []string{executor}, leaseDuration, now)
 }
 
-// ClaimNextOperationForExecutors preserves queue priority across the configured executors.
+// ClaimNextOperationForExecutors 只领取按这些执行器身份冻结的任务（D45），跨执行器保持队列优先级。
 func (s *Store) ClaimNextOperationForExecutors(ctx context.Context, workerID string, executors []string, leaseDuration time.Duration, now time.Time) (model.Operation, error) {
 	if len(executors) == 0 {
 		return model.Operation{}, fmt.Errorf("executor identities are required: %w", model.ErrInvalid)
@@ -196,12 +183,6 @@ func (s *Store) FailOperation(ctx context.Context, id string, attempt int, code 
 	return s.transitionOperation(ctx, id, model.OperationRunning, model.OperationFailed, message, code, now, attempt)
 }
 
-// AssertActiveAttempt 是执行侧在准备提案前的快速自检；受保护写入的真正围栏在各自事务内
-// 完成（PutWorkspaceArtifact、SaveExecutionDerivedDocument、CommitExecutionProposal、ConcludeOperation）。
-func (s *Store) AssertActiveAttempt(ctx context.Context, id string, attempt int) error {
-	return assertActiveAttempt(ctx, s.db, id, attempt)
-}
-
 // assertActiveAttempt 在调用方的事务内校验归属，让检查与受保护写入原子化（D42）。
 func assertActiveAttempt(ctx context.Context, query rowQuerier, id string, attempt int) error {
 	var active bool
@@ -230,7 +211,19 @@ func (s *Store) transitionOperation(ctx context.Context, id string, from, to mod
 		return model.Operation{}, fmt.Errorf("begin operation transition: %w", err)
 	}
 	defer tx.Rollback()
+	operation, err := transitionOperationTx(ctx, tx, id, from, to, message, code, now, attempt)
+	if err != nil {
+		return model.Operation{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return model.Operation{}, fmt.Errorf("commit operation transition: %w", err)
+	}
+	return operation, nil
+}
 
+// transitionOperationTx 在调用方事务内转移任务状态并记事件；现状不是 from（或执行已被
+// 接替）返回 model.ErrStateConflict。
+func transitionOperationTx(ctx context.Context, tx *sql.Tx, id string, from, to model.OperationState, message string, code model.FailureCode, now time.Time, attempt int) (model.Operation, error) {
 	row := tx.QueryRowContext(ctx, `
 		UPDATE operations
 		SET state = ?, error = ?, failure_code = ?, lease_owner = NULL, lease_until_unix_ms = NULL, updated_at_unix_ms = ?
@@ -258,9 +251,6 @@ func (s *Store) transitionOperation(ctx context.Context, id string, from, to mod
 		Kind:           "operation.transitioned", Payload: payload, CreatedAt: now,
 	}); err != nil {
 		return model.Operation{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return model.Operation{}, fmt.Errorf("commit operation transition: %w", err)
 	}
 	return operation, nil
 }

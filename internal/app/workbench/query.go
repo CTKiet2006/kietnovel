@@ -90,8 +90,8 @@ type WorkbenchSnapshot struct {
 	Adjudications []model.Adjudication `json:"adjudications,omitempty"`
 	// PendingCanon 是正文改动后待核验的事实 ID（D41）。
 	PendingCanon []string `json:"pending_canon,omitempty"`
-	// TargetChapters 是当前目标章数：Run 的小说目标，没有时回退 Intent。
-	TargetChapters int `json:"target_chapters"`
+	// Length 是篇幅口径（D63）：固定章数、故事罗盘与全书章数，与推导器同一规则。
+	Length novel.Length `json:"length"`
 }
 
 func (s *Query) WorkbenchSnapshot(ctx context.Context, projectID string) (WorkbenchSnapshot, error) {
@@ -132,7 +132,7 @@ func (s *Query) snapshotFromProject(ctx context.Context, project projectdoc.Snap
 		snapshot.PendingCanon = append(snapshot.PendingCanon, gap.Pending...)
 	}
 	snapshot.Outline = buildOutline(project, snapshot.Candidates, writingPlanID)
-	snapshot.TargetChapters = novel.TargetChapters(project, snapshot.Run)
+	snapshot.Length = novel.LengthOf(project, snapshot.Run)
 	return snapshot, nil
 }
 
@@ -154,7 +154,7 @@ func (s *Query) workbenchDecision(
 	// 等待期间的漂移按 D51 判定：只有用户专属变化时候选可重定位、仍是当前稿件；
 	// 正文/规划/相干要求变过则基线过期，不解出章节候选（大纲不得标 ◐），由界面
 	// 引导重写而不是直接通过。
-	relocated, _, err := s.decisions.RelocateProposal(ctx, proposal)
+	relocated, _, err := s.decisions.Relocate(ctx, proposal)
 	if errors.Is(err, model.ErrRevisionConflict) {
 		decision.Stale = true
 		return nil, decision, nil
@@ -236,8 +236,8 @@ type WorkbenchFinding struct {
 	model.ReviewFinding
 }
 
-// validFindings 返回基线仍成立的最新审阅发现里未被接受的部分，以及仍然有效的接受记录。
-// 有效性与"最新"的裁决规则同协调器（listVerdicts/latestVerdict），两处不分叉。
+// validFindings 返回各章当前裁定里未被接受的审阅发现（按章节顺序、每份裁定一次），
+// 以及仍然有效的接受记录。"当前裁定"与协调器共用 novel.CurrentVerdicts，两处不分叉。
 func (s *Query) validFindings(ctx context.Context, project projectdoc.Snapshot) ([]WorkbenchFinding, []model.Adjudication, error) {
 	verdicts, err := s.reviews.ListVerdicts(ctx, project)
 	if err != nil {
@@ -254,17 +254,26 @@ func (s *Query) validFindings(ctx context.Context, project projectdoc.Snapshot) 
 			effective = append(effective, record)
 		}
 	}
-	latest := novel.LatestStoredVerdict(verdicts, func(model.ReviewVerdict) bool { return true })
-	if latest == nil {
-		return nil, effective, nil
+	current := novel.CurrentVerdicts(verdicts)
+	written := make(map[string]string, len(project.Manuscript)) // plan node id → 正文章节 id
+	for _, chapter := range project.Manuscript {
+		written[chapter.PlanNodeID] = chapter.ID
 	}
+	seen := make(map[string]bool)
 	var findings []WorkbenchFinding
-	for index, finding := range latest.Verdict.Findings {
-		id := model.FindingID(latest.Key, index)
-		if _, ok := accepted[id]; ok && finding.Severity == model.FindingBlocking {
+	for _, plan := range model.ChapterPlansInOrder(project.Plan) {
+		stored := current[written[plan.ID]]
+		if stored == nil || seen[stored.Key] {
 			continue
 		}
-		findings = append(findings, WorkbenchFinding{ID: id, ReviewFinding: finding})
+		seen[stored.Key] = true
+		for index, finding := range stored.Verdict.Findings {
+			id := model.FindingID(stored.Key, index)
+			if _, ok := accepted[id]; ok && finding.Severity == model.FindingBlocking {
+				continue
+			}
+			findings = append(findings, WorkbenchFinding{ID: id, ReviewFinding: finding})
+		}
 	}
 	return findings, effective, nil
 }

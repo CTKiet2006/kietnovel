@@ -30,7 +30,12 @@ type Store interface {
 	ActiveCreationRun(context.Context, string) (model.CreationRun, error)
 	LatestCreationRun(context.Context, string) (model.CreationRun, error)
 	ListCreationRunEvents(context.Context, string) ([]model.CreationRunEvent, error)
-	TransitionCreationRun(context.Context, string, model.CreationRunState, model.CreationRunState, string, model.Revision, time.Time) (model.CreationRun, error)
+	TransitionCreationRun(context.Context, string, model.RunTransition, time.Time) (model.CreationRun, error)
+	// AwaitingRunOperations 与 TransitionOperation 只用于把被新推导取代的待审批任务转为 stale（D64）。
+	AwaitingRunOperations(context.Context, string) ([]model.Operation, error)
+	TransitionOperation(context.Context, string, model.OperationState, model.OperationState, string, time.Time) (model.Operation, error)
+	// RecoverExpiredOperations 把租约过期的执行放回队列，驱动开始前调用。
+	RecoverExpiredOperations(context.Context, time.Time) ([]string, error)
 	// SettleCreationRun atomically checks the observed goal, strategy and authority
 	// revision before recording a goal decision. Conflicts require re-evaluation.
 	SettleCreationRun(context.Context, model.CreationRun, model.Revision, model.CreationRunState, string, time.Time) (model.CreationRun, error)

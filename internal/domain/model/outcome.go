@@ -56,100 +56,51 @@ const (
 	FindingNote     = "note"
 )
 
-// ReviewFinding 是一条审阅发现。阻塞发现可通过 DirectiveID / Intent 链接到它证明
-// 未满足的核验项（§6.4）：未满足项与阻塞发现一一可追溯，用户接受发现即接受该项（D43）。
+// ReviewFinding 是一条审阅发现。阻塞发现可通过 Requirement 链接到它证明被违反的要求
+// （§6.4）：违反项与阻塞发现一一可追溯，用户接受发现即接受该项（D43）。
 type ReviewFinding struct {
 	ChapterID   string `json:"chapter_id"`
 	Severity    string `json:"severity"`
 	Note        string `json:"note"`
-	DirectiveID string `json:"directive_id,omitempty"`
-	Intent      string `json:"intent,omitempty"`
+	Requirement string `json:"requirement,omitempty"`
 }
 
-// Intent 核验的三个维度名，供发现链接与裁决引用。
+// 要求核验的三态（D62）：窗口只对自己看得到的正文下结论，未到期的要求如实 pending，
+// 由作用域末章所在窗口兑现。
 const (
-	IntentRequiredPresent  = "required_present"
-	IntentForbiddenAbsent  = "forbidden_absent"
-	IntentEndingConsistent = "ending_consistent"
+	CheckSatisfied = "satisfied"
+	CheckViolated  = "violated"
+	CheckPending   = "pending"
 )
 
-// IntentVerification 是审阅对 Intent 各维度的显式核验声明（§6.4 完成条件 3）：
-// 完成契约要求"已验证满足"而不仅是"检查过"，所以终审的 pass 必须逐项声明。
-type IntentVerification struct {
-	RequiredPresent  bool `json:"required_present"`
-	ForbiddenAbsent  bool `json:"forbidden_absent"`
-	EndingConsistent bool `json:"ending_consistent"`
+// RequirementCheck 是审阅对任务输入中一项要求的显式核验声明。
+type RequirementCheck struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Note   string `json:"note,omitempty"`
 }
 
-func (v IntentVerification) Satisfied() bool {
-	return v.RequiredPresent && v.ForbiddenAbsent && v.EndingConsistent
-}
-
-// Unmet 按固定顺序列出未满足的维度。
-func (v IntentVerification) Unmet() []string {
-	var unmet []string
-	for _, dimension := range []struct {
-		name string
-		ok   bool
-	}{{IntentRequiredPresent, v.RequiredPresent}, {IntentForbiddenAbsent, v.ForbiddenAbsent}, {IntentEndingConsistent, v.EndingConsistent}} {
-		if !dimension.ok {
-			unmet = append(unmet, dimension.name)
-		}
-	}
-	return unmet
-}
-
-func (v *IntentVerification) satisfy(dimension string) {
-	switch dimension {
-	case IntentRequiredPresent:
-		v.RequiredPresent = true
-	case IntentForbiddenAbsent:
-		v.ForbiddenAbsent = true
-	case IntentEndingConsistent:
-		v.EndingConsistent = true
-	}
-}
-
-func validIntentDimension(dimension string) bool {
-	return dimension == IntentRequiredPresent || dimension == IntentForbiddenAbsent || dimension == IntentEndingConsistent
-}
-
-// DirectiveVerification 是审阅对单条用户要求的显式核验声明（§4.9）：任务输入
-// 携带的每条 Directive 都必须逐条声明，未满足以阻塞发现表达并回到重写。
-type DirectiveVerification struct {
-	DirectiveID string `json:"directive_id"`
-	Satisfied   bool   `json:"satisfied"`
-	Note        string `json:"note,omitempty"`
-}
-
-// ReviewVerdict 是审阅 Operation 的版本化裁定（§6.4）：pass 表示范围内正文与
-// Intent 的必须出现 / 禁止出现 / 结局方向全部验证满足，且不存在阻塞级发现。
-// Intent 声明在阶段审阅可省略（必须出现的要素可能落在后续章节），终审必备。
+// ReviewVerdict 是审阅 Operation 的版本化裁定（§6.4）：pass 表示范围内正文没有阻塞级
+// 发现、没有被违反的要求。Checks 逐项声明任务输入的要求（D62）。
 // Revision 是产出裁定的基线 Revision；有效性按 Basis 判定（D48），不按 Revision 相等。
 type ReviewVerdict struct {
-	Status     string                  `json:"status"`
-	Revision   Revision                `json:"revision"`
-	ChapterIDs []string                `json:"chapter_ids"`
-	ReviewKey  string                  `json:"review_key"`
-	Basis      EvidenceBasis           `json:"basis"`
-	Intent     *IntentVerification     `json:"intent,omitempty"`
-	Directives []DirectiveVerification `json:"directives,omitempty"`
-	Findings   []ReviewFinding         `json:"findings"`
+	Status     string             `json:"status"`
+	Revision   Revision           `json:"revision"`
+	ChapterIDs []string           `json:"chapter_ids"`
+	ReviewKey  string             `json:"review_key"`
+	Basis      EvidenceBasis      `json:"basis"`
+	Checks     []RequirementCheck `json:"checks,omitempty"`
+	Findings   []ReviewFinding    `json:"findings"`
 }
 
-// IntentSatisfied 报告裁定是否带有全部通过的意图核验声明。
-func (v ReviewVerdict) IntentSatisfied() bool {
-	return v.Intent != nil && v.Intent.Satisfied()
-}
-
-// DirectivesSatisfied 报告已声明的要求核验是否全部满足；覆盖完整性由任务输入校验。
-func (v ReviewVerdict) DirectivesSatisfied() bool {
-	for _, directive := range v.Directives {
-		if !directive.Satisfied {
-			return false
+// CheckStatus 返回裁定对某项要求的结论；未声明返回空串。
+func (v ReviewVerdict) CheckStatus(id string) string {
+	for _, check := range v.Checks {
+		if check.ID == id {
+			return check.Status
 		}
 	}
-	return true
+	return ""
 }
 
 func (v ReviewVerdict) Validate() error {
@@ -162,25 +113,23 @@ func (v ReviewVerdict) Validate() error {
 	if err := validateEvidenceBasis("review verdict", v.Basis); err != nil {
 		return err
 	}
-	chapters := make(map[string]struct{}, len(v.ChapterIDs))
-	for i, id := range v.ChapterIDs {
-		if strings.TrimSpace(id) == "" {
-			return fmt.Errorf("review verdict chapter %d is empty: %w", i, ErrInvalid)
-		}
-		if _, exists := chapters[id]; exists {
-			return fmt.Errorf("review verdict chapter %q is duplicated: %w", id, ErrInvalid)
-		}
-		chapters[id] = struct{}{}
+	if err := validateDistinctStrings("review verdict chapters", v.ChapterIDs); err != nil {
+		return err
 	}
-	directives := make(map[string]struct{}, len(v.Directives))
-	for i, directive := range v.Directives {
-		if strings.TrimSpace(directive.DirectiveID) == "" {
-			return fmt.Errorf("review verdict directive %d is empty: %w", i, ErrInvalid)
+	checks := make(map[string]struct{}, len(v.Checks))
+	for i, check := range v.Checks {
+		if strings.TrimSpace(check.ID) == "" {
+			return fmt.Errorf("review verdict check %d is empty: %w", i, ErrInvalid)
 		}
-		if _, exists := directives[directive.DirectiveID]; exists {
-			return fmt.Errorf("review verdict directive %q is duplicated: %w", directive.DirectiveID, ErrInvalid)
+		if _, exists := checks[check.ID]; exists {
+			return fmt.Errorf("review verdict check %q is duplicated: %w", check.ID, ErrInvalid)
 		}
-		directives[directive.DirectiveID] = struct{}{}
+		checks[check.ID] = struct{}{}
+		switch check.Status {
+		case CheckSatisfied, CheckViolated, CheckPending:
+		default:
+			return fmt.Errorf("review verdict check %q has unknown status %q: %w", check.ID, check.Status, ErrInvalid)
+		}
 	}
 	blocking := 0
 	for i, finding := range v.Findings {
@@ -191,23 +140,15 @@ func (v ReviewVerdict) Validate() error {
 		case FindingBlocking:
 			blocking++
 		case FindingNote:
-			if finding.DirectiveID != "" || finding.Intent != "" {
+			if finding.Requirement != "" {
 				// 工具边界的错误要能让模型当场自纠：指明改哪个字段，不要只说违反了规则。
 				return fmt.Errorf(
-					"review finding %d has severity %q but links a verification item; drop directive_id/intent, "+
-						"or use severity %q if the requirement is actually unmet (satisfied items belong in the verdict's directives/intent): %w",
-					i, FindingNote, FindingBlocking, ErrInvalid)
+					"review finding %d has severity %q but links requirement %q; drop requirement, "+
+						"or use severity %q if the requirement is actually violated (other conclusions belong in the verdict's checks): %w",
+					i, FindingNote, finding.Requirement, FindingBlocking, ErrInvalid)
 			}
 		default:
 			return fmt.Errorf("unknown finding severity %q: %w", finding.Severity, ErrInvalid)
-		}
-		if finding.DirectiveID != "" && finding.Intent != "" {
-			return fmt.Errorf(
-				"review finding %d links both directive %q and intent dimension %q; keep exactly one: %w",
-				i, finding.DirectiveID, finding.Intent, ErrInvalid)
-		}
-		if finding.Intent != "" && !validIntentDimension(finding.Intent) {
-			return fmt.Errorf("review finding %d links unknown intent dimension %q: %w", i, finding.Intent, ErrInvalid)
 		}
 	}
 	switch v.Status {
@@ -225,8 +166,8 @@ func (v ReviewVerdict) Validate() error {
 	return nil
 }
 
-// ValidateReviewVerdictForOperation 把模型不能自证的 Revision、审阅范围、
-// 终审 Intent 要求和用户要求核验绑定到启动 Operation，由所有 Executor 共用同一确定性校验。
+// ValidateReviewVerdictForOperation 把模型不能自证的 Revision、审阅范围与要求核验
+// 绑定到启动 Operation，由所有 Executor 共用同一确定性校验。
 func ValidateReviewVerdictForOperation(operation Operation, verdict ReviewVerdict) error {
 	if operation.Kind != OperationReviewRange {
 		return fmt.Errorf("%s operation cannot produce a review verdict: %w", operation.Kind, ErrInvalid)
@@ -263,97 +204,65 @@ func ValidateReviewVerdictForOperation(operation Operation, verdict ReviewVerdic
 				finding.ChapterID, input.ChapterIDs, ErrInvalid)
 		}
 	}
-	if input.VerifyIntent && verdict.Status == ReviewPass && !verdict.IntentSatisfied() {
-		return fmt.Errorf(
-			"final review pass requires all intent checks satisfied; report unmet intent as blocking findings: %w",
-			ErrInvalid,
-		)
-	}
-	// 要求核验（§4.9）：任务输入里的每条 Directive 都必须被恰好声明一次，
-	// pass 要求全部满足——与章节范围同样不允许漏项或越界。
-	expected := make(map[string]struct{}, len(input.Directives))
-	for _, directive := range input.Directives {
-		expected[directive.ID] = struct{}{}
-	}
-	if len(expected) != len(verdict.Directives) {
-		// 任务没带 directives 时模型常自拟几条；说清期望集合，不要只说"不匹配"。
-		requestedIDs := make([]string, 0, len(input.Directives))
-		for _, directive := range input.Directives {
-			requestedIDs = append(requestedIDs, directive.ID)
-		}
-		return fmt.Errorf("verdict declares %d directives but the task requested %d %v; declare exactly these (omit the field when the task requests none): %w",
-			len(verdict.Directives), len(requestedIDs), requestedIDs, ErrInvalid)
-	}
-	for _, directive := range verdict.Directives {
-		if _, ok := expected[directive.DirectiveID]; !ok {
-			return fmt.Errorf("verdict directive %q is outside the requested directives: %w", directive.DirectiveID, ErrInvalid)
-		}
-	}
-	if verdict.Status == ReviewPass && !verdict.DirectivesSatisfied() {
-		return fmt.Errorf(
-			"review pass requires all directive checks satisfied; report unmet directives as blocking findings: %w",
-			ErrInvalid,
-		)
-	}
-	return validateFindingLinks(input, verdict)
+	return validateChecks(input.Requirements, verdict)
 }
 
-// validateFindingLinks 是链接门（§6.4/D43）：终审必须声明意图核验；每个未满足的
-// 核验项至少有一条阻塞发现链接到它，链接只能指向本裁定声明为未满足的项。
-func validateFindingLinks(input ReviewRangeInput, verdict ReviewVerdict) error {
-	if input.VerifyIntent && verdict.Intent == nil {
-		return fmt.Errorf("final review requires an intent verification declaration: %w", ErrInvalid)
+// validateChecks 是要求核验门（D62）：任务输入的每项要求恰好声明一次，settle 项不得
+// pending；pass 不得有违反项；每个违反项至少一条阻塞发现链接它，链接只能指向违反项。
+func validateChecks(requirements []Requirement, verdict ReviewVerdict) error {
+	expected := make(map[string]Requirement, len(requirements))
+	ids := make([]string, 0, len(requirements))
+	for _, requirement := range requirements {
+		expected[requirement.ID] = requirement
+		ids = append(ids, requirement.ID)
 	}
-	linkedDirectives := make(map[string]bool)
-	for _, directive := range verdict.Directives {
-		if !directive.Satisfied {
-			linkedDirectives[directive.DirectiveID] = false
+	if len(expected) != len(verdict.Checks) {
+		// 任务没带 requirements 时模型常自拟几条；说清期望集合，不要只说"不匹配"。
+		return fmt.Errorf("verdict declares %d checks but the task requested %d %v; declare exactly these (omit the field when the task requests none): %w",
+			len(verdict.Checks), len(ids), ids, ErrInvalid)
+	}
+	linked := make(map[string]bool)
+	for _, check := range verdict.Checks {
+		requirement, ok := expected[check.ID]
+		if !ok {
+			return fmt.Errorf("verdict check %q is outside the requested requirements %v: %w", check.ID, ids, ErrInvalid)
 		}
-	}
-	linkedIntent := make(map[string]bool)
-	if verdict.Intent != nil {
-		for _, dimension := range verdict.Intent.Unmet() {
-			linkedIntent[dimension] = false
+		switch {
+		case check.Status == CheckPending && requirement.Settle:
+			return fmt.Errorf("requirement %q must be settled in this window; declare %q or %q instead of %q: %w",
+				check.ID, CheckSatisfied, CheckViolated, CheckPending, ErrInvalid)
+		case check.Status == CheckViolated && verdict.Status == ReviewPass:
+			return fmt.Errorf("review pass cannot declare requirement %q violated; report it as a blocking finding: %w", check.ID, ErrInvalid)
+		case check.Status == CheckViolated:
+			linked[check.ID] = false
 		}
 	}
 	for i, finding := range verdict.Findings {
-		if finding.DirectiveID != "" {
-			if _, unmet := linkedDirectives[finding.DirectiveID]; !unmet {
-				return fmt.Errorf("finding %d links directive %q that is not declared unmet: %w", i, finding.DirectiveID, ErrInvalid)
-			}
-			linkedDirectives[finding.DirectiveID] = true
+		if finding.Requirement == "" {
+			continue
 		}
-		if finding.Intent != "" {
-			if _, unmet := linkedIntent[finding.Intent]; !unmet {
-				return fmt.Errorf("finding %d links intent %q that is not declared unmet: %w", i, finding.Intent, ErrInvalid)
-			}
-			linkedIntent[finding.Intent] = true
+		if _, violated := linked[finding.Requirement]; !violated {
+			return fmt.Errorf("finding %d links requirement %q that is not declared %q: %w", i, finding.Requirement, CheckViolated, ErrInvalid)
 		}
+		linked[finding.Requirement] = true
 	}
-	for _, directive := range verdict.Directives {
-		if linked, unmet := linkedDirectives[directive.DirectiveID]; unmet && !linked {
-			return fmt.Errorf("unmet directive %q requires a blocking finding linked to it: %w", directive.DirectiveID, ErrInvalid)
-		}
-	}
-	if verdict.Intent != nil {
-		for _, dimension := range verdict.Intent.Unmet() {
-			if !linkedIntent[dimension] {
-				return fmt.Errorf("unmet intent %q requires a blocking finding linked to it: %w", dimension, ErrInvalid)
-			}
+	for _, check := range verdict.Checks {
+		if ok, violated := linked[check.ID]; violated && !ok {
+			return fmt.Errorf("violated requirement %q requires a blocking finding linked to it: %w", check.ID, ErrInvalid)
 		}
 	}
 	return nil
 }
 
-// Adjudicated 套用用户裁决（D43）得到生效裁定：被接受的阻塞发现移除；核验项在没有
-// 剩余阻塞发现链接它时视为满足；不再有阻塞发现即生效为 pass。原裁定不变。
+// Adjudicated 套用用户裁决（D43）得到生效裁定：被接受的阻塞发现移除；违反项在没有
+// 剩余阻塞发现链接它时视为满足，pending 不受影响；不再有阻塞发现即生效为 pass。原裁定不变。
 func (v ReviewVerdict) Adjudicated(operationID string, accepted map[string]struct{}) ReviewVerdict {
 	if len(accepted) == 0 {
 		return v
 	}
 	effective := v
 	effective.Findings = make([]ReviewFinding, 0, len(v.Findings))
-	linkedDirectives, linkedIntent := make(map[string]struct{}), make(map[string]struct{})
+	linked := make(map[string]struct{})
 	removed := false
 	for i, finding := range v.Findings {
 		if _, ok := accepted[FindingID(operationID, i)]; ok && finding.Severity == FindingBlocking {
@@ -361,30 +270,18 @@ func (v ReviewVerdict) Adjudicated(operationID string, accepted map[string]struc
 			continue
 		}
 		effective.Findings = append(effective.Findings, finding)
-		if finding.DirectiveID != "" {
-			linkedDirectives[finding.DirectiveID] = struct{}{}
-		}
-		if finding.Intent != "" {
-			linkedIntent[finding.Intent] = struct{}{}
+		if finding.Requirement != "" {
+			linked[finding.Requirement] = struct{}{}
 		}
 	}
 	if !removed {
 		return v
 	}
-	effective.Directives = slices.Clone(v.Directives)
-	for i := range effective.Directives {
-		if _, linked := linkedDirectives[effective.Directives[i].DirectiveID]; !linked {
-			effective.Directives[i].Satisfied = true
+	effective.Checks = slices.Clone(v.Checks)
+	for i, check := range effective.Checks {
+		if _, still := linked[check.ID]; check.Status == CheckViolated && !still {
+			effective.Checks[i].Status = CheckSatisfied
 		}
-	}
-	if v.Intent != nil {
-		intent := *v.Intent
-		for _, dimension := range v.Intent.Unmet() {
-			if _, linked := linkedIntent[dimension]; !linked {
-				intent.satisfy(dimension)
-			}
-		}
-		effective.Intent = &intent
 	}
 	if len(effective.BlockingChapters()) == 0 {
 		effective.Status = ReviewPass

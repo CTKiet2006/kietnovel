@@ -72,14 +72,14 @@ func TestRelocateFollowsControlOnlyRule(t *testing.T) {
 	})
 	proposal.Impact.Compliance = json.RawMessage(`{"status":"pass"}`)
 
-	same, moved, err := engine.Relocate(ctx, proposal, scopeBasis())
+	same, moved, err := engine.relocate(ctx, proposal, scopeBasis())
 	if err != nil || moved || same.BaseRevision != 1 {
 		t.Fatalf("relocate at current = %#v, %v, %v", same, moved, err)
 	}
 	// 锁定实体 + 只覆盖第 1 章的要求：用户专属且不相干，重定位到 Revision 3。
 	commitUserChange(t, ctx, s, target, "lock-hero", ownershipPatch(t, hero, model.ControlLocked))
 	commitUserChange(t, ctx, s, target, "unrelated", directivePatch(t, "d1", "chapter_range:1-1"))
-	relocated, moved, err := engine.Relocate(ctx, proposal, scopeBasis())
+	relocated, moved, err := engine.relocate(ctx, proposal, scopeBasis())
 	if err != nil || !moved || relocated.BaseRevision != 3 || len(relocated.Impact.Structural) == 0 ||
 		string(relocated.Impact.Compliance) != `{"status":"pass"}` {
 		t.Fatalf("relocated = %#v, %v, %v", relocated, moved, err)
@@ -89,35 +89,35 @@ func TestRelocateFollowsControlOnlyRule(t *testing.T) {
 	}
 	// 覆盖第 2 章的要求：作用域摘要变了，任务基线不再成立。
 	related := commitUserChange(t, ctx, s, target, "related", directivePatch(t, "d2", "from_chapter:2"))
-	if _, _, err := engine.Relocate(ctx, proposal, scopeBasis()); !errors.Is(err, model.ErrRevisionConflict) || !errors.Is(err, ErrBasisMismatch) {
+	if _, _, err := engine.relocate(ctx, proposal, scopeBasis()); !errors.Is(err, model.ErrRevisionConflict) || !errors.Is(err, ErrBasisMismatch) {
 		t.Fatalf("related directive err = %v", err)
 	}
 	// 基线跟上后，内容变化仍然冲突并说明是哪份文档。
 	upToDate := scopeBasis(model.DocumentBasis{Ref: model.DocumentRef{Kind: model.DocumentDirective, ID: "d2"}, Revision: related})
-	if relocated, moved, err := engine.Relocate(ctx, proposal, upToDate); err != nil || !moved || relocated.BaseRevision != related {
+	if relocated, moved, err := engine.relocate(ctx, proposal, upToDate); err != nil || !moved || relocated.BaseRevision != related {
 		t.Fatalf("relocate with current scope = %#v, %v, %v", relocated, moved, err)
 	}
 	entity := commitUserChange(t, ctx, s, target, "rename", model.Patch{
 		Document: hero, Operation: model.PatchPut,
 		Content: documentJSON(t, model.Entity{ID: "hero", Kind: model.EntityCharacter, Name: "主角二号"}),
 	})
-	_, _, err = engine.Relocate(ctx, proposal, upToDate)
+	_, _, err = engine.relocate(ctx, proposal, upToDate)
 	if !errors.Is(err, model.ErrRevisionConflict) || !strings.Contains(err.Error(), "entity:hero changed at revision 5") {
 		t.Fatalf("content drift err = %v", err)
 	}
 	// 提案自己要改的用户专属文档被用户改过：同样冲突；改别的则重定位。
 	ownership := pendingChange("ai-guide", target, entity, model.AuthorAI, ownershipPatch(t, hero, model.ControlGuided))
 	commitUserChange(t, ctx, s, target, "relock", ownershipPatch(t, hero, model.ControlLocked))
-	if _, _, err := engine.Relocate(ctx, ownership, model.EvidenceBasis{}); !errors.Is(err, model.ErrRevisionConflict) {
+	if _, _, err := engine.relocate(ctx, ownership, model.EvidenceBasis{}); !errors.Is(err, model.ErrRevisionConflict) {
 		t.Fatalf("own document drift err = %v", err)
 	}
 	other := pendingChange("ai-guide-plan", target, entity, model.AuthorAI, ownershipPatch(t, model.DocumentRef{Kind: model.DocumentPlan, ID: "arc-1"}, model.ControlGuided))
-	if relocated, moved, err := engine.Relocate(ctx, other, model.EvidenceBasis{}); err != nil || !moved || relocated.BaseRevision != entity+1 {
+	if relocated, moved, err := engine.relocate(ctx, other, model.EvidenceBasis{}); err != nil || !moved || relocated.BaseRevision != entity+1 {
 		t.Fatalf("relocate past another ownership change = %#v, %v, %v", relocated, moved, err)
 	}
 	// 基线领先于当前是调用方错误。
 	ahead := pendingChange("ahead", target, 99, model.AuthorAI)
-	if _, _, err := engine.Relocate(ctx, ahead, model.EvidenceBasis{}); !errors.Is(err, model.ErrRevisionConflict) {
+	if _, _, err := engine.relocate(ctx, ahead, model.EvidenceBasis{}); !errors.Is(err, model.ErrRevisionConflict) {
 		t.Fatalf("ahead err = %v", err)
 	}
 }

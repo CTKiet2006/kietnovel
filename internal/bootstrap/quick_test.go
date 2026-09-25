@@ -1,6 +1,7 @@
 package bootstrap_test
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -74,7 +75,7 @@ func TestQuickWriteManualApprovalWaitsForUserAndResumes(t *testing.T) {
 		t.Fatalf("quick write under manual approval: %v", err)
 	}
 	if result.RunID != "run:manual-book:1" || result.RunState != model.RunWaitingUser ||
-		result.WaitingOperationID != runQuickID(result.RunID, "plan") || executor.calls != 1 {
+		result.WaitingOperationID != planID(result.RunID, command.Chapters) || executor.calls != 1 {
 		t.Fatalf("result = %#v, executor calls = %d", result, executor.calls)
 	}
 	payload, err := json.Marshal(result)
@@ -91,7 +92,7 @@ func TestQuickWriteManualApprovalWaitsForUserAndResumes(t *testing.T) {
 	}
 
 	proposals := []string{
-		runQuickID(result.RunID, "plan") + "-proposal",
+		planID(result.RunID, command.Chapters) + "-proposal",
 		runQuickID(result.RunID, "chapter", "chapter-plan-1") + "-proposal",
 		runQuickID(result.RunID, "chapter", "chapter-plan-2") + "-proposal",
 	}
@@ -128,7 +129,7 @@ func TestQuickWriteMilestonePresetPausesOnlyAtMilestones(t *testing.T) {
 	if result.RunState != model.RunWaitingUser || executor.calls != 1 {
 		t.Fatalf("result = %#v, executor calls = %d", result, executor.calls)
 	}
-	if _, err := api.Decisions.Approve(ctx, runQuickID(result.RunID, "plan")+"-proposal", command.UserID, command.CreatedAt.Add(time.Hour)); err != nil {
+	if _, err := api.Decisions.Approve(ctx, planID(result.RunID, command.Chapters)+"-proposal", command.UserID, command.CreatedAt.Add(time.Hour)); err != nil {
 		t.Fatalf("approve plan: %v", err)
 	}
 	command.CreatedAt = command.CreatedAt.Add(2 * time.Hour)
@@ -155,7 +156,7 @@ func TestQuickWriteRejectedChapterIsRewrittenBySuccessor(t *testing.T) {
 	if _, err := api.Novels.QuickWrite(ctx, command); err != nil {
 		t.Fatalf("quick write: %v", err)
 	}
-	if _, err := api.Decisions.Approve(ctx, runQuickID("run:reject-book:1", "plan")+"-proposal", command.UserID, command.CreatedAt.Add(time.Hour)); err != nil {
+	if _, err := api.Decisions.Approve(ctx, planID("run:reject-book:1", command.Chapters)+"-proposal", command.UserID, command.CreatedAt.Add(time.Hour)); err != nil {
 		t.Fatalf("approve plan: %v", err)
 	}
 	command.CreatedAt = command.CreatedAt.Add(2 * time.Hour)
@@ -275,8 +276,8 @@ func TestQuickWriteMidRunTighteningMigratesInFlightWork(t *testing.T) {
 }
 
 func TestQuickWriteExtendsGoalWithRollingPlan(t *testing.T) {
-	// D5+D2：完本后把目标从 3 章提到 5 章——Intent 走用户提案更新，
-	// 蓝图用 revise_plan 增量扩窗（保持已有节点稳定），续写到新目标。
+	// D5+D2+D63：完本后把篇幅从 3 章提到 5 章——只改运行目标、不写 Intent（已有审阅证据
+	// 不失效），蓝图用 revise_plan 增量扩窗（保持已有节点稳定），续写到新篇幅。
 	ctx := context.Background()
 	executor := &scriptedQuickExecutor{now: testTime()}
 	api := newQuickTestApp(t, executor)
@@ -295,18 +296,29 @@ func TestQuickWriteExtendsGoalWithRollingPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("grow goal: %v", err)
 	}
-	// 修订序列：意图更新 6、扩窗 7、第 4 章 8、第 5 章 9；审阅不产生修订。
-	// 调用序列：已写窗口先过阶段审阅（先审后扩）再扩窗、写两章、终审，共 +5。
-	if grown.RunState != model.RunCompleted || grown.Revision != 9 ||
-		grown.RunID != "run:grow-book:2" || len(grown.Chapters) != 5 || executor.calls != 10 {
+	// 修订序列：扩窗 6、第 4 章 7、第 5 章 8；审阅不产生修订。
+	// 调用序列：前三章的窗口审阅仍有效（篇幅不进证据基线），扩窗、写两章、末窗审阅，共 +4。
+	if grown.RunState != model.RunCompleted || grown.Revision != 8 ||
+		grown.RunID != "run:grow-book:2" || len(grown.Chapters) != 5 || executor.calls != 9 {
 		t.Fatalf("grown = %#v, executor calls = %d", grown, executor.calls)
 	}
 	project, err := api.Projects.Project(ctx, command.ProjectID, 0)
-	if err != nil || project.Intent.TargetChapters != 5 || len(project.Manuscript) != 5 {
+	if err != nil || len(project.Manuscript) != 5 {
 		t.Fatalf("project = %#v, %v", project, err)
 	}
+	// 续跑不传篇幅沿用上一轮（修复旧版把已有作品重置为 3 章）：只做完成验证，不再调用模型。
+	command.Chapters = novelapp.KeepChapters
+	command.CreatedAt = command.CreatedAt.Add(time.Hour)
+	kept, err := api.Novels.QuickWrite(ctx, command)
+	if err != nil || kept.RunState != model.RunCompleted || len(kept.Chapters) != 5 || executor.calls != 9 {
+		t.Fatalf("kept = %#v, %v, executor calls = %d", kept, err, executor.calls)
+	}
+	run, err := api.Runs.CreationRun(ctx, kept.RunID)
+	if goal, decodeErr := model.DecodeNovelGoal(run.Goal); err != nil || decodeErr != nil || goal.TargetChapters != 5 {
+		t.Fatalf("continued goal = %+v, %v %v", goal, err, decodeErr)
+	}
 
-	// Run 血统（§6.3）：创建事件 + 阶段审阅、扩窗、两章、终审的 operation_created 事件。
+	// Run 血统（§6.3）：创建事件 + 扩窗、两章、末窗审阅的 operation_created 事件。
 	events, err := api.Runs.CreationRunEvents(ctx, "run:grow-book:2")
 	if err != nil {
 		t.Fatalf("list run events: %v", err)
@@ -317,7 +329,7 @@ func TestQuickWriteExtendsGoalWithRollingPlan(t *testing.T) {
 	}
 	want := []string{
 		model.RunEventCreated, model.RunEventOperationCreated, model.RunEventOperationCreated,
-		model.RunEventOperationCreated, model.RunEventOperationCreated, model.RunEventOperationCreated,
+		model.RunEventOperationCreated, model.RunEventOperationCreated,
 	}
 	if !slices.Equal(kinds, want) {
 		t.Fatalf("run event kinds = %v, want %v", kinds, want)
@@ -468,7 +480,7 @@ func TestQuickWriteDirectiveAddedMidRunReachesSuccessorAndGatesReview(t *testing
 }
 
 func TestQuickWriteReviewsWindowBeforeExtendingPlan(t *testing.T) {
-	// 先审后扩（§6.3）：写满一个规划窗口后先做阶段审阅，通过才扩展下一段
+	// 先审后扩（§6.3）：写满一个规划窗口后先做窗口审阅，通过才扩展下一段
 	// 计划，且审阅意见随扩窗输入进入下一段规划。
 	ctx := context.Background()
 	note := "主角动机要在下一段更明确"
@@ -488,7 +500,7 @@ func TestQuickWriteReviewsWindowBeforeExtendingPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quick write with rolling window: %v", err)
 	}
-	// 规划 1 + 首窗三章 3 + 阶段审阅 1 + 扩窗 1 + 两章 2 + 终审 1 = 9 次。
+	// 规划 1 + 首窗三章 3 + 首窗审阅 1 + 扩窗 1 + 两章 2 + 末窗审阅 1 = 9 次。
 	if result.RunState != model.RunCompleted || result.Revision != 8 ||
 		len(result.Chapters) != 5 || executor.calls != 9 {
 		t.Fatalf("result = %#v, executor calls = %d", result, executor.calls)
@@ -496,10 +508,48 @@ func TestQuickWriteReviewsWindowBeforeExtendingPlan(t *testing.T) {
 	if len(extendInputs) != 1 || !strings.Contains(extendInputs[0], note) {
 		t.Fatalf("extend inputs = %v, want stage review note %q forwarded", extendInputs, note)
 	}
+	// 工作台与协调器同口径（D62）：两个窗口各自的当前裁定都呈现，不只取最新一份。
+	snapshot, err := api.Workbench.WorkbenchSnapshot(ctx, "window-book")
+	if err != nil {
+		t.Fatalf("workbench snapshot: %v", err)
+	}
+	if len(snapshot.Findings) != 2 || snapshot.Findings[0].ChapterID != "chapter-chapter-plan-1" || snapshot.Findings[1].ChapterID != "chapter-chapter-plan-4" {
+		t.Fatalf("workbench findings = %+v, want one per window", snapshot.Findings)
+	}
+}
+
+// TestQuickWriteReviewCostIsLinear 是 D62 的成本证据：20 章按 3 章窗口审阅，每章只审一次
+// （原累计范围为 3+6+…+20 章次）。
+func TestQuickWriteReviewCostIsLinear(t *testing.T) {
+	ctx := context.Background()
+	executor := &scriptedQuickExecutor{now: testTime()}
+	api := newQuickTestApp(t, executor)
+	reviewed := 0
+	executor.onExecute = func(operation model.Operation) {
+		if operation.Kind != model.OperationReviewRange {
+			return
+		}
+		input, err := model.TaskInputAs[model.ReviewRangeInput](operation)
+		if err != nil {
+			t.Fatalf("review input: %v", err)
+		}
+		reviewed += len(input.ChapterIDs)
+	}
+	result, err := api.Novels.QuickWrite(ctx, novelapp.QuickWriteCommand{
+		ProjectID: "long-book", UserID: "user-1", Premise: "一个失忆的邮差替亡者送完最后一封信",
+		Chapters: 20, WorkerID: "quick-worker", LeaseDuration: time.Minute, CreatedAt: testTime(),
+	})
+	if err != nil {
+		t.Fatalf("quick write: %v", err)
+	}
+	// 规划 1 + 20 章 + 7 次窗口审阅 + 6 次扩窗 = 34 次。
+	if result.RunState != model.RunCompleted || len(result.Chapters) != 20 || reviewed != 20 || executor.calls != 34 {
+		t.Fatalf("result = %#v, reviewed chapters = %d, executor calls = %d", result, reviewed, executor.calls)
+	}
 }
 
 func TestQuickWriteWindowReviewBlockedTriggersRewriteBeforeExtending(t *testing.T) {
-	// 阶段审阅给出阻塞发现时不得扩窗：先按意见重写、再审阅通过后才继续规划。
+	// 窗口审阅给出阻塞发现时不得扩窗：先按意见重写、再审阅通过后才继续规划。
 	ctx := context.Background()
 	executor := &scriptedQuickExecutor{
 		now: testTime(), blockChapter: "chapter-chapter-plan-2", blockRemaining: 1,
@@ -513,7 +563,7 @@ func TestQuickWriteWindowReviewBlockedTriggersRewriteBeforeExtending(t *testing.
 	if err != nil {
 		t.Fatalf("quick write across blocked window review: %v", err)
 	}
-	// 规划 1 + 三章 3 + 阶段审阅（阻塞）1 + 重写 1 + 再审阅 1 + 扩窗 1 + 两章 2 + 终审 1 = 11 次。
+	// 规划 1 + 三章 3 + 窗口审阅（阻塞）1 + 重写 1 + 再审阅 1 + 扩窗 1 + 两章 2 + 末窗审阅 1 = 11 次。
 	if result.RunState != model.RunCompleted || result.Revision != 9 || executor.calls != 11 {
 		t.Fatalf("result = %#v, executor calls = %d", result, executor.calls)
 	}
@@ -576,7 +626,7 @@ func TestQuickWriteExhaustedRepairBudgetWaitsAndRaisedBudgetResumes(t *testing.T
 	if err != nil {
 		t.Fatalf("resume after raising budget: %v", err)
 	}
-	// 续跑：第三次重写 1 + 终审通过 1 = 10 次。
+	// 续跑：第三次重写 1 + 末窗审阅通过 1 = 10 次。
 	if result.RunState != model.RunCompleted || executor.calls != 10 {
 		t.Fatalf("resumed result = %#v, executor calls = %d", result, executor.calls)
 	}
@@ -599,6 +649,9 @@ type scriptedQuickExecutor struct {
 	unmetRemaining int
 	// rewrites：按章记录重写轮次，让 canon 前值在多轮重写间保持连续。
 	rewrites map[string]int
+	// finale/scaleMax/raiseTo：篇幅交给 AI 时的规划（D63）——写罗盘（上限默认 50），
+	// 蓝图够到 finale 章时声明收官；raiseTo 非零时扩窗上调上限。
+	finale, scaleMax, raiseTo int
 }
 
 func newQuickTestApp(t *testing.T, executor *scriptedQuickExecutor) *testApp {
@@ -611,6 +664,27 @@ func newQuickTestApp(t *testing.T, executor *scriptedQuickExecutor) *testApp {
 }
 
 func (e *scriptedQuickExecutor) Identity() string { return prompt.ExecutorIdentity }
+
+// planCompass 返回本次规划的末章与罗盘补丁；固定篇幅时不写罗盘。
+func (e *scriptedQuickExecutor) planCompass(fixed, requested int, extending bool) (int, []model.Patch, error) {
+	if fixed > 0 {
+		return requested, nil, nil
+	}
+	compass := model.Compass{ScaleMax: cmp.Or(e.scaleMax, 50), Ending: "送完最后一封信"}
+	if extending && e.raiseTo > 0 {
+		compass.ScaleMax = e.raiseTo
+	}
+	if e.finale > 0 && requested >= e.finale {
+		requested, compass.Final = e.finale, e.finale
+	}
+	content, err := json.Marshal(compass)
+	if err != nil {
+		return 0, nil, err
+	}
+	return requested, []model.Patch{{
+		Document: model.DocumentRef{Kind: model.DocumentCompass, ID: model.SingletonDocumentID}, Operation: model.PatchPut, Content: content,
+	}}, nil
+}
 
 func (e *scriptedQuickExecutor) Execute(ctx context.Context, operation model.Operation) (model.OperationOutcome, error) {
 	e.calls++
@@ -636,7 +710,12 @@ func (e *scriptedQuickExecutor) Execute(ctx context.Context, operation model.Ope
 			{ID: "volume-1", Kind: model.PlanVolume, Order: 1, Title: "余信", Summary: "完成亡者留下的托付"},
 			{ID: "arc-1", Kind: model.PlanArc, ParentID: "volume-1", Order: 1, Title: "启程", Summary: "邮差追索身份与收信人"},
 		}
-		for number := 1; number <= input.RequestedChapters; number++ {
+		last, compass, err := e.planCompass(input.FixedChapters, input.RequestedChapters, false)
+		if err != nil {
+			return model.OperationOutcome{}, err
+		}
+		patches = append(patches, compass...)
+		for number := 1; number <= last; number++ {
 			values = append(values, model.PlanNode{
 				ID: fmt.Sprintf("chapter-plan-%d", number), Kind: model.PlanChapter,
 				ParentID: "arc-1", Order: number, Title: fmt.Sprintf("第%d章", number),
@@ -658,7 +737,12 @@ func (e *scriptedQuickExecutor) Execute(ctx context.Context, operation model.Ope
 		if err != nil {
 			return model.OperationOutcome{}, err
 		}
-		for number := input.ExistingChapters + 1; number <= input.RequestedChapters; number++ {
+		last, compass, err := e.planCompass(input.FixedChapters, input.RequestedChapters, true)
+		if err != nil {
+			return model.OperationOutcome{}, err
+		}
+		patches = append(patches, compass...)
+		for number := input.ExistingChapters + 1; number <= last; number++ {
 			node := model.PlanNode{
 				ID: fmt.Sprintf("chapter-plan-%d", number), Kind: model.PlanChapter,
 				ParentID: "arc-1", Order: number, Title: fmt.Sprintf("第%d章", number),
@@ -713,21 +797,19 @@ func (e *scriptedQuickExecutor) Execute(ctx context.Context, operation model.Ope
 			ChapterIDs: input.ChapterIDs, ReviewKey: "scripted-review", Basis: input.Basis,
 			Findings: []model.ReviewFinding{},
 		}
-		if input.VerifyIntent {
-			verdict.Intent = &model.IntentVerification{RequiredPresent: true, ForbiddenAbsent: true, EndingConsistent: true}
-		}
-		for _, directive := range input.Directives {
-			check := model.DirectiveVerification{DirectiveID: directive.ID, Satisfied: true}
-			if directive.ID == e.unmetDirective && e.unmetRemaining > 0 {
+		// 脚本化审阅对投递的要求一律判满足（settle 项因此也有结论），指定要求按次数判违反。
+		for _, requirement := range input.Requirements {
+			check := model.RequirementCheck{ID: requirement.ID, Status: model.CheckSatisfied}
+			if requirement.ID == "directive:"+e.unmetDirective && e.unmetRemaining > 0 {
 				e.unmetRemaining--
-				check.Satisfied, check.Note = false, "结尾没有留下钩子"
+				check.Status, check.Note = model.CheckViolated, "结尾没有留下钩子"
 				verdict.Status = model.ReviewBlocked
 				verdict.Findings = append(verdict.Findings, model.ReviewFinding{
-					ChapterID: e.blockChapter, Severity: model.FindingBlocking, Note: "按要求补上结尾钩子：" + directive.Text,
-					DirectiveID: directive.ID,
+					ChapterID: e.blockChapter, Severity: model.FindingBlocking, Note: "按要求补上结尾钩子：" + requirement.Text,
+					Requirement: requirement.ID,
 				})
 			}
-			verdict.Directives = append(verdict.Directives, check)
+			verdict.Checks = append(verdict.Checks, check)
 		}
 		if e.blockRemaining > 0 && slices.Contains(input.ChapterIDs, e.blockChapter) {
 			e.blockRemaining--
@@ -840,7 +922,7 @@ func (e *scriptedQuickExecutor) Execute(ctx context.Context, operation model.Ope
 
 func TestQuickWriteUnrelatedDirectiveKeepsWindowVerdictValid(t *testing.T) {
 	// D48：审阅证据按基线失效，不按整本 Revision。扩窗时用户对第 5 章提要求，
-	// 1–3 章的阶段审阅证据仍然有效、不重审；对第 2 章提要求则必须重审。
+	// 1–3 章的窗口审阅证据仍然有效、不重审；对第 2 章提要求则必须重审。
 	ctx := context.Background()
 	run := func(projectID, scope string) (novelapp.QuickWriteResult, *scriptedQuickExecutor) {
 		t.Helper()
@@ -851,7 +933,7 @@ func TestQuickWriteUnrelatedDirectiveKeepsWindowVerdictValid(t *testing.T) {
 			Chapters: 5, WorkerID: "quick-worker", LeaseDuration: time.Minute, CreatedAt: testTime(),
 		}
 		executor.onExecute = func(operation model.Operation) {
-			if operation.ID != runQuickID("run:"+projectID+":1", "plan", "extend", "3") {
+			if operation.ID != runQuickID("run:"+projectID+":1", "plan", "extend", "3", "r5:f5") {
 				return
 			}
 			if _, err := api.Projects.AddDirective(ctx, projectdoc.AddDirectiveCommand{
@@ -870,14 +952,11 @@ func TestQuickWriteUnrelatedDirectiveKeepsWindowVerdictValid(t *testing.T) {
 	}
 	reviewed := func(executor *scriptedQuickExecutor, runID string, revision model.Revision) bool {
 		t.Helper()
-		_, err := executor.authorityStore.GetOperation(ctx, reviewOperationID(runID, revision))
-		if err != nil && !errors.Is(err, model.ErrNotFound) {
-			t.Fatalf("read review operation: %v", err)
-		}
-		return err == nil
+		_, ok := findReview(t, executor.authorityStore, runID, revision)
+		return ok
 	}
-	// 规划 1 + 三章 3 + 阶段审阅 1 + 扩窗（提案重定位，D51）1 + 两章 2 + 终审 1 = 9 次；
-	// 要求提交后（Revision 6）没有新的阶段审阅。
+	// 规划 1 + 三章 3 + 窗口审阅 1 + 扩窗（提案重定位，D51）1 + 两章 2 + 末窗审阅 1 = 9 次；
+	// 要求提交后（Revision 6）没有新的窗口审阅。
 	unrelated, executor := run("late-directive-book", "from_chapter:5")
 	if unrelated.RunState != model.RunCompleted || unrelated.Revision != 9 || executor.calls != 9 ||
 		reviewed(executor, unrelated.RunID, 6) {
@@ -948,7 +1027,7 @@ func TestQuickWriteAcceptedFindingUnblocksAndWithdrawRestoresBlock(t *testing.T)
 		len(snapshot.Findings) != 1 || len(snapshot.Adjudications) != 0 {
 		t.Fatalf("snapshot after withdrawal = findings %#v, adjudications %#v, %v", snapshot.Findings, snapshot.Adjudications, err)
 	}
-	// 新一轮续写：阻塞恢复，按意见重写 1 + 终审通过 1。
+	// 新一轮续写：阻塞恢复，按意见重写 1 + 末窗审阅通过 1。
 	resume.CreatedAt = testTime().Add(6 * time.Minute)
 	if result, err = api.Novels.QuickWrite(ctx, resume); err != nil || result.RunState != model.RunCompleted ||
 		result.RunID != "run:accept-book:2" || executor.calls != 10 {
@@ -1040,7 +1119,7 @@ func TestQuickWriteDisjointDirectiveMidRunRelocatesInFlightChapter(t *testing.T)
 	if err != nil {
 		t.Fatalf("quick write: %v", err)
 	}
-	// 规划 1 + 三章 3 + 阶段审阅 1 + 扩窗 1 + 两章 2 + 终审 1 = 9 次，第 2 章没有后继。
+	// 规划 1 + 三章 3 + 窗口审阅 1 + 扩窗 1 + 两章 2 + 末窗审阅 1 = 9 次，第 2 章没有后继。
 	if result.RunState != model.RunCompleted || result.Revision != 9 || executor.calls != 9 {
 		t.Fatalf("result = %#v, executor calls = %d", result, executor.calls)
 	}
@@ -1075,7 +1154,7 @@ func TestQuickWriteDriftDuringReviewFollowsBasis(t *testing.T) {
 			Chapters: 2, WorkerID: "quick-worker", LeaseDuration: time.Minute, CreatedAt: testTime(),
 		}
 		executor.onExecute = func(operation model.Operation) {
-			if operation.ID == reviewOperationID("run:"+projectID+":1", 4) {
+			if reviewAt(operation.ID, "run:"+projectID+":1", 4) {
 				drift(api, command.CreatedAt.Add(30*time.Minute))
 			}
 		}
@@ -1085,7 +1164,7 @@ func TestQuickWriteDriftDuringReviewFollowsBasis(t *testing.T) {
 		}
 		return result, executor
 	}
-	// 规划 1 + 两章 2 + 终审 1 = 4 次：审阅期间锁定设定，裁定照常生效。
+	// 规划 1 + 两章 2 + 末窗审阅 1 = 4 次：审阅期间锁定设定，裁定照常生效。
 	locked, executor := run("locked-review-book", func(api *testApp, at time.Time) {
 		if _, err := api.Projects.SetOwnership(ctx, projectdoc.SetOwnershipCommand{
 			ProjectID: "locked-review-book", ChangeID: "review-lock", UserID: "user-1",
@@ -1110,9 +1189,9 @@ func TestQuickWriteDriftDuringReviewFollowsBasis(t *testing.T) {
 	if related.RunState != model.RunCompleted || executor.calls != 5 {
 		t.Fatalf("related result = %#v, executor calls = %d", related, executor.calls)
 	}
-	stale, err := executor.authorityStore.GetOperation(ctx, reviewOperationID(related.RunID, 4))
-	if err != nil || stale.State != model.OperationStale {
-		t.Fatalf("first review = %#v, %v; want stale", stale, err)
+	stale, ok := findReview(t, executor.authorityStore, related.RunID, 4)
+	if !ok || stale.State != model.OperationStale {
+		t.Fatalf("first review = %#v, found %v; want stale", stale, ok)
 	}
 }
 
@@ -1150,7 +1229,7 @@ func TestQuickWriteUserEditedChapterIsVerifiedBeforeNextWrite(t *testing.T) {
 	if err != nil || len(snapshot.PendingCanon) != 1 || snapshot.PendingCanon[0] != "chapter-chapter-plan-1-outcome" {
 		t.Fatalf("pending canon after edit = %#v, %v", snapshot.PendingCanon, err)
 	}
-	// 续写到 4 章：核验 1 + 重审（旧终审因第 1 章变化失效）1 + 扩窗 1 + 第 4 章 1 + 终审 1 = 10 次。
+	// 续写到 4 章：核验 1 + 重审（第 1 章变化使其窗口裁定失效）1 + 扩窗 1 + 第 4 章 1 + 末窗审阅 1 = 10 次。
 	command.Chapters, command.CreatedAt = 4, testTime().Add(2*time.Hour)
 	if result, err = api.Novels.QuickWrite(ctx, command); err != nil || result.RunState != model.RunCompleted || executor.calls != 10 {
 		t.Fatalf("second run = %#v, calls = %d, err = %v", result, executor.calls, err)
@@ -1165,5 +1244,201 @@ func TestQuickWriteUserEditedChapterIsVerifiedBeforeNextWrite(t *testing.T) {
 	}
 	if gaps := novelapp.CanonGaps(project); len(gaps) != 0 {
 		t.Fatalf("gaps after verification = %#v", gaps)
+	}
+}
+
+// D63：一句话交给 AI 定篇幅——首次规划给出罗盘，扩窗时蓝图够到收官章便声明收官；
+// 末窗必须对收官要求下结论，完成章数等于收官承诺。续跑沿用"交给 AI"。
+func TestQuickWriteAILengthCompletesAtTheCommittedFinale(t *testing.T) {
+	ctx := context.Background()
+	executor := &scriptedQuickExecutor{now: testTime(), finale: 5}
+	api := newQuickTestApp(t, executor)
+	var finale []model.Requirement
+	executor.onExecute = func(operation model.Operation) {
+		if operation.Kind != model.OperationReviewRange {
+			return
+		}
+		input, err := model.TaskInputAs[model.ReviewRangeInput](operation)
+		if err != nil {
+			t.Fatalf("review input: %v", err)
+		}
+		for _, requirement := range input.Requirements {
+			if strings.HasPrefix(requirement.ID, "book:finale:") {
+				finale = append(finale, requirement)
+			}
+		}
+	}
+	command := novelapp.QuickWriteCommand{
+		ProjectID: "ai-book", UserID: "user-1", Premise: "一个失忆的邮差替亡者送完最后一封信",
+		Chapters: novelapp.KeepChapters, WorkerID: "quick-worker", LeaseDuration: time.Minute, CreatedAt: testTime(),
+	}
+	result, err := api.Novels.QuickWrite(ctx, command)
+	if err != nil {
+		t.Fatalf("quick write: %v", err)
+	}
+	// 规划、三章、窗口审阅、扩窗（收官于 5）、两章、末窗审阅。
+	if result.RunState != model.RunCompleted || result.RunReason != "全书 5 章完成并通过审阅" || len(result.Chapters) != 5 || executor.calls != 9 {
+		t.Fatalf("result = %#v, executor calls = %d", result, executor.calls)
+	}
+	if len(finale) != 1 || !finale[0].Settle || !strings.Contains(finale[0].Text, "送完最后一封信") {
+		t.Fatalf("finale requirement = %+v", finale)
+	}
+	project, err := api.Projects.Project(ctx, command.ProjectID, 0)
+	if err != nil || project.Compass == nil || project.Compass.Final != 5 {
+		t.Fatalf("compass = %+v, %v", project.Compass, err)
+	}
+	run, err := api.Runs.CreationRun(ctx, result.RunID)
+	if goal, decodeErr := model.DecodeNovelGoal(run.Goal); err != nil || decodeErr != nil || goal.TargetChapters != 0 {
+		t.Fatalf("AI length goal = %+v, %v %v", goal, err, decodeErr)
+	}
+}
+
+// 续写（D63）：完本后不给章数，撤回收官承诺、篇幅交回 AI；扩窗文案点明已写末章是结局，
+// AI 重新收官后按新的全书章数完成。续写不能同时固定章数。
+func TestQuickWriteExtendHandsTheContinuationToAI(t *testing.T) {
+	ctx := context.Background()
+	executor := &scriptedQuickExecutor{now: testTime(), finale: 5}
+	api := newQuickTestApp(t, executor)
+	command := novelapp.QuickWriteCommand{
+		ProjectID: "sequel-book", UserID: "user-1", Premise: "一个失忆的邮差替亡者送完最后一封信",
+		Chapters: novelapp.KeepChapters, WorkerID: "quick-worker", LeaseDuration: time.Minute, CreatedAt: testTime(),
+	}
+	if first, err := api.Novels.QuickWrite(ctx, command); err != nil || first.RunState != model.RunCompleted || executor.calls != 9 {
+		t.Fatalf("first run = %#v, %v", first, err)
+	}
+	command.Extend, command.Chapters = true, 7
+	if _, err := api.Novels.QuickWrite(ctx, command); !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("extend with fixed chapters = %v, want ErrInvalid", err)
+	}
+
+	var goals []string
+	executor.onExecute = func(operation model.Operation) {
+		if operation.Kind == model.OperationRevisePlan {
+			input, err := model.TaskInputAs[model.RevisePlanInput](operation)
+			if err != nil {
+				t.Fatalf("revise input: %v", err)
+			}
+			goals = append(goals, input.Goal)
+		}
+	}
+	executor.finale = 7
+	command.Chapters = novelapp.KeepChapters
+	command.CreatedAt = command.CreatedAt.Add(time.Hour)
+	result, err := api.Novels.QuickWrite(ctx, command)
+	if err != nil {
+		t.Fatalf("extend: %v", err)
+	}
+	// 前五章的审阅仍有效（罗盘不进证据基线）：扩窗（收官于 7）、第 6 章、审第 6 章（窗口
+	// 4–6 的边界）、第 7 章、末窗审阅，共 +5。
+	if result.RunState != model.RunCompleted || result.RunReason != "全书 7 章完成并通过审阅" || len(result.Chapters) != 7 || executor.calls != 14 {
+		t.Fatalf("result = %#v, executor calls = %d", result, executor.calls)
+	}
+	if len(goals) != 1 || !strings.Contains(goals[0], "第 5 章已作为全书结局写成，这是续写") {
+		t.Fatalf("continuation goals = %q", goals)
+	}
+	project, err := api.Projects.Project(ctx, command.ProjectID, 0)
+	if err != nil || project.Compass == nil || project.Compass.Final != 7 {
+		t.Fatalf("compass = %+v, %v", project.Compass, err)
+	}
+}
+
+// D63 篇幅护栏：开放期扩窗逼近上限时 AI 上调 scale_max，auto 档下也要等用户裁决；
+// 批准后按新上限继续，直到收官。
+func TestQuickWriteAIScaleRaiseWaitsForUser(t *testing.T) {
+	ctx := context.Background()
+	executor := &scriptedQuickExecutor{now: testTime(), finale: 5, scaleMax: 4, raiseTo: 8}
+	api := newQuickTestApp(t, executor)
+	command := novelapp.QuickWriteCommand{
+		ProjectID: "raise-book", UserID: "user-1", Premise: "一个失忆的邮差替亡者送完最后一封信",
+		Chapters: 0, WorkerID: "quick-worker", LeaseDuration: time.Minute, CreatedAt: testTime(),
+	}
+	result, err := api.Novels.QuickWrite(ctx, command)
+	if err != nil {
+		t.Fatalf("quick write: %v", err)
+	}
+	// 上限 4 章：扩窗只请求到第 4 章，AI 同时把上限提到 8。
+	raise := runQuickID(result.RunID, "plan", "extend", "3", "r4:f0")
+	if result.RunState != model.RunWaitingUser || result.WaitingOperationID != raise || executor.calls != 6 {
+		t.Fatalf("result = %#v, executor calls = %d", result, executor.calls)
+	}
+	if _, err := api.Decisions.Approve(ctx, raise+"-proposal", command.UserID, command.CreatedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("approve raise: %v", err)
+	}
+	command.CreatedAt = command.CreatedAt.Add(2 * time.Hour)
+	if result, err = api.Novels.QuickWrite(ctx, command); err != nil {
+		t.Fatalf("resume after raise: %v", err)
+	}
+	// 第 4 章、审第 4 章、扩窗收官于 5、第 5 章、审第 5 章。
+	if result.RunState != model.RunCompleted || len(result.Chapters) != 5 || executor.calls != 11 {
+		t.Fatalf("final = %#v, executor calls = %d", result, executor.calls)
+	}
+	project, err := api.Projects.Project(ctx, command.ProjectID, 0)
+	if err != nil || project.Compass == nil || project.Compass.ScaleMax != 8 || project.Compass.Final != 5 {
+		t.Fatalf("compass = %+v, %v", project.Compass, err)
+	}
+}
+
+// D63：等待 AI 上调上限时用户改为固定篇幅——罗盘的收官章数对齐到固定值（上下文只有一个
+// 篇幅口径），按新篇幅续写；被取代的旧规划稿不再作为等待稿件呈现。
+func TestQuickWriteFixingLengthSupersedesWaitingRaise(t *testing.T) {
+	// 暂停保留运行等待的任务（D64）：续跑时照样核对并作废被取代的上调。
+	for _, paused := range []bool{false, true} {
+		t.Run(map[bool]string{false: "waiting", true: "paused"}[paused], func(t *testing.T) {
+			testFixingLengthSupersedesWaitingRaise(t, paused)
+		})
+	}
+}
+
+func testFixingLengthSupersedesWaitingRaise(t *testing.T, paused bool) {
+	ctx := context.Background()
+	executor := &scriptedQuickExecutor{
+		now: testTime(), scaleMax: 4, raiseTo: 8,
+		blockChapter: "chapter-chapter-plan-4", blockRemaining: 10,
+	}
+	api := newQuickTestApp(t, executor)
+	command := novelapp.QuickWriteCommand{
+		ProjectID: "fix-book", UserID: "user-1", Premise: "一个失忆的邮差替亡者送完最后一封信",
+		Chapters: 0, WorkerID: "quick-worker", LeaseDuration: time.Minute, CreatedAt: testTime(),
+	}
+	result, err := api.Novels.QuickWrite(ctx, command)
+	raise := runQuickID("run:fix-book:1", "plan", "extend", "3", "r4:f0")
+	if err != nil || result.WaitingOperationID != raise {
+		t.Fatalf("raise wait = %#v, %v", result, err)
+	}
+	if paused {
+		run, err := api.Runs.PauseCreationRun(ctx, result.RunID, command.CreatedAt.Add(time.Minute))
+		if err != nil || run.State != model.RunPaused || run.WaitingOperationID != raise {
+			t.Fatalf("paused run = %+v, %v", run, err)
+		}
+	}
+
+	command.Chapters, command.CreatedAt = 5, command.CreatedAt.Add(time.Hour)
+	if result, err = api.Novels.QuickWrite(ctx, command); err != nil {
+		t.Fatalf("fix length: %v", err)
+	}
+	// 第 4 章审阅一直阻塞：每章 2 次自动重写用尽后等待，这次等待不带稿件。
+	if result.RunState != model.RunWaitingUser || !strings.Contains(result.RunReason, "自动修订预算") {
+		t.Fatalf("budget wait = %#v", result)
+	}
+	// 被取代的上调转为 stale（D64）：不再作为等待稿件呈现，旧稿也不能再被批准入账。
+	if stale, err := api.store.GetOperation(ctx, raise); err != nil || stale.State != model.OperationStale {
+		t.Fatalf("superseded raise = %+v, %v", stale, err)
+	}
+	if _, ok, err := api.Runs.WaitingProposal(ctx, result.RunID); err != nil || ok {
+		t.Fatalf("superseded raise must not surface as the waiting proposal: ok=%v err=%v", ok, err)
+	}
+	superseded, err := api.store.GetProposalByOperation(ctx, raise)
+	if err != nil {
+		t.Fatalf("raise proposal: %v", err)
+	}
+	if _, err := api.Decisions.Approve(ctx, superseded.ID, "user-1", command.CreatedAt.Add(time.Minute)); err == nil {
+		t.Fatal("a superseded raise must not be approved")
+	}
+	if rejected, err := api.Decisions.Reject(ctx, superseded.ID, "user-1", "不再需要", command.CreatedAt.Add(time.Minute)); err != nil || rejected.ApprovalState != model.ApprovalRejected {
+		t.Fatalf("rejecting a superseded raise = %+v, %v", rejected, err)
+	}
+	project, err := api.Projects.Project(ctx, command.ProjectID, 0)
+	if err != nil || project.Compass == nil || project.Compass.Final != 5 || project.Compass.ScaleMax != 5 || len(project.Manuscript) != 5 {
+		t.Fatalf("aligned compass = %+v chapters=%d, %v", project.Compass, len(project.Manuscript), err)
 	}
 }

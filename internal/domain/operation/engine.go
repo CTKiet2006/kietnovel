@@ -49,7 +49,6 @@ type RunResult struct {
 
 func NewEngine(authorityStore Store, changes *change.Engine, contracts ...VerdictContract) *Engine {
 	e := &Engine{store: authorityStore, changes: changes, verdicts: make(map[model.OperationKind]VerdictValidator)}
-	e.verdicts[model.OperationReviewRange] = e.validateReviewEvidence
 	for _, contract := range contracts {
 		if _, err := model.KindSpec(contract.Kind); err != nil {
 			panic(err)
@@ -88,23 +87,6 @@ func (e *Engine) RunNextWithExecutors(ctx context.Context, executors []Executor,
 	return e.runClaimed(ctx, byID[op.Snapshot.Executor], op, workerID, leaseDuration, now)
 }
 
-func (e *Engine) RunNext(
-	ctx context.Context,
-	executor Executor,
-	workerID string,
-	leaseDuration time.Duration,
-	now time.Time,
-) (RunResult, error) {
-	if executor == nil {
-		return RunResult{}, fmt.Errorf("operation executor is required: %w", model.ErrInvalid)
-	}
-	operation, err := e.store.ClaimNextOperationForExecutor(ctx, workerID, executor.Identity(), leaseDuration, now)
-	if err != nil {
-		return RunResult{}, err
-	}
-	return e.runClaimed(ctx, executor, operation, workerID, leaseDuration, now)
-}
-
 func (e *Engine) Run(
 	ctx context.Context,
 	executor Executor,
@@ -117,7 +99,8 @@ func (e *Engine) Run(
 	}
 	operation, err := e.store.ClaimOperationForExecutor(ctx, operationID, workerID, executor.Identity(), leaseDuration, now)
 	if err != nil {
-		return RunResult{}, err
+		stored, err := e.persisted(ctx, operationID, err)
+		return RunResult{Operation: stored}, err
 	}
 	return e.runClaimed(ctx, executor, operation, workerID, leaseDuration, now)
 }
@@ -176,12 +159,24 @@ func (e *Engine) runClaimed(
 			return e.fail(ctx, operation, err, now)
 		}
 	}
+	result, err := e.deliver(ctx, executor, workerID, leaseDuration, operation, outcome, now)
+	result.Artifacts = outcome.Artifacts
+	return result, err
+}
+
+// deliver 收尾执行产出：无产出直接成功，裁定走证据收尾，提案经宿主规范化后保存并裁决。
+func (e *Engine) deliver(
+	ctx context.Context,
+	executor Executor,
+	workerID string,
+	leaseDuration time.Duration,
+	operation model.Operation,
+	outcome model.OperationOutcome,
+	now time.Time,
+) (RunResult, error) {
 	if outcome.Proposal == nil && len(outcome.Verdict) == 0 {
-		succeeded, err := e.store.ConcludeOperation(ctx, operation.ID, operation.Attempt, model.OperationSucceeded, "", now)
-		if err != nil {
-			return RunResult{}, err
-		}
-		return RunResult{Operation: succeeded, Artifacts: outcome.Artifacts}, nil
+		succeeded, err := e.conclude(ctx, operation, model.OperationSucceeded, "", now)
+		return RunResult{Operation: succeeded}, err
 	}
 	if outcome.Proposal == nil {
 		return e.finalizeVerdict(ctx, operation, outcome.Verdict, now)
@@ -199,83 +194,35 @@ func (e *Engine) runClaimed(
 	if err := proposal.Validate(); err != nil {
 		return e.fail(ctx, operation, err, now)
 	}
-	// 故事依赖由宿主写入（D40）：执行器声明的 depends_on 不作数。
-	if proposal.Patches, err = model.BindChapterDependencies(proposal.Patches); err != nil {
-		return e.fail(ctx, operation, err, now)
-	}
 	if len(proposal.Impact.Semantic) != 0 || len(proposal.Impact.Compliance) != 0 {
 		return e.fail(ctx, operation, fmt.Errorf("executor cannot self-assert semantic compliance: %w", model.ErrInvalid), now)
 	}
-	if err := e.validatePlanTarget(ctx, operation, proposal); err != nil {
-		return e.fail(ctx, operation, err, now)
-	}
-	// 提案重定位（D51）：基线落后但中间只有用户专属变化且任务基线仍成立时搬到当前
-	// Revision，让在途约束有机会参与合规分析；否则任务失效，后继继承工作区。
-	if proposal, _, err = e.relocate(ctx, operation, proposal); errors.Is(err, model.ErrRevisionConflict) {
-		result, err := e.stale(ctx, operation, err, now)
-		result.Artifacts = outcome.Artifacts
-		return result, err
-	} else if err != nil {
-		return e.fail(ctx, operation, err, now)
-	}
-	constraints, err := e.changes.SemanticConstraints(ctx, operation.Snapshot.BaseRevision, proposal)
+	// 宿主规范化提交（D40：故事依赖由宿主写入，执行器声明的 depends_on 不作数）。
+	patches, err := model.NormalizeSubmission(proposal.Patches)
 	if err != nil {
 		return e.fail(ctx, operation, err, now)
 	}
-	if shouldAnalyzeSemanticCompliance(operation, proposal, constraints) {
-		proposal.Impact.Compliance, err = e.analyzeCompliance(ctx, executor, workerID, leaseDuration, operation, proposal, constraints)
-		if err != nil {
-			return e.fail(ctx, operation, err, now)
-		}
-	}
+	proposal.Patches = patches
 	prepared, err := e.changes.PrepareExecution(ctx, proposal, operation.Attempt)
-	if errors.Is(err, model.ErrRevisionConflict) {
-		result, err := e.stale(ctx, operation, err, now)
-		result.Artifacts = outcome.Artifacts
-		return result, err
-	}
 	if err != nil {
-		return e.fail(ctx, operation, err, now)
+		return e.settle(ctx, operation, err, now)
 	}
-	result, err := e.finalize(ctx, executor, workerID, leaseDuration, operation, prepared, now)
-	result.Artifacts = outcome.Artifacts
-	return result, err
+	return e.finalize(ctx, executor, workerID, leaseDuration, operation, prepared, now)
 }
 
-// relocate 按任务基线重定位提案（D51）；不落库。
-func (e *Engine) relocate(ctx context.Context, operation model.Operation, proposal model.Proposal) (model.Proposal, bool, error) {
-	basis, err := model.OperationBasis(operation)
-	if err != nil {
-		return model.Proposal{}, false, err
+// settle 把收尾错误落为任务结局：基线冲突（无法重定位、提交前又有提交）转 stale，由
+// 后继继承工作区重做；其余失败。
+func (e *Engine) settle(ctx context.Context, operation model.Operation, cause error, now time.Time) (RunResult, error) {
+	if errors.Is(cause, model.ErrRevisionConflict) {
+		return e.stale(ctx, operation, cause, now)
 	}
-	return e.changes.Relocate(ctx, proposal, basis)
+	return e.fail(ctx, operation, cause, now)
 }
 
 // stale 收尾为 stale（§5.5）：基线无法重定位，由后继继承工作区重做。
 func (e *Engine) stale(ctx context.Context, operation model.Operation, cause error, now time.Time) (RunResult, error) {
-	stale, err := e.store.ConcludeOperation(ctx, operation.ID, operation.Attempt, model.OperationStale, cause.Error(), now)
-	if err != nil {
-		return RunResult{}, errors.Join(cause, err)
-	}
-	return RunResult{Operation: stale}, cause
-}
-
-// validatePlanTarget 把滚动规划请求的数量变成提交边界不变量：模型可以自由
-// 设计层级和内容，但不能悄悄多产或少产章节节点。
-func (e *Engine) validatePlanTarget(
-	ctx context.Context,
-	operation model.Operation,
-	proposal model.Proposal,
-) error {
-	expected, ok, err := model.PlanChapterTargetForOperation(operation)
-	if err != nil || !ok {
-		return err
-	}
-	base, err := e.store.ListPlanNodes(ctx, operation.Target, operation.Snapshot.BaseRevision)
-	if err != nil {
-		return err
-	}
-	return model.ValidatePlanChapterTarget(base, proposal.Patches, expected)
+	stale, err := e.conclude(ctx, operation, model.OperationStale, cause.Error(), now)
+	return RunResult{Operation: stale}, errors.Join(cause, err)
 }
 
 // finalizeVerdict 收尾无 Proposal 的 Operation（D30）：裁定绑定启动快照的 Revision
@@ -309,11 +256,8 @@ func (e *Engine) finalizeVerdict(
 	}, operation.ID, operation.Attempt); err != nil {
 		return e.fail(ctx, operation, err, now)
 	}
-	succeeded, err := e.store.ConcludeOperation(ctx, operation.ID, operation.Attempt, model.OperationSucceeded, "", now)
-	if err != nil {
-		return RunResult{}, err
-	}
-	return RunResult{Operation: succeeded, Verdict: payload}, nil
+	succeeded, err := e.conclude(ctx, operation, model.OperationSucceeded, "", now)
+	return RunResult{Operation: succeeded, Verdict: payload}, err
 }
 
 func (e *Engine) withLease(
@@ -366,6 +310,7 @@ func (e *Engine) withLease(
 	}
 }
 
+// finalize 裁决已保存的执行提案（首次收尾与崩溃恢复共用）；已裁决的提案直接落结局。
 func (e *Engine) finalize(
 	ctx context.Context,
 	executor Executor,
@@ -375,142 +320,78 @@ func (e *Engine) finalize(
 	prepared model.Proposal,
 	now time.Time,
 ) (RunResult, error) {
-	result := RunResult{Operation: operation, Proposal: prepared}
-	if prepared.ApprovalState == model.ApprovalApproved {
+	switch prepared.ApprovalState {
+	case model.ApprovalApproved:
 		committed, err := e.store.GetChangeSet(ctx, prepared.ID)
 		if err != nil {
 			return e.fail(ctx, operation, err, now)
 		}
-		succeeded, err := e.store.ConcludeOperation(ctx, operation.ID, operation.Attempt, model.OperationSucceeded, "", now)
-		if err != nil {
-			return RunResult{}, err
-		}
-		result.Operation = succeeded
-		result.ChangeSet = &committed
-		return result, nil
-	}
-	if prepared.ApprovalState == model.ApprovalRejected {
+		succeeded, err := e.conclude(ctx, operation, model.OperationSucceeded, "", now)
+		return RunResult{Operation: succeeded, Proposal: prepared, ChangeSet: &committed}, err
+	case model.ApprovalRejected:
 		return e.fail(ctx, operation, fmt.Errorf("proposal %q was rejected", prepared.ID), now)
 	}
-	// 基线漂移按 D51 重定位：只有用户专属变化时搬到当前 Revision 继续裁决，否则 stale。
-	relocated, moved, err := e.relocate(ctx, operation, prepared)
-	if errors.Is(err, model.ErrRevisionConflict) {
-		result, err := e.stale(ctx, operation, err, now)
-		result.Proposal = prepared
-		return result, err
-	}
-	if err != nil {
-		return e.fail(ctx, operation, err, now)
-	}
-	if moved {
-		if err := e.store.RelocateProposal(ctx, relocated, operation.Attempt, now); err != nil {
-			return e.fail(ctx, operation, err, now)
-		}
-		prepared, result.Proposal = relocated, relocated
-	}
-	policy, err := e.changes.EffectiveApprovalPolicy(ctx, operation.Snapshot.ApprovalPolicy, prepared)
-	if err != nil {
-		return e.fail(ctx, operation, err, now)
-	}
-	if policy == model.ApprovalCustom {
-		return e.fail(ctx, operation, fmt.Errorf("custom approval policy requires an explicit policy contract: %w", model.ErrInvalid), now)
-	}
-	if policy == model.ApprovalManual || (policy == model.ApprovalMilestone && change.Milestone(prepared)) {
-		awaiting, err := e.store.ConcludeOperation(ctx, operation.ID, operation.Attempt, model.OperationAwaitingApproval,
-			"proposal awaits user approval", now,
-		)
-		if err != nil {
-			return RunResult{}, err
-		}
-		result.Operation = awaiting
-		return result, nil
-	}
-	// 恢复或重定位不能把旧约束下的 pass 用在新约束上。需要时只重做独立检查，
-	// 保留已经生成的候选内容；检查不可用仍沿既有规则等待用户裁决。
-	constraints, err := e.changes.SemanticConstraints(ctx, operation.Snapshot.BaseRevision, prepared)
-	if err != nil {
-		return e.fail(ctx, operation, err, now)
-	}
-	if len(constraints) > 0 {
-		basis, err := change.ComplianceBasisDigest(prepared, constraints)
-		if err != nil {
-			return e.fail(ctx, operation, err, now)
-		}
-		var existing model.SemanticComplianceReport
-		if len(prepared.Impact.Compliance) > 0 {
-			if err := json.Unmarshal(prepared.Impact.Compliance, &existing); err != nil {
-				return e.fail(ctx, operation, err, now)
-			}
-		}
-		if existing.BasisDigest != basis {
-			prepared.Impact.Compliance, err = e.analyzeCompliance(ctx, executor, workerID, leaseDuration, operation, prepared, constraints)
-			if err != nil {
-				return e.fail(ctx, operation, err, now)
-			}
-			if err := e.store.RelocateProposal(ctx, prepared, operation.Attempt, now); err != nil {
-				return e.fail(ctx, operation, err, now)
-			}
-			result.Proposal = prepared
-		}
-	}
-	if reason, err := change.ComplianceReason(prepared, constraints); err != nil {
-		return e.fail(ctx, operation, err, now)
-	} else if reason != "" {
-		awaiting, err := e.store.ConcludeOperation(ctx, operation.ID, operation.Attempt, model.OperationAwaitingApproval, reason, now)
-		if err != nil {
-			return RunResult{}, err
-		}
-		result.Operation = awaiting
-		return result, nil
-	}
+	result, err := e.adjudicate(ctx, executor, workerID, leaseDuration, operation, &prepared, now)
+	result.Proposal = prepared
+	return result, err
+}
 
+// adjudicate 先按 D51 重定位，再问 Change Engine 能否按策略放行；需要独立合规分析时
+// 只重做检查、保留已生成的候选，证据写回后重新判定。放行则以系统身份裁决提交，授权
+// 层面的等待（locked、用户专属等）由提交返回 ErrUnauthorized。proposal 随写回更新。
+func (e *Engine) adjudicate(
+	ctx context.Context,
+	executor Executor,
+	workerID string,
+	leaseDuration time.Duration,
+	operation model.Operation,
+	proposal *model.Proposal,
+	now time.Time,
+) (RunResult, error) {
+	relocated, err := e.changes.RelocatePending(ctx, *proposal, operation.Attempt, now)
+	if err != nil {
+		return e.settle(ctx, operation, err, now)
+	}
+	*proposal = relocated
+	admission, err := e.changes.Admit(ctx, *proposal)
+	if err != nil {
+		return e.fail(ctx, operation, err, now)
+	}
+	if admission.Analyze {
+		report, err := e.analyzeCompliance(ctx, executor, workerID, leaseDuration, operation, *proposal, admission)
+		if err != nil {
+			return e.fail(ctx, operation, err, now)
+		}
+		recorded, err := e.changes.RecordCompliance(ctx, *proposal, report, operation.Attempt, now)
+		if err != nil {
+			return e.fail(ctx, operation, err, now)
+		}
+		*proposal = recorded
+		if admission, err = e.changes.Admit(ctx, *proposal); err != nil {
+			return e.fail(ctx, operation, err, now)
+		}
+	}
+	if admission.Hold != "" {
+		awaiting, err := e.conclude(ctx, operation, model.OperationAwaitingApproval, admission.Hold, now)
+		return RunResult{Operation: awaiting}, err
+	}
 	approved, err := change.Decide(
-		prepared, model.ApprovalApproved,
-		model.Author{Kind: model.AuthorSystem, ID: "approval-policy:" + string(policy)}, now,
+		*proposal, model.ApprovalApproved,
+		model.Author{Kind: model.AuthorSystem, ID: "approval-policy:" + string(admission.Policy)}, now,
 	)
 	if err != nil {
 		return e.fail(ctx, operation, err, now)
 	}
 	committed, err := e.changes.CommitExecution(ctx, approved, operation.Attempt)
 	if errors.Is(err, change.ErrUnauthorized) {
-		awaiting, transitionErr := e.store.ConcludeOperation(ctx, operation.ID, operation.Attempt, model.OperationAwaitingApproval,
-			err.Error(), now,
-		)
-		if transitionErr != nil {
-			return RunResult{}, errors.Join(err, transitionErr)
-		}
-		result.Operation = awaiting
-		return result, nil
-	}
-	if errors.Is(err, model.ErrRevisionConflict) {
-		// 重定位与提交之间又有提交：任务失效而非失败，后继继承工作区。
-		result, err := e.stale(ctx, operation, err, now)
-		result.Proposal = prepared
-		return result, err
+		awaiting, transitionErr := e.conclude(ctx, operation, model.OperationAwaitingApproval, err.Error(), now)
+		return RunResult{Operation: awaiting}, transitionErr
 	}
 	if err != nil {
-		return e.fail(ctx, operation, err, now)
+		return e.settle(ctx, operation, err, now)
 	}
-	succeeded, err := e.store.ConcludeOperation(ctx, operation.ID, operation.Attempt, model.OperationSucceeded, "", now)
-	if err != nil {
-		return RunResult{}, err
-	}
-	result.Operation = succeeded
-	result.ChangeSet = &committed
-	return result, nil
-}
-
-func shouldAnalyzeSemanticCompliance(
-	operation model.Operation,
-	proposal model.Proposal,
-	constraints []model.OwnershipRule,
-) bool {
-	if len(constraints) == 0 || operation.Snapshot.ApprovalPolicy == model.ApprovalManual ||
-		operation.Snapshot.ApprovalPolicy == model.ApprovalCustom ||
-		(operation.Snapshot.ApprovalPolicy == model.ApprovalMilestone && change.Milestone(proposal)) {
-		return false
-	}
-	return true
+	succeeded, err := e.conclude(ctx, operation, model.OperationSucceeded, "", now)
+	return RunResult{Operation: succeeded, ChangeSet: &committed}, err
 }
 
 func unavailableComplianceReport(
@@ -533,11 +414,8 @@ func (e *Engine) fail(ctx context.Context, operation model.Operation, cause erro
 	if ctx.Err() != nil {
 		return e.release(ctx, operation, cause)
 	}
-	failed, err := e.store.FailOperation(ctx, operation.ID, operation.Attempt, model.FailureCodeFor(cause), cause.Error(), now)
-	if err != nil {
-		return RunResult{}, errors.Join(cause, err)
-	}
-	return RunResult{Operation: failed}, cause
+	failed, err := e.failed(ctx, operation, cause, now)
+	return RunResult{Operation: failed}, errors.Join(cause, err)
 }
 
 // releaseTimeout 是释放写入的上限：取消后执行器已停手，释放只是一次本地写入。
@@ -551,11 +429,35 @@ const releasedMessage = "进程退出，任务已放回队列等待续跑"
 func (e *Engine) release(ctx context.Context, operation model.Operation, cause error) (RunResult, error) {
 	detached, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
 	defer cancel()
-	released, err := e.store.ConcludeOperation(detached, operation.ID, operation.Attempt, model.OperationQueued, releasedMessage, time.Now().UTC())
+	released, err := e.conclude(detached, operation, model.OperationQueued, releasedMessage, time.Now().UTC())
+	return RunResult{Operation: released}, errors.Join(cause, err)
+}
+
+// conclude 落盘任务结局。围栏拒绝写入（用户在执行期间暂停或取消了它，或执行已被
+// 取代）时回读持久化状态一并返回：协调器按真实状态落点，而不是按执行前的副本。
+func (e *Engine) conclude(ctx context.Context, operation model.Operation, to model.OperationState, message string, now time.Time) (model.Operation, error) {
+	concluded, err := e.store.ConcludeOperation(ctx, operation.ID, operation.Attempt, to, message, now)
 	if err != nil {
-		return RunResult{}, errors.Join(cause, err)
+		return e.persisted(ctx, operation.ID, err)
 	}
-	return RunResult{Operation: released}, cause
+	return concluded, nil
+}
+
+// failed 落盘执行失败并按原因打码（D46），写入被拒时同 conclude 回读。
+func (e *Engine) failed(ctx context.Context, operation model.Operation, cause error, now time.Time) (model.Operation, error) {
+	failed, err := e.store.FailOperation(ctx, operation.ID, operation.Attempt, model.FailureCodeFor(cause), cause.Error(), now)
+	if err != nil {
+		return e.persisted(ctx, operation.ID, err)
+	}
+	return failed, nil
+}
+
+func (e *Engine) persisted(ctx context.Context, id string, cause error) (model.Operation, error) {
+	stored, err := e.store.GetOperation(ctx, id)
+	if err != nil {
+		return model.Operation{}, errors.Join(cause, err)
+	}
+	return stored, cause
 }
 
 // verifyBasis 核对证据基线在启动快照上属实（D48）：文档 revision、要求作用域摘要与
@@ -568,28 +470,25 @@ func (e *Engine) verifyBasis(ctx context.Context, operation model.Operation, bas
 	return err
 }
 
-// analyzeCompliance 只允许宿主声明报告的适用范围；分析失败沿既有合规规则显式等待裁决。
-func (e *Engine) analyzeCompliance(ctx context.Context, executor Executor, workerID string, leaseDuration time.Duration, operation model.Operation, proposal model.Proposal, constraints []model.OwnershipRule) (json.RawMessage, error) {
-	report := unavailableComplianceReport(constraints, "configured executor does not provide independent semantic compliance analysis")
+// analyzeCompliance 由宿主把报告绑定到 Admit 给出的基线；分析失败沿 D14 记为不可用，
+// 显式等待裁决。
+func (e *Engine) analyzeCompliance(ctx context.Context, executor Executor, workerID string, leaseDuration time.Duration, operation model.Operation, proposal model.Proposal, admission change.Admission) (model.SemanticComplianceReport, error) {
+	report := unavailableComplianceReport(admission.Constraints, "configured executor does not provide independent semantic compliance analysis")
 	if analyzer, ok := executor.(SemanticComplianceAnalyzer); ok {
 		err := e.withLease(ctx, operation, workerID, leaseDuration, func(callContext context.Context) error {
 			var analyzeErr error
-			report, analyzeErr = analyzer.AnalyzeSemanticCompliance(callContext, operation, proposal, constraints)
+			report, analyzeErr = analyzer.AnalyzeSemanticCompliance(callContext, operation, proposal, admission.Constraints)
 			return analyzeErr
 		})
 		if errors.Is(err, errLeaseLost) {
-			return nil, err
+			return model.SemanticComplianceReport{}, err
 		}
 		if err != nil {
-			report = unavailableComplianceReport(constraints, err.Error())
+			report = unavailableComplianceReport(admission.Constraints, err.Error())
 		} else if err := report.Validate(); err != nil {
-			return nil, err
+			return model.SemanticComplianceReport{}, err
 		}
 	}
-	basis, err := change.ComplianceBasisDigest(proposal, constraints)
-	if err != nil {
-		return nil, err
-	}
-	report.BasisDigest = basis
-	return json.Marshal(report)
+	report.BasisDigest = admission.Basis
+	return report, nil
 }

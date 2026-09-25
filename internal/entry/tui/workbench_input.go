@@ -25,7 +25,7 @@ const benchHelp = `创作控制台
 /review                   全屏查看待确认稿件的完整变更
 /think · /view            全屏查看思考原文、完整详情
 /pause · /continue        暂停推进、继续创作（也可 /p · /c）
-/goal <章数>              调整目标并继续
+/goal <章数|auto>         固定篇幅或交给 AI，并继续
 /budget <次数>            等待时调整自动修订预算
 /accept <理由>            接受选中章第一条阻塞发现
 /export <路径>            导出已确认正文（.txt 或 .epub）
@@ -314,16 +314,22 @@ var benchCommands = []benchCommand{
 		m.bench.notice = "现在没有在推进的创作"
 		return m, nil
 	}},
-	{name: "continue", alias: "c", label: "继续创作", idleOnly: true, run: func(m model, _ string) (tea.Model, tea.Cmd) {
+	{name: "continue", alias: "c", label: "继续创作（完本后续写）", idleOnly: true, run: func(m model, _ string) (tea.Model, tea.Cmd) {
+		if m.bench.situation() == situationCompleted {
+			return m.continueRunWith(quickParams{extend: true})
+		}
 		return m.continueRun()
 	}},
-	{name: "goal", usage: "<章数>", label: "调整总章数并继续", idleOnly: true, run: func(m model, arg string) (tea.Model, tea.Cmd) {
+	{name: "goal", usage: "<章数|auto>", label: "调整篇幅并继续", idleOnly: true, run: func(m model, arg string) (tea.Model, tea.Cmd) {
+		if arg == "auto" {
+			return m.continueRunWith(quickParams{})
+		}
 		chapters, err := strconv.Atoi(arg)
 		if err != nil || chapters <= 0 {
-			m.bench.err = fmt.Sprintf("用法：/goal 章数（当前目标 %d 章）", m.bench.snap.TargetChapters)
+			m.bench.err = fmt.Sprintf("用法：/goal 章数 固定篇幅，/goal auto 交给 AI（当前%s）", lengthStatus(m.bench.snap.Length))
 			return m, nil
 		}
-		return m.continueRunWith(chapters)
+		return m.continueRunWith(quickParams{chapters: chapters})
 	}},
 	{name: "budget", usage: "<次数>", label: "修订预算", idleOnly: true, run: func(m model, arg string) (tea.Model, tea.Cmd) {
 		b := &m.bench

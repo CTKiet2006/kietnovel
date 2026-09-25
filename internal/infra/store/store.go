@@ -42,6 +42,9 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	query.Set("_journal_mode", "wal")
 	query.Set("_synchronous", "full")
 	query.Set("_busy_timeout", "5000")
+	// 写事务一律 BEGIN IMMEDIATE：开事务即取写锁，先读后写的事务不会在 WAL 下因别的连接
+	// （如续租心跳）中途提交而得到 SQLITE_BUSY_SNAPSHOT。只读事务不受影响。
+	query.Set("_txlock", "immediate")
 	uri.RawQuery = query.Encode()
 	dsn := uri.String()
 	db, err := sql.Open("sqlite", dsn)

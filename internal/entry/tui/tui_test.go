@@ -251,7 +251,7 @@ func TestLibraryDeleteRequiresDoubleConfirm(t *testing.T) {
 	if _, err := api.Projects.CreateProject(context.Background(), projectdoc.CreateProjectCommand{
 		ProjectID: "book-del", ChangeID: "create-del", UserID: deps.UserID,
 		Reason: "删除测试", Draft: projectdoc.ProjectDraft{
-			Intent: domainmodel.Intent{Premise: "写废的书", TargetChapters: 1},
+			Intent: domainmodel.Intent{Premise: "写废的书"},
 		},
 		CreatedAt: time.Now().UTC(),
 	}); err != nil {
@@ -429,7 +429,7 @@ func TestHomeImportEntryImportsProjectionAndApprovesViaDecisionCard(t *testing.T
 	origin, err := api.Projects.CreateProject(ctx, projectdoc.CreateProjectCommand{
 		ProjectID: "origin-book", ChangeID: "create-origin", UserID: "tester", Reason: "导出源",
 		Draft: projectdoc.ProjectDraft{
-			Intent: domainmodel.Intent{Premise: "旧书", TargetChapters: 1},
+			Intent: domainmodel.Intent{Premise: "旧书"},
 			Plan:   []domainmodel.PlanNode{{ID: "v1", Kind: domainmodel.PlanVolume, Title: "卷一", Summary: "起"}},
 		},
 		CreatedAt: time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC),
@@ -487,9 +487,9 @@ func TestWorkbenchTwoPaneOutlineDetailAndCandidateReading(t *testing.T) {
 	m.width, m.height = 180, 40
 	run := domainmodel.CreationRun{ID: "run:book-1", State: domainmodel.RunWaitingUser}
 	m.bench.snap = workbench.WorkbenchSnapshot{
-		ProjectID:      "book-1",
-		Intent:         domainmodel.Intent{Premise: "测试书", TargetChapters: 3, EndingDirection: "圆满"},
-		TargetChapters: 3,
+		ProjectID: "book-1",
+		Intent:    domainmodel.Intent{Premise: "测试书", EndingDirection: "圆满"},
+		Length:    novel.Length{Fixed: 3, Final: 3},
 		Outline: []workbench.OutlineNode{
 			{Node: domainmodel.PlanNode{ID: "v1", Kind: domainmodel.PlanVolume, Title: "卷一"}},
 			{Node: domainmodel.PlanNode{ID: "a1", Kind: domainmodel.PlanArc, ParentID: "v1", Title: "弧一"}},
@@ -556,7 +556,7 @@ func TestOutlineFoldingCollapsesSubtreeAndAnchorsCursor(t *testing.T) {
 		{Node: domainmodel.PlanNode{ID: "c3", Kind: domainmodel.PlanChapter, ParentID: "a2", Title: "第三章"}, Number: 3, State: workbench.ChapterPlanned},
 	}
 	m.bench.snap = workbench.WorkbenchSnapshot{
-		ProjectID: "book-fold", Intent: domainmodel.Intent{Premise: "折叠", TargetChapters: 5}, TargetChapters: 5,
+		ProjectID: "book-fold", Intent: domainmodel.Intent{Premise: "折叠"}, Length: novel.Length{Fixed: 5, Final: 5},
 		Outline: outline,
 	}
 	m.bench.cursor = anchorOutlineCursor(m.outlineRows(), "", 0) // 第一个章行（行 2）
@@ -609,7 +609,7 @@ func TestFoldPreferencePersistsAcrossReopen(t *testing.T) {
 	m.bench.loaded = true
 	m.width, m.height = 180, 40
 	m.bench.snap = workbench.WorkbenchSnapshot{
-		ProjectID: "book-pref", Intent: domainmodel.Intent{Premise: "偏好", TargetChapters: 1}, TargetChapters: 1,
+		ProjectID: "book-pref", Intent: domainmodel.Intent{Premise: "偏好"}, Length: novel.Length{Fixed: 1, Final: 1},
 		Outline: []workbench.OutlineNode{
 			{Node: domainmodel.PlanNode{ID: "v1", Kind: domainmodel.PlanVolume, Title: "卷一"}},
 			{Node: domainmodel.PlanNode{ID: "a1", Kind: domainmodel.PlanArc, ParentID: "v1", Title: "弧一"}},
@@ -646,7 +646,7 @@ func TestMouseWheelScrollsAndClickSelectsOutline(t *testing.T) {
 	m.bench.loaded = true
 	m.width, m.height = 180, 40
 	m.bench.snap = workbench.WorkbenchSnapshot{
-		ProjectID: "book-mouse", Intent: domainmodel.Intent{Premise: "鼠标", TargetChapters: 3}, TargetChapters: 3,
+		ProjectID: "book-mouse", Intent: domainmodel.Intent{Premise: "鼠标"}, Length: novel.Length{Fixed: 3, Final: 3},
 		Outline: []workbench.OutlineNode{
 			{Node: domainmodel.PlanNode{ID: "v1", Kind: domainmodel.PlanVolume, Title: "卷一"}},
 			{Node: domainmodel.PlanNode{ID: "a1", Kind: domainmodel.PlanArc, ParentID: "v1", Title: "弧一"}},
@@ -731,16 +731,64 @@ func TestWorkbenchTargetPromptContinuesWithNewGoal(t *testing.T) {
 	m.bench = newWorkbenchState("book-1", 1)
 	m.bench.loaded = true
 	m.bench.snap = workbench.WorkbenchSnapshot{
-		ProjectID: "book-1", Intent: domainmodel.Intent{Premise: "写书", TargetChapters: 3}, TargetChapters: 3,
+		ProjectID: "book-1", Intent: domainmodel.Intent{Premise: "写书"}, Length: novel.Length{Fixed: 3, Final: 3},
 	}
 	m, cmd := submit(t, m, "/goal")
-	if cmd != nil || !strings.Contains(m.bench.err, "当前目标 3 章") || m.bench.input.Value() != "/goal" {
+	if cmd != nil || !strings.Contains(m.bench.err, "当前固定 3 章") || m.bench.input.Value() != "/goal" {
 		t.Fatalf("缺参应报用法并保留输入: err=%q input=%q", m.bench.err, m.bench.input.Value())
 	}
 	m, _ = press(t, m, tea.KeyEsc)
 	m, cmd = submit(t, m, "/g 5")
 	if m.bench.input.Value() != "" || !m.bench.writing || cmd == nil {
 		t.Fatalf("/goal did not continue run: input=%q writing=%v", m.bench.input.Value(), m.bench.writing)
+	}
+	// /goal auto 把篇幅交回 AI（D63）。
+	m.bench.writing = false
+	m, cmd = submit(t, m, "/goal auto")
+	if m.bench.input.Value() != "" || !m.bench.writing || cmd == nil {
+		t.Fatalf("/goal auto did not continue run: input=%q writing=%v err=%q", m.bench.input.Value(), m.bench.writing, m.bench.err)
+	}
+}
+
+// 头部进度三态（D63）：固定篇幅给分母；AI 收官后给分母并注明；开放期只有已入稿与上限。
+func TestProgressLabelFollowsLength(t *testing.T) {
+	for _, c := range []struct {
+		length novel.Length
+		want   string
+	}{
+		{novel.Length{Fixed: 8, Final: 8}, "已入稿 3 / 8 章"},
+		{novel.Length{Compass: &domainmodel.Compass{ScaleMax: 60, Ending: "e", Final: 40}, Final: 40}, "已入稿 3 / 40 章 · 收官"},
+		{novel.Length{Compass: &domainmodel.Compass{ScaleMax: 60, Ending: "e"}}, "已入稿 3 章 · 上限 60"},
+		{novel.Length{}, "已入稿 3 章 · 篇幅待定"},
+	} {
+		if got := progressLabel(3, c.length); got != c.want {
+			t.Fatalf("progress %+v = %q, want %q", c.length, got, c.want)
+		}
+	}
+}
+
+// 决定卡把罗盘补丁说成人话：AI 上调篇幅上限时这正是等你裁决的内容。
+func TestCompassSummaryDescribesTheChange(t *testing.T) {
+	ref := domainmodel.DocumentRef{Kind: domainmodel.DocumentCompass, ID: domainmodel.SingletonDocumentID}
+	put := func(value domainmodel.Compass) domainmodel.Patch {
+		content, _ := json.Marshal(value)
+		return domainmodel.Patch{Document: ref, Operation: domainmodel.PatchPut, Content: content}
+	}
+	current := &domainmodel.Compass{ScaleMax: 60, Ending: "称帝"}
+	for _, c := range []struct {
+		current *domainmodel.Compass
+		patch   domainmodel.Patch
+		want    string
+	}{
+		{nil, put(domainmodel.Compass{ScaleMax: 60, Ending: "称帝"}), "篇幅上限 60 章 · 终局：称帝"},
+		{current, put(domainmodel.Compass{ScaleMax: 120, Ending: "称帝"}), "篇幅上限 60 → 120 章"},
+		{current, put(domainmodel.Compass{ScaleMax: 60, Ending: "称帝", Final: 48}), "收官 48 章"},
+		{current, domainmodel.Patch{Document: ref, Operation: domainmodel.PatchDelete}, "删除故事罗盘"},
+		{&domainmodel.Compass{ScaleMax: 60, Ending: "称帝", Final: 40}, put(domainmodel.Compass{ScaleMax: 60, Ending: "称帝"}), "撤回收官（原 40 章）"},
+	} {
+		if got, err := compassSummary(c.current, c.patch); err != nil || got != c.want {
+			t.Fatalf("compass summary = %q, %v; want %q", got, err, c.want)
+		}
 	}
 }
 
@@ -766,7 +814,7 @@ func TestWorkbenchDirectivePromptRecordsRequirement(t *testing.T) {
 	m.bench = newWorkbenchState("book-1", 1)
 	m.bench.loaded = true
 	m.bench.snap = workbench.WorkbenchSnapshot{
-		ProjectID: "book-1", Intent: domainmodel.Intent{Premise: "写书", TargetChapters: 1}, TargetChapters: 1,
+		ProjectID: "book-1", Intent: domainmodel.Intent{Premise: "写书"}, Length: novel.Length{Fixed: 1, Final: 1},
 		Outline: []workbench.OutlineNode{{Node: plan[0]}, {Node: plan[1]}, {Node: plan[2], Number: 1}},
 	}
 	if scope, label := m.directiveScope(); scope != "plan_node:volume-1" || label != "「第一卷」" {

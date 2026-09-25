@@ -38,14 +38,13 @@ TUI 首次启动会进入配置向导（选择 provider、填写模型与 API Ke
 
 连接名称可以自定义：顶层 `provider` 引用 `providers` 中的连接，连接的 `type` 指定协议（如 `openai`），`api` 选择 OpenAI 的 `chat` 或 `responses` 接口。每个连接保存自己的密钥、地址和模型列表，参见 [配置示例](config.example.jsonc)。`AINOVEL_PROVIDER_TYPE` 和 `AINOVEL_API` 可覆盖当前连接的协议和接口；选择其他连接不会沿用原连接的密钥与地址。
 
-Headless 一句话写前三章：
+Headless 一句话写全书（篇幅由 AI 在故事罗盘里给出上限并在合适时收官；`--chapters N` 可固定全书章数，续跑不传则沿用上一轮设定；完本后加 `--extend` 续写，撤回收官承诺、由 AI 决定再写多少，TUI 完本后 `/continue` 同义）：
 
 ```bash
 go run ./cmd/ainovel-cli --headless quick write \
   --project book-1 \
   --user user-1 \
-  --premise "一个失忆的邮差替亡者送完最后一封信" \
-  --chapters 3
+  --premise "一个失忆的邮差替亡者送完最后一封信"
 ```
 
 成功输出只展示作品 revision 和章节进度，不暴露 Proposal/ChangeSet 内部术语。若模型、工具、约束检查或版本发生真实错误，命令会明确失败，已落盘 Operation 与 Workspace 可供检查和恢复。
@@ -77,7 +76,7 @@ pack install|export|eval
 profile save|show|learn|candidates|confirm
 ```
 
-精细创作先用 `creation start` 展开 Goal 与 RunStrategy，再在内容类 `operation start` 上通过 `--run` 归属同一运行；`quick write` 只是自动完成这两步并持续驱动相同 Coordinator。`creation strategy` 可在运行中途调整窗口与自动修订预算（只影响之后创建的 Operation），预算用尽落 waiting_user 后调高预算即可从落点继续。
+精细创作先用 `creation start` 展开 Goal 与 RunStrategy，再在内容类 `operation start` 上通过 `--run` 归属同一运行；`quick write` 只是自动完成这两步并持续驱动相同 Coordinator。`creation strategy` 可在运行中途调整窗口与每章自动修订预算（只影响之后创建的 Operation），某章预算用尽落 waiting_user 后调高预算即可从落点继续。
 
 典型的可编辑故事循环：
 

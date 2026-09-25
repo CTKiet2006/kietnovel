@@ -7,6 +7,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/voocel/ainovel-cli/internal/app/novel"
 )
 
 // 双栏创作台：左栏目录，右栏「正文 / 活动」视图 + 常驻创作现场 + 决定卡；底栏输入。
@@ -122,11 +124,40 @@ func (m model) benchHeader(l benchLayout) []string {
 	if title == "" {
 		title = m.bench.projectID
 	}
-	done, total := len(m.bench.snap.Manuscript), m.bench.snap.TargetChapters
-	right := m.benchStateBadge() + benchTheme.Muted.Render(fmt.Sprintf("  ·  已入稿 %d / %d 章", done, total)) + " "
+	done, length := len(m.bench.snap.Manuscript), m.bench.snap.Length
+	right := m.benchStateBadge() + benchTheme.Muted.Render("  ·  "+progressLabel(done, length)) + " "
 	brand := " " + benchTheme.Accent.Bold(true).Render("AINOVEL") + benchTheme.Muted.Render("  /  ")
 	left := brand + benchTheme.Title.Render(truncate(title, max(4, l.width-lipgloss.Width(right)-lipgloss.Width(brand)-2)))
-	return []string{alignRight(left, right, l.width), progressRule(done, total, l.width)}
+	return []string{alignRight(left, right, l.width), progressRule(done, length.Final, l.width)}
+}
+
+// progressLabel 是头部的入稿进度（D63 三态）：全书章数已知时给分母，AI 收官后注明；
+// 开放期只有已入稿章数与篇幅上限。
+func progressLabel(done int, length novel.Length) string {
+	switch {
+	case length.Final > 0 && length.Fixed == 0:
+		return fmt.Sprintf("已入稿 %d / %d 章 · 收官", done, length.Final)
+	case length.Final > 0:
+		return fmt.Sprintf("已入稿 %d / %d 章", done, length.Final)
+	case length.Compass != nil:
+		return fmt.Sprintf("已入稿 %d 章 · 上限 %d", done, length.Compass.ScaleMax)
+	default:
+		return fmt.Sprintf("已入稿 %d 章 · 篇幅待定", done)
+	}
+}
+
+// lengthStatus 是篇幅设定的一句话描述，供命令提示使用。
+func lengthStatus(length novel.Length) string {
+	switch {
+	case length.Fixed > 0:
+		return fmt.Sprintf("固定 %d 章", length.Fixed)
+	case length.Final > 0:
+		return fmt.Sprintf("AI 已承诺 %d 章收官", length.Final)
+	case length.Compass != nil:
+		return fmt.Sprintf("AI 决定，上限 %d 章", length.Compass.ScaleMax)
+	default:
+		return "AI 决定"
+	}
 }
 
 // padMain 给主栏行加左留白并裁到主栏宽度。
@@ -376,7 +407,7 @@ func (m model) primaryAction() benchAction {
 	case situationDecidingProposal:
 		return benchAction{"/review", "查看完整变更"}
 	case situationCompleted:
-		return benchAction{"/goal", "提高目标续写"}
+		return benchAction{"/continue", "续写（AI 决定篇幅）"}
 	default:
 		return benchAction{"/continue", "继续创作"}
 	}

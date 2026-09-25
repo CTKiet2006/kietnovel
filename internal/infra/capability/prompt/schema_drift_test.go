@@ -39,8 +39,7 @@ func TestToolSchemaCoversDomainFields(t *testing.T) {
 		{ToolWorkspacePutChapter, "chapter", model.ManuscriptChapter{}},
 		{ToolWorkspacePutChapter, "chapter.blocks[]", model.ManuscriptBlock{}},
 		{ToolWorkspacePutReview, "findings[]", model.ReviewFinding{}},
-		{ToolVerdictSubmit, "directives[]", model.DirectiveVerification{}},
-		{ToolVerdictSubmit, "intent", model.IntentVerification{}},
+		{ToolVerdictSubmit, "checks[]", model.RequirementCheck{}},
 	} {
 		t.Run(c.tool+"/"+c.path, func(t *testing.T) {
 			properties, err := schemaProperties(schemas[c.tool], c.path)

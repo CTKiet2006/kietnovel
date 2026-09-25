@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"time"
 
@@ -45,10 +46,12 @@ func (e *Engine) Validate(ctx context.Context, proposal model.Proposal) error {
 	if err := proposal.Validate(); err != nil {
 		return err
 	}
-	_, _, err := e.analyze(ctx, proposal)
+	_, err := e.analyze(ctx, proposal)
 	return err
 }
 
+// PrepareExecution 校验并保存执行提案（attempt 围栏内）：基线落后时先按 D51 重定位，
+// 不能重定位返回 model.ErrRevisionConflict。
 func (e *Engine) PrepareExecution(ctx context.Context, proposal model.Proposal, attempt int) (model.Proposal, error) {
 	if attempt <= 0 {
 		return model.Proposal{}, fmt.Errorf("execution proposal requires an attempt: %w", model.ErrInvalid)
@@ -67,34 +70,31 @@ func (e *Engine) prepare(ctx context.Context, proposal model.Proposal, analyzeSe
 	if err := proposal.Validate(); err != nil {
 		return model.Proposal{}, err
 	}
-	impact, baseState, err := e.validateAndAnalyze(ctx, proposal)
+	var err error
+	if attempt > 0 {
+		if proposal, _, err = e.Relocate(ctx, proposal); err != nil {
+			return model.Proposal{}, err
+		}
+	}
+	checked, err := e.validateAndAnalyze(ctx, proposal)
 	if err != nil {
 		return model.Proposal{}, err
 	}
-	payload, err := json.Marshal(impact)
-	if err != nil {
-		return model.Proposal{}, fmt.Errorf("marshal structural impact: %w", err)
+	if proposal, err = withImpact(proposal, checked.impact); err != nil {
+		return model.Proposal{}, err
 	}
-	proposal.Impact.Structural = payload
 	if analyzeSemantic {
 		if e.semantic == nil {
 			return model.Proposal{}, ErrSemanticUnavailable
 		}
-		semantic, err := e.semantic.Analyze(ctx, proposal, impact)
+		semantic, err := e.semantic.Analyze(ctx, proposal, checked.impact)
 		if err != nil {
 			return model.Proposal{}, fmt.Errorf("analyze semantic impact: %w", err)
 		}
 		if len(semantic) == 0 || !json.Valid(semantic) {
 			return model.Proposal{}, fmt.Errorf("semantic analyzer returned invalid JSON: %w", model.ErrInvalid)
 		}
-		var report SemanticImpactReport
-		if err := json.Unmarshal(semantic, &report); err != nil {
-			return model.Proposal{}, fmt.Errorf("decode semantic impact: %w", err)
-		}
-		if err := report.Validate(); err != nil {
-			return model.Proposal{}, fmt.Errorf("validate semantic impact: %w", err)
-		}
-		if err := validateSemanticReferences(report, baseState); err != nil {
+		if _, err := model.DecodeSemanticImpact(semantic, checked.base); err != nil {
 			return model.Proposal{}, err
 		}
 		proposal.Impact.Semantic = append(json.RawMessage(nil), semantic...)
@@ -103,18 +103,6 @@ func (e *Engine) prepare(ctx context.Context, proposal model.Proposal, analyzeSe
 		return e.store.SaveExecutionProposal(ctx, proposal, attempt)
 	}
 	return e.store.SaveProposal(ctx, proposal)
-}
-
-func validateSemanticReferences(report SemanticImpactReport, base documentState) error {
-	for _, option := range report.Options {
-		for _, chapterID := range option.ChapterIDs {
-			key := (model.DocumentRef{Kind: model.DocumentManuscript, ID: chapterID}).Key()
-			if _, exists := base[key]; !exists {
-				return fmt.Errorf("semantic resolution references missing chapter %q: %w", chapterID, ErrStructuralConflict)
-			}
-		}
-	}
-	return nil
 }
 
 func Decide(proposal model.Proposal, state model.ApprovalState, decider model.Author, at time.Time) (model.Proposal, error) {
@@ -161,19 +149,24 @@ func (e *Engine) prepareCommit(ctx context.Context, approved model.Proposal) (mo
 	if err := approved.Validate(); err != nil {
 		return model.Proposal{}, err
 	}
-	impact, baseState, err := e.validateAndAnalyze(ctx, approved)
+	checked, err := e.validateAndAnalyze(ctx, approved)
 	if err != nil {
 		return model.Proposal{}, err
 	}
-	if err := authorize(approved, baseState); err != nil {
+	constraints, err := e.constraints(ctx, checked.task, approved)
+	if err != nil {
 		return model.Proposal{}, err
 	}
-	payload, err := json.Marshal(impact)
-	if err != nil {
-		return model.Proposal{}, fmt.Errorf("marshal structural impact: %w", err)
+	basis := ""
+	if len(constraints) > 0 {
+		if basis, err = complianceBasis(approved, constraints); err != nil {
+			return model.Proposal{}, err
+		}
 	}
-	approved.Impact.Structural = payload
-	return approved, nil
+	if err := authorize(approved, checked.base, basis); err != nil {
+		return model.Proposal{}, err
+	}
+	return withImpact(approved, checked.impact)
 }
 
 func (e *Engine) Reject(ctx context.Context, rejected model.Proposal) (model.Proposal, error) {
@@ -238,20 +231,9 @@ func (e *Engine) PrepareRevert(
 		case !inTarget:
 			patches = append(patches, model.Patch{Document: currentDocument.Document, Operation: model.PatchDelete})
 		case !inCurrent || !bytes.Equal(currentDocument.Content, targetDocument.Content):
-			content := append(json.RawMessage(nil), targetDocument.Content...)
-			if inCurrent && targetDocument.Document.Kind == model.DocumentCanon {
-				var currentFact, targetFact model.CanonFact
-				if err := json.Unmarshal(currentDocument.Content, &currentFact); err != nil {
-					return model.Proposal{}, fmt.Errorf("decode current canon for revert: %w", err)
-				}
-				if err := json.Unmarshal(targetDocument.Content, &targetFact); err != nil {
-					return model.Proposal{}, fmt.Errorf("decode target canon for revert: %w", err)
-				}
-				targetFact.PreviousValue = append(json.RawMessage(nil), currentFact.Value...)
-				content, err = json.Marshal(targetFact)
-				if err != nil {
-					return model.Proposal{}, fmt.Errorf("encode canon revert: %w", err)
-				}
+			content, err := model.RevertContent(ref, currentDocument.Content, targetDocument.Content)
+			if err != nil {
+				return model.Proposal{}, err
 			}
 			patches = append(patches, model.Patch{
 				Document:  targetDocument.Document,
@@ -275,29 +257,44 @@ func (e *Engine) PrepareRevert(
 	})
 }
 
-type documentState map[string]model.DocumentVersion
+// analysis 是一次确定性校验的结果：结构影响、基线状态与提案所属任务。
+type analysis struct {
+	impact StructuralImpact
+	base   model.DocumentSet
+	task   *model.Operation
+}
 
-func (e *Engine) validateAndAnalyze(ctx context.Context, change model.Proposal) (StructuralImpact, documentState, error) {
+func withImpact(proposal model.Proposal, impact StructuralImpact) (model.Proposal, error) {
+	payload, err := json.Marshal(impact)
+	if err != nil {
+		return model.Proposal{}, fmt.Errorf("marshal structural impact: %w", err)
+	}
+	proposal.Impact.Structural = payload
+	return proposal, nil
+}
+
+func (e *Engine) validateAndAnalyze(ctx context.Context, change model.Proposal) (analysis, error) {
 	current, err := e.currentRevision(ctx, change.Target)
 	if err != nil {
-		return StructuralImpact{}, nil, err
+		return analysis{}, err
 	}
 	if current != change.BaseRevision {
-		return StructuralImpact{}, nil, fmt.Errorf("base revision %d, current revision %d: %w", change.BaseRevision, current, model.ErrRevisionConflict)
+		return analysis{}, fmt.Errorf("base revision %d, current revision %d: %w", change.BaseRevision, current, model.ErrRevisionConflict)
 	}
 	return e.analyze(ctx, change)
 }
 
-// analyze 在提案自己的 BaseRevision 上执行全部确定性结构校验并计算结构影响，不落库。
-func (e *Engine) analyze(ctx context.Context, change model.Proposal) (StructuralImpact, documentState, error) {
+// analyze 在提案自己的 BaseRevision 上执行全部确定性校验并计算结构影响，不落库：先是
+// 通用结构（种类、内容、只追加、工件、依赖），再是创作领域规则与所属任务的提交契约。
+func (e *Engine) analyze(ctx context.Context, change model.Proposal) (analysis, error) {
 	if err := validateTargetDocuments(change.Target, change.Patches); err != nil {
-		return StructuralImpact{}, nil, err
+		return analysis{}, err
 	}
-	baseState, err := e.loadState(ctx, change.Target, change.BaseRevision)
+	base, err := e.loadState(ctx, change.Target, change.BaseRevision)
 	if err != nil {
-		return StructuralImpact{}, nil, err
+		return analysis{}, err
 	}
-	projected := cloneState(baseState)
+	projected := maps.Clone(base) // 已存文档内容不可变，浅拷贝即可
 	direct := make([]model.DocumentRef, 0, len(change.Patches))
 	for i, patch := range change.Patches {
 		key := patch.Document.Key()
@@ -305,7 +302,7 @@ func (e *Engine) analyze(ctx context.Context, change model.Proposal) (Structural
 		switch patch.Operation {
 		case model.PatchPut:
 			if err := model.ValidateDocumentContent(patch.Document, patch.Content); err != nil {
-				return StructuralImpact{}, nil, fmt.Errorf("patch %d content: %w", i, err)
+				return analysis{}, fmt.Errorf("patch %d content: %w", i, err)
 			}
 			projected[key] = model.DocumentVersion{
 				Target: change.Target, Document: patch.Document, Revision: change.BaseRevision + 1,
@@ -313,59 +310,42 @@ func (e *Engine) analyze(ctx context.Context, change model.Proposal) (Structural
 			}
 		case model.PatchDelete:
 			if _, ok := projected[key]; !ok {
-				return StructuralImpact{}, nil, fmt.Errorf("delete missing document %q: %w", key, model.ErrNotFound)
+				return analysis{}, fmt.Errorf("delete missing document %q: %w", key, model.ErrNotFound)
 			}
 			delete(projected, key)
 		}
 	}
-	if err := validateCanonContinuity(baseState, change.Patches); err != nil {
-		return StructuralImpact{}, nil, err
+	if err := validateAppendOnly(base, change.Patches); err != nil {
+		return analysis{}, err
 	}
-	if err := validateChapterAuthors(change); err != nil {
-		return StructuralImpact{}, nil, err
+	if err := e.validateArtifacts(ctx, change); err != nil {
+		return analysis{}, err
 	}
-	if err := validateAppendOnly(baseState, change.Patches); err != nil {
-		return StructuralImpact{}, nil, err
-	}
-	if err := e.validateAttachments(ctx, change); err != nil {
-		return StructuralImpact{}, nil, err
-	}
-	if err := validateProjectedState(change.Target, projected); err != nil {
-		return StructuralImpact{}, nil, err
-	}
-	if err := validateAICanon(baseState, projected, change); err != nil {
-		return StructuralImpact{}, nil, err
-	}
-	impact, err := buildStructuralImpact(projected, direct)
+	graph, err := dependenciesOf(projected)
 	if err != nil {
-		return StructuralImpact{}, nil, err
+		return analysis{}, err
 	}
-	return impact, baseState, nil
+	task, err := e.task(ctx, change)
+	if err != nil {
+		return analysis{}, err
+	}
+	if err := model.ValidateChange(model.ChangeCheck{Proposal: change, Task: task, Base: base, Projected: projected}); err != nil {
+		return analysis{}, err
+	}
+	return analysis{impact: graph.impact(projected, direct), base: base, task: task}, nil
 }
 
-// validateAttachments 要求附件引用的工件已发布、属于本作品且摘要一致（D47）：
-// 权威只能指向不可变内容。
-func (e *Engine) validateAttachments(ctx context.Context, change model.Proposal) error {
-	for _, patch := range change.Patches {
-		if patch.Document.Kind != model.DocumentAttachment || patch.Operation != model.PatchPut {
-			continue
-		}
-		var attachment model.Attachment
-		if err := json.Unmarshal(patch.Content, &attachment); err != nil {
-			return fmt.Errorf("decode attachment %q: %w", patch.Document.ID, err)
-		}
-		artifact, err := e.store.GetArtifact(ctx, attachment.Artifact.ID)
-		if errors.Is(err, model.ErrNotFound) {
-			return fmt.Errorf("attachment %q references unpublished artifact %q: %w", attachment.ID, attachment.Artifact.ID, ErrStructuralConflict)
-		}
-		if err != nil {
-			return err
-		}
-		if artifact.ProjectID != change.Target.ID || artifact.Digest != attachment.Artifact.Digest {
-			return fmt.Errorf("attachment %q artifact %q does not match the published object: %w", attachment.ID, attachment.Artifact.ID, ErrStructuralConflict)
-		}
+// task 载入提案所属的任务：任务提交契约随领域规则一起执行（D64）。用户直接发起的
+// 变更没有任务。
+func (e *Engine) task(ctx context.Context, change model.Proposal) (*model.Operation, error) {
+	if change.OperationID == "" {
+		return nil, nil
 	}
-	return nil
+	operation, err := e.store.GetOperation(ctx, change.OperationID)
+	if err != nil {
+		return nil, fmt.Errorf("load task %q of proposal %q: %w", change.OperationID, change.ID, err)
+	}
+	return &operation, nil
 }
 
 func (e *Engine) currentRevision(ctx context.Context, target model.AuthorityTarget) (model.Revision, error) {
@@ -376,8 +356,8 @@ func (e *Engine) currentRevision(ctx context.Context, target model.AuthorityTarg
 	return revision, err
 }
 
-func (e *Engine) loadState(ctx context.Context, target model.AuthorityTarget, at model.Revision) (documentState, error) {
-	state := make(documentState)
+func (e *Engine) loadState(ctx context.Context, target model.AuthorityTarget, at model.Revision) (model.DocumentSet, error) {
+	state := make(model.DocumentSet)
 	if at == model.InitialRevision {
 		return state, nil
 	}

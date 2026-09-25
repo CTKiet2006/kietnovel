@@ -178,6 +178,7 @@ type quickParams struct {
 	projectID string
 	premise   string
 	chapters  int
+	extend    bool // 续写：篇幅交给 AI 并撤回收官承诺
 	approval  domainmodel.ApprovalPolicy
 	// intent 非空时（完善设定入口）先以完整 Intent 初始化作品。
 	intent *domainmodel.Intent
@@ -277,7 +278,7 @@ func (m model) startQuickWriteCmd(params quickParams) tea.Cmd {
 		}
 		result, err := api.Novels.QuickWrite(ctx, novel.QuickWriteCommand{
 			ProjectID: params.projectID, UserID: user,
-			Premise: params.premise, Chapters: params.chapters, Approval: params.approval,
+			Premise: params.premise, Chapters: params.chapters, Extend: params.extend, Approval: params.approval,
 			WorkerID: "tui-" + user, CreatedAt: now,
 		})
 		return quickDoneMsg{gen: gen, result: result, err: err}
@@ -560,11 +561,14 @@ func (m model) applyBudgetCmd(budget int) tea.Cmd {
 	}
 }
 
-// continueRun 是统一续跑入口：同一命令从落点继续，目标章数沿用当前目标。
-func (m model) continueRun() (tea.Model, tea.Cmd) { return m.continueRunWith(0) }
+// continueRun 是统一续跑入口：同一命令从落点继续，篇幅沿用上一轮设定。
+func (m model) continueRun() (tea.Model, tea.Cmd) {
+	return m.continueRunWith(quickParams{chapters: novel.KeepChapters})
+}
 
-// continueRunWith 续跑并把目标调整为 chapters 章；0 表示沿用当前目标（由 app/novel 解析）。
-func (m model) continueRunWith(chapters int) (tea.Model, tea.Cmd) {
+// continueRunWith 按篇幅设定续跑：chapters 正数固定章数，0 交给 AI，novel.KeepChapters 沿用
+// （由 app/novel 解析）；extend 为续写。作品与梗概取当前工作台。
+func (m model) continueRunWith(params quickParams) (tea.Model, tea.Cmd) {
 	bench := &m.bench
 	if !bench.loaded {
 		return m, m.refreshBenchCmd()
@@ -575,12 +579,9 @@ func (m model) continueRunWith(chapters int) (tea.Model, tea.Cmd) {
 	// 新一轮驱动开始：上一轮的活动快照不再呈现，等新事件流入。
 	bench.activity = activity.Snapshot{}
 	bench.activityHeld, bench.activityOffset = nil, 0
+	params.projectID, params.premise = bench.projectID, bench.snap.Intent.Premise
 	return m, tea.Batch(
-		m.startQuickWriteCmd(quickParams{
-			projectID: bench.projectID,
-			premise:   bench.snap.Intent.Premise,
-			chapters:  chapters,
-		}),
+		m.startQuickWriteCmd(params),
 		pollTick(bench.gen),
 	)
 }

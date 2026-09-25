@@ -295,24 +295,20 @@ func (o Operation) Validate() error {
 func CanTransitionOperation(from, to OperationState) bool {
 	switch from {
 	case OperationQueued:
-		return to == OperationRunning || to == OperationPaused || to == OperationCancelled || to == OperationStale
+		return to == OperationRunning || to == OperationPaused || to == OperationCancelled
 	case OperationRunning:
 		return to == OperationPaused || to == OperationAwaitingApproval || to == OperationSucceeded ||
 			to == OperationFailed || to == OperationCancelled || to == OperationStale || to == OperationQueued
 	case OperationPaused:
-		return to == OperationQueued || to == OperationCancelled || to == OperationStale
+		return to == OperationQueued || to == OperationCancelled
 	case OperationAwaitingApproval:
-		return to == OperationQueued || to == OperationSucceeded || to == OperationFailed ||
-			to == OperationCancelled || to == OperationStale
+		// 批准、否决、取消，或被新的推导取代（D64）。
+		return to == OperationSucceeded || to == OperationFailed || to == OperationCancelled || to == OperationStale
 	case OperationFailed:
 		return to == OperationQueued || to == OperationCancelled
 	default:
 		return false
 	}
-}
-
-func OperationTerminal(state OperationState) bool {
-	return state == OperationSucceeded || state == OperationCancelled || state == OperationStale
 }
 
 type WorkspaceArtifact struct {

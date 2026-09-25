@@ -16,19 +16,21 @@ func TestDirectiveScopeCoversTarget(t *testing.T) {
 	if got := target.PlanNodeIDs; len(got) != 3 || got[0] != "chapter-plan-3" || got[2] != "volume-1" {
 		t.Fatalf("PlanAncestry = %v, want chapter → arc → volume", got)
 	}
+	// end 是作用域自带的末章（D63）：只有章号区间有，其余随全书章数确定。
 	cases := []struct {
 		scope string
 		want  bool
+		end   int
 	}{
-		{"project", true},
-		{"plan_node:chapter-plan-3", true},
-		{"plan_node:arc-1", true},
-		{"plan_node:volume-1", true},
-		{"plan_node:arc-2", false},
-		{"chapter_range:1-3", true},
-		{"chapter_range:4-6", false},
-		{"from_chapter:3", true},
-		{"from_chapter:4", false},
+		{"project", true, 0},
+		{"plan_node:chapter-plan-3", true, 0},
+		{"plan_node:arc-1", true, 0},
+		{"plan_node:volume-1", true, 0},
+		{"plan_node:arc-2", false, 0},
+		{"chapter_range:1-3", true, 3},
+		{"chapter_range:4-6", false, 6},
+		{"from_chapter:3", true, 0},
+		{"from_chapter:4", false, 0},
 	}
 	for _, tc := range cases {
 		directive := Directive{ID: "d", Scope: tc.scope, Text: "要求", Status: DirectiveActive}
@@ -37,6 +39,9 @@ func TestDirectiveScopeCoversTarget(t *testing.T) {
 		}
 		if got := directive.Covers(target); got != tc.want {
 			t.Errorf("scope %q covers = %v, want %v", tc.scope, got, tc.want)
+		}
+		if got := directive.BoundedEnd(); got != tc.end {
+			t.Errorf("scope %q bounded end = %d, want %d", tc.scope, got, tc.end)
 		}
 	}
 }

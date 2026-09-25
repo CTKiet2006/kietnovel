@@ -14,17 +14,34 @@ type Intent struct {
 	Required          []string `json:"required,omitempty"`
 	Forbidden         []string `json:"forbidden,omitempty"`
 	EndingDirection   string   `json:"ending_direction,omitempty"`
-	TargetChapters    int      `json:"target_chapters,omitempty"`
 }
 
 func (v Intent) Validate() error {
 	if strings.TrimSpace(v.Premise) == "" {
 		return fmt.Errorf("intent premise is required: %w", ErrInvalid)
 	}
-	if v.TargetChapters < 0 {
-		return fmt.Errorf("target chapters cannot be negative: %w", ErrInvalid)
-	}
 	return validateDistinctStrings("intent required", v.Required)
+}
+
+// Compass 是故事罗盘（D63）：AI 在蓝图里给出的篇幅与终局，随滚动规划修订，只有
+// 规划任务能写。Final 是收官承诺（全书章数），0 表示尚未收官。
+type Compass struct {
+	ScaleMax int    `json:"scale_max"` // 自主篇幅上限：AI 上调需用户裁决
+	Ending   string `json:"ending"`    // 终局方向
+	Final    int    `json:"final,omitempty"`
+}
+
+// CompassAutonomyCeiling 是无人值守的篇幅护栏：AI 首次给出的上限超过它需用户裁决。
+const CompassAutonomyCeiling = 300
+
+func (v Compass) Validate() error {
+	if v.ScaleMax < 1 || strings.TrimSpace(v.Ending) == "" {
+		return fmt.Errorf("compass requires a positive scale_max and an ending: %w", ErrInvalid)
+	}
+	if v.Final < 0 || v.Final > v.ScaleMax {
+		return fmt.Errorf("compass final %d must be within scale_max %d: %w", v.Final, v.ScaleMax, ErrInvalid)
+	}
+	return nil
 }
 
 type PlanNodeKind string
@@ -44,6 +61,23 @@ type PlanNode struct {
 	Title     string        `json:"title"`
 	Summary   string        `json:"summary"`
 	DependsOn []DocumentRef `json:"depends_on,omitempty"`
+}
+
+// ChapterPlansInOrder 是章节计划的唯一排序口径：按 Order、再按 ID；章号即下标 +1。
+func ChapterPlansInOrder(plan []PlanNode) []PlanNode {
+	chapters := make([]PlanNode, 0, len(plan))
+	for _, node := range plan {
+		if node.Kind == PlanChapter {
+			chapters = append(chapters, node)
+		}
+	}
+	slices.SortFunc(chapters, func(left, right PlanNode) int {
+		if left.Order != right.Order {
+			return left.Order - right.Order
+		}
+		return strings.Compare(left.ID, right.ID)
+	})
+	return chapters
 }
 
 // PlanAncestry 返回节点自身及其祖先 ID（章 → 弧 → 卷），供作用域匹配；
@@ -142,6 +176,25 @@ type CanonFact struct {
 	// 不同，缺省即来源章；事件按来源章只追加，不用它。
 	EffectiveChapterID string        `json:"effective_chapter_id,omitempty"`
 	DependsOn          []DocumentRef `json:"depends_on,omitempty"`
+	// Resolved 标记伏笔已回收（D61）：只用于 foreshadow，回收后不再进入创作上下文。
+	Resolved bool `json:"resolved,omitempty"`
+}
+
+// CanonKey 是非事件事实的概念身份（D61）：同一主体的同一谓词只有一个节点，按
+// old/new 演进。事件跨章只追加；关系的对象写在值里，二者都不按键归并。
+type CanonKey struct {
+	SubjectID string
+	Predicate string
+}
+
+func (k CanonKey) String() string { return k.SubjectID + "/" + k.Predicate }
+
+func (v CanonFact) ConceptKey() (CanonKey, bool) {
+	switch v.Kind {
+	case CanonState, CanonWorldRule, CanonForeshadow:
+		return CanonKey{SubjectID: v.SubjectID, Predicate: v.Predicate}, true
+	}
+	return CanonKey{}, false
 }
 
 // EffectiveChapter 是事实在故事中的生效章节，缺省为来源章；两者都空表示规划期事实。
@@ -175,6 +228,9 @@ func (v CanonFact) Validate() error {
 	}
 	if !strings.HasPrefix(v.Predicate, prefix) || !validCanonKey(v.Predicate) {
 		return fmt.Errorf("canon predicate %q must use the %q controlled namespace: %w", v.Predicate, prefix, ErrInvalid)
+	}
+	if v.Resolved && v.Kind != CanonForeshadow {
+		return fmt.Errorf("only foreshadow canon can be resolved, got %s: %w", v.Kind, ErrInvalid)
 	}
 	if len(v.PreviousValue) != 0 && !json.Valid(v.PreviousValue) {
 		return fmt.Errorf("canon old_value must be valid JSON: %w", ErrInvalid)
@@ -356,108 +412,14 @@ func (v OwnershipRule) Validate() error {
 	return validateDistinctStrings("ownership guidance", v.Guidance)
 }
 
-// ValidatePlanChapterTarget 在提交边界按 Proposal 应用后的结果验证固定章节目标。
-// 它只判断结构覆盖，不判断文学内容；超量和缺量都必须显式修正，不能在完成时忽略。
-func ValidatePlanChapterTarget(base []PlanNode, patches []Patch, expected int) error {
-	if expected <= 0 {
-		return fmt.Errorf("plan chapter target must be positive: %w", ErrInvalid)
-	}
-	nodes := make(map[string]PlanNode, len(base))
-	for _, node := range base {
-		if err := node.Validate(); err != nil {
-			return err
-		}
-		nodes[node.ID] = node
-	}
-	for _, patch := range patches {
-		if patch.Document.Kind != DocumentPlan {
-			continue
-		}
-		switch patch.Operation {
-		case PatchDelete:
-			delete(nodes, patch.Document.ID)
-		case PatchPut:
-			if err := ValidateDocumentContent(patch.Document, patch.Content); err != nil {
-				return err
-			}
-			var node PlanNode
-			if err := json.Unmarshal(patch.Content, &node); err != nil {
-				return fmt.Errorf("decode proposed plan node %q: %w", patch.Document.ID, err)
-			}
-			nodes[node.ID] = node
-		default:
-			return fmt.Errorf("unknown plan patch operation %q: %w", patch.Operation, ErrInvalid)
-		}
-	}
-	chapters := 0
-	for _, node := range nodes {
-		if node.Kind == PlanChapter {
-			chapters++
-		}
-	}
-	if chapters != expected {
-		return fmt.Errorf("plan has %d chapter nodes, requested exactly %d: %w", chapters, expected, ErrInvalid)
-	}
-	return nil
-}
-
-// PlanChapterTargetForOperation 解析滚动规划 Operation 请求的章节数；
-// 非规划类 Operation 不受数量不变量约束（ok=false）。
-func PlanChapterTargetForOperation(operation Operation) (int, bool, error) {
-	switch operation.Kind {
-	case OperationDevelopPlan:
-		input, err := TaskInputAs[DevelopPlanInput](operation)
-		return input.RequestedChapters, err == nil, err
-	case OperationRevisePlan:
-		input, err := TaskInputAs[RevisePlanInput](operation)
-		return input.RequestedChapters, err == nil, err
-	default:
-		return 0, false, nil
-	}
-}
-
-// BindChapterDependencies 由宿主写入章节的故事依赖（D40）：本章 Canon Delta 的
-// 主体实体。模型自行声明的 depends_on 被覆盖，依赖只来自可验证的提交内容。
-func BindChapterDependencies(patches []Patch) ([]Patch, error) {
-	subjects := make(map[string][]DocumentRef)
-	for _, patch := range patches {
-		if patch.Document.Kind != DocumentCanon || patch.Operation != PatchPut {
-			continue
-		}
-		var fact CanonFact
-		if err := DecodeStrict(patch.Content, &fact); err != nil {
-			return nil, fmt.Errorf("decode canon delta %q: %w", patch.Document.ID, err)
-		}
-		if fact.SourceChapterID != "" {
-			subjects[fact.SourceChapterID] = append(subjects[fact.SourceChapterID], DocumentRef{Kind: DocumentEntity, ID: fact.SubjectID})
-		}
-	}
-	bound := slices.Clone(patches)
-	for i, patch := range bound {
-		if patch.Document.Kind != DocumentManuscript || patch.Operation != PatchPut {
-			continue
-		}
-		var chapter ManuscriptChapter
-		if err := DecodeStrict(patch.Content, &chapter); err != nil {
-			return nil, fmt.Errorf("decode chapter %q: %w", patch.Document.ID, err)
-		}
-		dependencies := subjects[chapter.ID]
-		slices.SortFunc(dependencies, func(a, b DocumentRef) int { return strings.Compare(a.Key(), b.Key()) })
-		chapter.DependsOn = slices.CompactFunc(dependencies, func(a, b DocumentRef) bool { return a.Key() == b.Key() })
-		content, err := json.Marshal(chapter)
-		if err != nil {
-			return nil, fmt.Errorf("encode chapter %q: %w", patch.Document.ID, err)
-		}
-		bound[i].Content = content
-	}
-	return bound, nil
-}
-
 func validateDocumentRefs(refs []DocumentRef) error {
 	seen := make(map[string]struct{}, len(refs))
 	for i, ref := range refs {
 		if err := ref.Validate(); err != nil {
 			return fmt.Errorf("dependency %d: %w", i, err)
+		}
+		if ref.Kind == DocumentCompass {
+			return fmt.Errorf("dependency %d: the compass cannot be a dependency: %w", i, ErrInvalid)
 		}
 		if _, ok := seen[ref.Key()]; ok {
 			return fmt.Errorf("duplicate dependency %q: %w", ref.Key(), ErrInvalid)

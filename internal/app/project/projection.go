@@ -17,6 +17,7 @@ type ProjectProjection struct {
 	ProjectID    string           `json:"project_id"`
 	BaseRevision model.Revision   `json:"base_revision"`
 	Intent       model.Intent     `json:"intent"`
+	Compass      *model.Compass   `json:"compass,omitempty"`
 	Plan         []model.PlanNode `json:"plan"`
 	Entities     []model.Entity   `json:"entities,omitempty"`
 	// 附件只携带本作品库内的不可变引用；投影不是包含媒体文件的备份包。
@@ -37,7 +38,7 @@ func (s *Repository) ExportProject(ctx context.Context, projectID string, revisi
 	}
 	return ProjectProjection{
 		ProjectID: project.ID, BaseRevision: project.Revision,
-		Intent: project.Intent, Plan: project.Plan, Entities: project.Entities, Attachments: project.Attachments, Canon: project.Canon,
+		Intent: project.Intent, Compass: project.Compass, Plan: project.Plan, Entities: project.Entities, Attachments: project.Attachments, Canon: project.Canon,
 		Manuscript: project.Manuscript, Ownership: project.Ownership, Directives: project.Directives,
 		Approval: project.Approval, Overlay: project.Overlay, Assets: project.Assets,
 	}, nil
@@ -223,7 +224,7 @@ type projectionDocument struct {
 func snapshotDocuments(project Snapshot) (map[string]projectionDocument, error) {
 	return projectionDocuments(ProjectProjection{
 		ProjectID: project.ID, BaseRevision: project.Revision,
-		Intent: project.Intent, Plan: project.Plan, Entities: project.Entities, Attachments: project.Attachments, Canon: project.Canon,
+		Intent: project.Intent, Compass: project.Compass, Plan: project.Plan, Entities: project.Entities, Attachments: project.Attachments, Canon: project.Canon,
 		Manuscript: project.Manuscript, Ownership: project.Ownership, Directives: project.Directives,
 		Approval: project.Approval, Overlay: project.Overlay, Assets: project.Assets,
 	})
@@ -244,6 +245,11 @@ func projectionDocuments(projection ProjectProjection) (map[string]projectionDoc
 	}
 	if err := add(model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, projection.Intent); err != nil {
 		return nil, err
+	}
+	if projection.Compass != nil {
+		if err := add(model.DocumentRef{Kind: model.DocumentCompass, ID: "root"}, *projection.Compass); err != nil {
+			return nil, err
+		}
 	}
 	for _, node := range projection.Plan {
 		if err := add(model.DocumentRef{Kind: model.DocumentPlan, ID: node.ID}, node); err != nil {

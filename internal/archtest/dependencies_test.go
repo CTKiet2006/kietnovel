@@ -59,6 +59,8 @@ var allowedImports = map[string][]string{
 
 // Tests may open a real store for assembly; entry production code may not.
 var allowedTestImports = map[string][]string{
+	// 机制守护用运行时登记表核对它从源码推导的禁止集合（D64）。
+	"archtest":         {"domain/model"},
 	"app/task":         {"domain/change"},
 	"domain/change":    {"infra/store"},
 	"domain/operation": {"infra/store"},

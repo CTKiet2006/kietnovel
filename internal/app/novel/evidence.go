@@ -47,15 +47,6 @@ func directiveScope(project projectdoc.Snapshot, target model.DirectiveTarget) m
 	return model.ScopeBasis{Kind: model.ScopeDirective, Target: target, Digest: model.ScopeDigest(members)}
 }
 
-func canonScope(project projectdoc.Snapshot, target model.CanonScope) model.ScopeBasis {
-	refs := model.CanonScopeRefs(project.Canon, project.Manuscript, target)
-	members := make([]model.DocumentBasis, 0, len(refs))
-	for _, ref := range refs {
-		members = append(members, model.DocumentBasis{Ref: ref, Revision: project.Index[ref.Key()].Revision})
-	}
-	return model.ScopeBasis{Kind: model.ScopeCanon, Canon: &target, Digest: model.ScopeDigest(members)}
-}
-
 // basisValid delegates validity to the same contract used by change submission.
 func (s *Reviews) basisValid(ctx context.Context, project projectdoc.Snapshot, basis model.EvidenceBasis) (bool, error) {
 	target := model.AuthorityTarget{Kind: model.AuthorityProject, ID: project.ID}

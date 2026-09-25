@@ -18,7 +18,7 @@ import (
 )
 
 // stubAnalyzer 返回预设的语义影响报告；用例在建提案前改 report。
-type stubAnalyzer struct{ report change.SemanticImpactReport }
+type stubAnalyzer struct{ report model.SemanticImpactReport }
 
 func (a *stubAnalyzer) Analyze(context.Context, model.Proposal, change.StructuralImpact) (json.RawMessage, error) {
 	return json.Marshal(a.report)
@@ -32,16 +32,16 @@ func (boundLLM) Execute(context.Context, model.Operation) (model.OperationOutcom
 	return model.OperationOutcome{}, errors.New("not executed in decision tests")
 }
 
-func conflictReport() change.SemanticImpactReport {
-	return change.SemanticImpactReport{
-		Status: change.SemanticImpactConflict,
-		Findings: []change.SemanticImpactFinding{{
+func conflictReport() model.SemanticImpactReport {
+	return model.SemanticImpactReport{
+		Status: model.SemanticImpactConflict,
+		Findings: []model.SemanticImpactFinding{{
 			Document: &model.DocumentRef{Kind: model.DocumentManuscript, ID: "chapter-1"}, Explanation: "第一章已经用行动落实了旧底线",
 		}},
-		Options: []change.ResolutionOption{
-			{Strategy: change.ResolutionRewriteAffected, ChapterIDs: []string{"chapter-1"}, Explanation: "同步重写第一章"},
-			{Strategy: change.ResolutionReinterpretFuture, Explanation: "保留旧章并在后文解释变化"},
-			{Strategy: change.ResolutionAbandon, Explanation: "放弃本次事实变更"},
+		Options: []model.ResolutionOption{
+			{Strategy: model.ResolutionRewriteAffected, ChapterIDs: []string{"chapter-1"}, Explanation: "同步重写第一章"},
+			{Strategy: model.ResolutionReinterpretFuture, Explanation: "保留旧章并在后文解释变化"},
+			{Strategy: model.ResolutionAbandon, Explanation: "放弃本次事实变更"},
 		},
 	}
 }
@@ -156,7 +156,7 @@ func (f *reviewFixture) conflict(t *testing.T, id string) model.Proposal {
 	return proposal
 }
 
-func (f *reviewFixture) command(proposalID string, strategy change.ResolutionStrategy) ResolveProposalCommand {
+func (f *reviewFixture) command(proposalID string, strategy model.ResolutionStrategy) ResolveProposalCommand {
 	return ResolveProposalCommand{
 		ProposalID: proposalID, UserID: fixtureUser, Strategy: string(strategy), Reason: " 放弃改动 ",
 		RunID: fixtureRun, CreatedAt: f.now.Add(5 * time.Minute),
@@ -212,7 +212,7 @@ func TestResolveProposalRejectsIncompleteCommand(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			command := f.command(proposal.ID, change.ResolutionAbandon)
+			command := f.command(proposal.ID, model.ResolutionAbandon)
 			tc.edit(&command)
 			if _, err := f.review.ResolveProposal(f.ctx, command); !errors.Is(err, tc.want) {
 				t.Fatalf("error = %v, want %v", err, tc.want)
@@ -232,20 +232,20 @@ func TestResolveProposalRequiresSemanticConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepare plain proposal: %v", err)
 	}
-	f.analyzer.report = change.SemanticImpactReport{Status: change.SemanticImpactConsistent}
+	f.analyzer.report = model.SemanticImpactReport{Status: model.SemanticImpactConsistent}
 	consistent := f.conflict(t, "consistent-edit")
 	f.analyzer.report = conflictReport()
 	conflict := f.conflict(t, "change-bottom-line")
 
 	cases := map[string]struct {
 		proposal string
-		strategy change.ResolutionStrategy
+		strategy model.ResolutionStrategy
 		want     string
 	}{
 		"unknown strategy":          {conflict.ID, "merge", `unknown resolution strategy "merge"`},
-		"proposal without report":   {plain.ID, change.ResolutionAbandon, "has no semantic impact report"},
-		"consistent proposal":       {consistent.ID, change.ResolutionReinterpretFuture, "approve it directly"},
-		"consistent proposal abort": {consistent.ID, change.ResolutionAbandon, "approve it directly"},
+		"proposal without report":   {plain.ID, model.ResolutionAbandon, "has no semantic impact report"},
+		"consistent proposal":       {consistent.ID, model.ResolutionReinterpretFuture, "approve it directly"},
+		"consistent proposal abort": {consistent.ID, model.ResolutionAbandon, "approve it directly"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -261,7 +261,7 @@ func TestResolveProposalRequiresSemanticConflict(t *testing.T) {
 func TestResolveProposalAbandonRejectsWithReason(t *testing.T) {
 	f := newReviewFixture(t, false)
 	proposal := f.conflict(t, "change-bottom-line")
-	command := f.command(proposal.ID, change.ResolutionAbandon)
+	command := f.command(proposal.ID, model.ResolutionAbandon)
 	result, err := f.review.ResolveProposal(f.ctx, command)
 	if err != nil {
 		t.Fatalf("abandon: %v", err)
@@ -284,7 +284,7 @@ func TestResolveProposalAbandonRejectsWithReason(t *testing.T) {
 	if err != nil || again.Proposal == nil || again.Proposal.ApprovalState != model.ApprovalRejected || again.Proposal.DecisionReason != "放弃改动" {
 		t.Fatalf("repeated abandon = %#v, %v", again, err)
 	}
-	if _, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, change.ResolutionReinterpretFuture)); !errors.Is(err, model.ErrStateConflict) {
+	if _, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, model.ResolutionReinterpretFuture)); !errors.Is(err, model.ErrStateConflict) {
 		t.Fatalf("approve after reject: %v", err)
 	}
 }
@@ -292,7 +292,7 @@ func TestResolveProposalAbandonRejectsWithReason(t *testing.T) {
 func TestResolveProposalReinterpretFutureCommitsWithoutOperation(t *testing.T) {
 	f := newReviewFixture(t, false)
 	proposal := f.conflict(t, "change-bottom-line")
-	result, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, change.ResolutionReinterpretFuture))
+	result, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, model.ResolutionReinterpretFuture))
 	if err != nil {
 		t.Fatalf("reinterpret future: %v", err)
 	}
@@ -309,11 +309,11 @@ func TestResolveProposalReinterpretFutureCommitsWithoutOperation(t *testing.T) {
 	}
 
 	// 已批准的提案重复裁决返回同一 ChangeSet；再放弃是状态冲突。
-	again, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, change.ResolutionReinterpretFuture))
+	again, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, model.ResolutionReinterpretFuture))
 	if err != nil || again.ChangeSet == nil || again.ChangeSet.NewRevision != 3 {
 		t.Fatalf("repeated resolution = %#v, %v", again, err)
 	}
-	if _, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, change.ResolutionAbandon)); !errors.Is(err, model.ErrStateConflict) {
+	if _, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, model.ResolutionAbandon)); !errors.Is(err, model.ErrStateConflict) {
 		t.Fatalf("abandon after approve: %v", err)
 	}
 	f.assertState(t, proposal.ID, model.ApprovalApproved, 3)
@@ -337,7 +337,7 @@ func TestResolveProposalRewriteAffectedChecksPrerequisitesBeforeCommit(t *testin
 		t.Run(name, func(t *testing.T) {
 			f := newReviewFixture(t, tc.withModel)
 			proposal := f.conflict(t, "change-bottom-line")
-			command := f.command(proposal.ID, change.ResolutionRewriteAffected)
+			command := f.command(proposal.ID, model.ResolutionRewriteAffected)
 			if tc.edit != nil {
 				tc.edit(&command)
 			}
@@ -356,7 +356,7 @@ func TestResolveProposalRewriteAffectedAdoptsMatchingOperation(t *testing.T) {
 	existing := f.rewriteOperation(t, proposal.ID, model.RewriteAffectedInput{
 		ChapterIDs: []string{"chapter-1"}, BaseRevision: 3, ResolutionProposalID: proposal.ID, Reason: "同步重写第一章",
 	}, 3)
-	result, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, change.ResolutionRewriteAffected))
+	result, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, model.ResolutionRewriteAffected))
 	if err != nil {
 		t.Fatalf("rewrite affected: %v", err)
 	}
@@ -383,7 +383,7 @@ func TestResolveProposalRewriteAffectedRejectsForeignOperation(t *testing.T) {
 			f := newReviewFixture(t, true)
 			proposal := f.conflict(t, "change-bottom-line")
 			f.rewriteOperation(t, proposal.ID, tc.input, tc.baseRevision)
-			result, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, change.ResolutionRewriteAffected))
+			result, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, model.ResolutionRewriteAffected))
 			if !errors.Is(err, model.ErrIdempotencyConflict) {
 				t.Fatalf("error = %v, want ErrIdempotencyConflict", err)
 			}
@@ -402,12 +402,12 @@ func TestResolveProposalStaleProposalCannotBeApprovedButCanBeAbandoned(t *testin
 	f.commitEdit(t, "later-edit", func(projection *projectdoc.ProjectProjection) {
 		projection.Plan[2].Summary = "冒雨抵达山门"
 	})
-	_, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, change.ResolutionReinterpretFuture))
+	_, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, model.ResolutionReinterpretFuture))
 	if !errors.Is(err, model.ErrRevisionConflict) {
 		t.Fatalf("stale approval: %v", err)
 	}
 	f.assertState(t, proposal.ID, model.ApprovalPending, 3)
-	result, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, change.ResolutionAbandon))
+	result, err := f.review.ResolveProposal(f.ctx, f.command(proposal.ID, model.ResolutionAbandon))
 	if err != nil || result.Proposal == nil || result.Proposal.ApprovalState != model.ApprovalRejected {
 		t.Fatalf("stale abandon = %#v, %v", result, err)
 	}

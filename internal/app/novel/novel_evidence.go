@@ -10,7 +10,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/domain/model"
 )
 
-// StoredVerdict 是一条已校验的原始裁定及其派生记录坐标（选"最新"用）；Accepted 是
+// StoredVerdict 是一条已校验的原始裁定及其派生记录坐标（选"当前"用）；Accepted 是
 // 仍然有效的用户裁决所接受的发现（D43），生效裁定由 Effective 套用得到。
 type StoredVerdict struct {
 	Verdict   model.ReviewVerdict
@@ -24,7 +24,7 @@ func (v StoredVerdict) Effective() model.ReviewVerdict {
 }
 
 // ListVerdicts 取当前快照下仍然有效的全部裁定并附上有效裁决（D43）：协调器与工作台
-// 共用，两处"最新裁定"与"生效裁定"语义一致。
+// 共用，两处"当前裁定"（CurrentVerdicts）与"生效裁定"语义一致。
 func (s *Reviews) ListVerdicts(ctx context.Context, project projectdoc.Snapshot) ([]StoredVerdict, error) {
 	verdicts, err := s.rawVerdicts(ctx, project)
 	if err != nil {
@@ -74,30 +74,4 @@ func (s *Reviews) rawVerdicts(ctx context.Context, project projectdoc.Snapshot) 
 		verdicts = append(verdicts, StoredVerdict{Verdict: verdict, Key: document.Key, CreatedAt: document.CreatedAt})
 	}
 	return verdicts, nil
-}
-
-// latestVerdict 在满足条件的裁定里选最新并返回其生效形态；条件按原始裁定匹配。
-func latestVerdict(verdicts []StoredVerdict, matches func(model.ReviewVerdict) bool) *model.ReviewVerdict {
-	best := LatestStoredVerdict(verdicts, matches)
-	if best == nil {
-		return nil
-	}
-	verdict := best.Effective()
-	return &verdict
-}
-
-// LatestStoredVerdict 选最新：CreatedAt 优先，相同则 Key 决胜。
-func LatestStoredVerdict(verdicts []StoredVerdict, matches func(model.ReviewVerdict) bool) *StoredVerdict {
-	var best *StoredVerdict
-	for index := range verdicts {
-		candidate := &verdicts[index]
-		if !matches(candidate.Verdict) {
-			continue
-		}
-		if best == nil || candidate.CreatedAt.After(best.CreatedAt) ||
-			(candidate.CreatedAt.Equal(best.CreatedAt) && candidate.Key > best.Key) {
-			best = candidate
-		}
-	}
-	return best
 }

@@ -2,6 +2,7 @@ package change
 
 import (
 	"context"
+	"time"
 
 	"github.com/voocel/ainovel-cli/internal/domain/model"
 )
@@ -19,9 +20,11 @@ type Store interface {
 		revision model.Revision,
 	) (model.ChangeSet, error)
 	GetDocument(ctx context.Context, target model.AuthorityTarget, ref model.DocumentRef, at model.Revision) (model.DocumentVersion, error)
+	GetOperation(ctx context.Context, id string) (model.Operation, error)
 	GetProposal(ctx context.Context, id string) (model.Proposal, error)
 	ListDocuments(ctx context.Context, target model.AuthorityTarget, kind model.DocumentKind, at model.Revision) ([]model.DocumentVersion, error)
 	RejectProposal(ctx context.Context, proposal model.Proposal) (model.Proposal, error)
 	SaveExecutionProposal(ctx context.Context, proposal model.Proposal, attempt int) (model.Proposal, error)
 	SaveProposal(ctx context.Context, proposal model.Proposal) (model.Proposal, error)
+	UpdatePendingProposal(ctx context.Context, proposal model.Proposal, attempt int, now time.Time) error
 }

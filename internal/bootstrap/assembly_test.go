@@ -15,8 +15,8 @@ func TestEveryOperationKindIsAssembled(t *testing.T) {
 	basis := model.EvidenceBasis{Documents: []model.DocumentBasis{{Ref: model.DocumentRef{Kind: model.DocumentManuscript, ID: "chapter-1"}, Revision: 1}}}
 	samples := map[model.OperationKind]model.TaskInput{
 		model.OperationInitializeProject: model.InitializeProjectInput{Intent: "凡人修仙"},
-		model.OperationDevelopPlan:       model.DevelopPlanInput{Intent: "凡人修仙", TargetChapters: 3, RequestedChapters: 3},
-		model.OperationRevisePlan:        model.RevisePlanInput{Intent: "凡人修仙", TargetChapters: 6, ExistingChapters: 3, RequestedChapters: 6},
+		model.OperationDevelopPlan:       model.DevelopPlanInput{Intent: "凡人修仙", FixedChapters: 3, RequestedChapters: 3},
+		model.OperationRevisePlan:        model.RevisePlanInput{Intent: "凡人修仙", FixedChapters: 6, ExistingChapters: 3, RequestedChapters: 6},
 		model.OperationReviseCanon:       model.ReviseCanonInput{ChapterID: "chapter-1", Reason: "修订设定"},
 		model.OperationWriteChapter:      model.WriteChapterInput{ChapterPlanID: "chapter-plan-1", ChapterNumber: 1},
 		model.OperationRewriteChapter: model.RewriteChapterInput{
@@ -30,7 +30,7 @@ func TestEveryOperationKindIsAssembled(t *testing.T) {
 		model.OperationInspectAsset:  model.InspectAssetInput{Artifact: model.ArtifactRef{ID: "op/image", Digest: model.Digest([]byte("image"))}, Basis: model.EvidenceBasis{Documents: basis.Documents, Artifacts: []model.ArtifactRef{{ID: "op/image", Digest: model.Digest([]byte("image"))}}}},
 	}
 	content := derive.ProjectContent{
-		ID: "book-1", Revision: 1, Intent: model.Intent{Premise: "凡人修仙"},
+		ID: "book-1", Revision: 1,
 		Plan: []model.PlanNode{
 			{ID: "volume-1", Kind: model.PlanVolume, Title: "入道", Summary: "进入山门"},
 			{ID: "arc-1", Kind: model.PlanArc, ParentID: "volume-1", Title: "山门", Summary: "考验"},

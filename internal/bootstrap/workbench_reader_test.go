@@ -71,7 +71,7 @@ func BenchmarkWorkbenchReader500Chapters(b *testing.B) {
 	}
 	b.Cleanup(func() { authority.Close() })
 	api := newTestApp(authority)
-	projection := projectdoc.ProjectProjection{ProjectID: "long-reader", Intent: model.Intent{Premise: "雨夜来信", TargetChapters: 500}}
+	projection := projectdoc.ProjectProjection{ProjectID: "long-reader", Intent: model.Intent{Premise: "雨夜来信"}}
 	projection.Plan = []model.PlanNode{{ID: "volume", Kind: model.PlanVolume, Title: "来信", Summary: "来信"}, {ID: "arc", ParentID: "volume", Kind: model.PlanArc, Title: "雨夜", Summary: "雨夜"}}
 	for i := 1; i <= 500; i++ {
 		planID, id := fmt.Sprintf("plan-%d", i), fmt.Sprintf("chapter-%d", i)

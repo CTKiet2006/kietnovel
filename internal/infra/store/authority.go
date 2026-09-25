@@ -285,23 +285,6 @@ func (s *Store) DeleteProject(ctx context.Context, projectID string) error {
 	return nil
 }
 
-// ListPlanNodes 以类型化形式读取某 Revision 的全部蓝图节点。
-func (s *Store) ListPlanNodes(ctx context.Context, target model.AuthorityTarget, at model.Revision) ([]model.PlanNode, error) {
-	documents, err := s.ListDocuments(ctx, target, model.DocumentPlan, at)
-	if err != nil {
-		return nil, err
-	}
-	nodes := make([]model.PlanNode, 0, len(documents))
-	for _, document := range documents {
-		var node model.PlanNode
-		if err := json.Unmarshal(document.Content, &node); err != nil {
-			return nil, fmt.Errorf("decode plan node %q: %w", document.Document.ID, err)
-		}
-		nodes = append(nodes, node)
-	}
-	return nodes, nil
-}
-
 func findCommittedChange(ctx context.Context, tx *sql.Tx, id string) (model.Revision, string, bool, error) {
 	var revision model.Revision
 	var digest string

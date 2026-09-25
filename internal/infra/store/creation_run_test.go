@@ -38,27 +38,41 @@ func TestCreationRunSingleActivePerProject(t *testing.T) {
 		t.Fatalf("same id with different goal must conflict, got %v", err)
 	}
 
-	waiting, err := s.TransitionCreationRun(ctx, first.ID, model.RunRunning, model.RunWaitingUser, "等待确认", 0, now.Add(time.Minute))
-	if err != nil || waiting.State != model.RunWaitingUser {
+	if _, err := s.TransitionCreationRun(ctx, first.ID, model.RunTransition{From: model.RunRunning, To: model.RunPaused, WaitingOperationID: "op"}, now); !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("only waiting_user records the awaited operation, got %v", err)
+	}
+	waiting, err := s.TransitionCreationRun(ctx, first.ID, model.RunTransition{From: model.RunRunning, To: model.RunWaitingUser, Reason: "等待确认", WaitingOperationID: "op"}, now.Add(time.Minute))
+	if err != nil || waiting.State != model.RunWaitingUser || waiting.WaitingOperationID != "op" {
 		t.Fatalf("transition to waiting = %#v, %v", waiting, err)
+	}
+	// 暂停保留等待任务，决定卡照常呈现；恢复运行清空（D64）。
+	paused, err := s.TransitionCreationRun(ctx, first.ID, model.RunTransition{From: model.RunWaitingUser, To: model.RunPaused}, now.Add(time.Minute))
+	if err != nil || paused.WaitingOperationID != "op" {
+		t.Fatalf("pause = %#v, %v", paused, err)
+	}
+	if waiting, err = s.TransitionCreationRun(ctx, first.ID, model.RunTransition{From: model.RunPaused, To: model.RunRunning}, now.Add(time.Minute)); err != nil || waiting.WaitingOperationID != "" {
+		t.Fatalf("resume = %#v, %v", waiting, err)
+	}
+	if waiting, err = s.TransitionCreationRun(ctx, first.ID, model.RunTransition{From: model.RunRunning, To: model.RunWaitingUser, Reason: "等待确认"}, now.Add(time.Minute)); err != nil || waiting.WaitingOperationID != "" {
+		t.Fatalf("waiting without an operation = %#v, %v", waiting, err)
 	}
 	if active, err := s.ActiveCreationRun(ctx, "book"); err != nil || active.ID != first.ID {
 		t.Fatalf("waiting run must stay active = %#v, %v", active, err)
 	}
-	if _, err := s.TransitionCreationRun(ctx, first.ID, model.RunWaitingUser, model.RunCompleted, "完成", 5, now.Add(2*time.Minute)); err == nil {
+	if _, err := s.TransitionCreationRun(ctx, first.ID, model.RunTransition{From: model.RunWaitingUser, To: model.RunCompleted, Reason: "完成", CompletedRevision: 5}, now.Add(2*time.Minute)); err == nil {
 		t.Fatal("waiting cannot complete directly")
 	}
-	if _, err := s.TransitionCreationRun(ctx, first.ID, model.RunWaitingUser, model.RunRunning, "继续", 0, now.Add(2*time.Minute)); err != nil {
+	if _, err := s.TransitionCreationRun(ctx, first.ID, model.RunTransition{From: model.RunWaitingUser, To: model.RunRunning, Reason: "继续"}, now.Add(2*time.Minute)); err != nil {
 		t.Fatalf("resume run: %v", err)
 	}
-	if _, err := s.TransitionCreationRun(ctx, first.ID, model.RunRunning, model.RunCompleted, "完成", 0, now.Add(3*time.Minute)); !errors.Is(err, model.ErrInvalid) {
+	if _, err := s.TransitionCreationRun(ctx, first.ID, model.RunTransition{From: model.RunRunning, To: model.RunCompleted, Reason: "完成"}, now.Add(3*time.Minute)); !errors.Is(err, model.ErrInvalid) {
 		t.Fatalf("completion must bind a revision, got %v", err)
 	}
-	completed, err := s.TransitionCreationRun(ctx, first.ID, model.RunRunning, model.RunCompleted, "完成", 5, now.Add(3*time.Minute))
+	completed, err := s.TransitionCreationRun(ctx, first.ID, model.RunTransition{From: model.RunRunning, To: model.RunCompleted, Reason: "完成", CompletedRevision: 5}, now.Add(3*time.Minute))
 	if err != nil || completed.CompletedRevision != 5 {
 		t.Fatalf("complete run = %#v, %v", completed, err)
 	}
-	if _, err := s.TransitionCreationRun(ctx, first.ID, model.RunCompleted, model.RunRunning, "重启", 0, now.Add(4*time.Minute)); !errors.Is(err, model.ErrStateConflict) {
+	if _, err := s.TransitionCreationRun(ctx, first.ID, model.RunTransition{From: model.RunCompleted, To: model.RunRunning, Reason: "重启"}, now.Add(4*time.Minute)); !errors.Is(err, model.ErrStateConflict) {
 		t.Fatalf("terminal run must not transition, got %v", err)
 	}
 	if _, err := s.UpdateCreationRunStrategy(ctx, first.ID, model.CreationRunStrategy{
@@ -109,9 +123,9 @@ func TestCreateOperationBindsRunLineageTransactionally(t *testing.T) {
 		State:  model.OperationQueued, RunID: run.ID,
 		Snapshot: model.ExecutionSnapshot{
 			Executor: testExecutor, BaseRevision: 1, ConfigDigest: "profile", ApprovalPolicy: model.ApprovalAuto,
-			InputDigest: model.Digest([]byte(`{"intent":"一句话","target_chapters":5,"requested_chapters":3}`)),
+			InputDigest: model.Digest([]byte(`{"intent":"一句话","fixed_chapters":5,"requested_chapters":3}`)),
 		},
-		Input: []byte(`{"intent":"一句话","target_chapters":5,"requested_chapters":3}`), CreatedAt: now.Add(2 * time.Minute), UpdatedAt: now.Add(2 * time.Minute),
+		Input: []byte(`{"intent":"一句话","fixed_chapters":5,"requested_chapters":3}`), CreatedAt: now.Add(2 * time.Minute), UpdatedAt: now.Add(2 * time.Minute),
 	}
 	created, err := s.CreateOperation(ctx, operation)
 	if err != nil {
@@ -154,7 +168,7 @@ func TestCreateOperationBindsRunLineageTransactionally(t *testing.T) {
 		t.Fatalf("operation with mismatched run project = %v, want model.ErrInvalid", err)
 	}
 	if _, err := s.TransitionCreationRun(
-		ctx, run.ID, model.RunRunning, model.RunCancelled, "取消", 0, now.Add(3*time.Minute),
+		ctx, run.ID, model.RunTransition{From: model.RunRunning, To: model.RunCancelled, Reason: "取消"}, now.Add(3*time.Minute),
 	); err != nil {
 		t.Fatalf("cancel run: %v", err)
 	}

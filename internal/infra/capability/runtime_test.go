@@ -90,11 +90,11 @@ func TestRuntimeToolsRespectAuthoritySnapshotAndWorkspaceBoundary(t *testing.T) 
 		Predicate: "event.chapter_outcome", Value: json.RawMessage(`"抵达山门"`), SourceChapterID: chapter.ID,
 	})
 	manuscriptPatch := domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentManuscript, ID: "chapter-1"}, Operation: domainmodel.PatchPut, Content: chapterContent}
-	// 真实模型犯过的错：给已有事实另起新 id 并带 old_value。结构校验必须在工具边界
-	// 当场报出，而不是让模型看到"提交成功"后在收尾失败。
+	// 真实模型犯过的错：给已有事实另起新 id。同一主体+谓词就是同一事实（D61），
+	// 宿主按键并入已有节点并补 old_value，模型无需记住 ID。
 	renamedContent, _ := json.Marshal(domainmodel.CanonFact{
 		ID: "hero-origin-update", Kind: domainmodel.CanonState, SubjectID: "hero", Predicate: "state.origin",
-		PreviousValue: json.RawMessage(`"农家子"`), Value: json.RawMessage(`"孤儿"`), SourceChapterID: chapter.ID,
+		Value: json.RawMessage(`"孤儿"`), SourceChapterID: chapter.ID,
 	})
 	renamedArgs, _ := json.Marshal(map[string]any{
 		"reason": "更新出身", "workspace_key": "chapter/chapter-1",
@@ -102,8 +102,13 @@ func TestRuntimeToolsRespectAuthoritySnapshotAndWorkspaceBoundary(t *testing.T) 
 			{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: "hero-origin-update"}, Operation: domainmodel.PatchPut, Content: renamedContent},
 		},
 	})
-	if _, err := submitTool(ctx, renamedArgs); !errors.Is(err, change.ErrStructuralConflict) || !strings.Contains(err.Error(), "cannot declare old_value") {
-		t.Fatalf("renamed fact must be rejected at the tool boundary, got %v", err)
+	if _, err := submitTool(ctx, renamedArgs); err != nil {
+		t.Fatalf("renamed fact must merge into the existing key: %v", err)
+	}
+	var merged domainmodel.CanonFact
+	if err := json.Unmarshal(submitted.Patches[1].Content, &merged); err != nil || submitted.Patches[1].Document.ID != "hero-origin" ||
+		merged.ID != "hero-origin" || string(merged.PreviousValue) != `"农家子"` {
+		t.Fatalf("merged patch = %+v (%v)", submitted.Patches[1], err)
 	}
 	proposalArgs, _ := json.Marshal(map[string]any{
 		"reason":        "提交章节候选",
@@ -165,8 +170,15 @@ func TestRuntimeToolsRespectAuthoritySnapshotAndWorkspaceBoundary(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(submitted.Patches) != 2 || string(submitted.Patches[1].Content) != string(chapterContent) {
-				t.Fatalf("reference did not preserve exact manuscript: %+v", submitted.Patches)
+			// 引用提交原样带上草稿，故事依赖由宿主按 Canon Delta 写入（D40）。
+			want, err := domainmodel.NormalizeSubmission([]domainmodel.Patch{attachment, {
+				Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentManuscript, ID: "chapter-1"}, Operation: domainmodel.PatchPut, Content: chapterContent,
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(submitted.Patches) != 2 || string(submitted.Patches[1].Content) != string(want[1].Content) {
+				t.Fatalf("reference did not carry the draft: %+v", submitted.Patches)
 			}
 		})
 	}
@@ -340,7 +352,7 @@ func TestRuntimeReviewSubmitsVerdictWithoutProposal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load review capability: %v", err)
 	}
-	task := json.RawMessage(`{"chapter_ids":["chapter-1","chapter-2"],"verify_intent":true,"directives":[{"id":"hook","scope":"project","text":"每章结尾留钩子","status":"active"}],"basis":{"documents":[{"ref":{"kind":"manuscript","id":"chapter-1"},"revision":2}]}}`)
+	task := json.RawMessage(`{"chapter_ids":["chapter-1","chapter-2"],"requirements":[{"id":"directive:hook","text":"每章结尾留钩子"},{"id":"intent:forbidden:0","text":"不写感情线","settle":true}],"basis":{"documents":[{"ref":{"kind":"manuscript","id":"chapter-1"},"revision":2}]}}`)
 	operation := domainmodel.Operation{
 		ID: "review-1", Kind: domainmodel.OperationReviewRange,
 		Target: domainmodel.AuthorityTarget{Kind: domainmodel.AuthorityProject, ID: "book-review"},
@@ -357,22 +369,22 @@ func TestRuntimeReviewSubmitsVerdictWithoutProposal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim operation: %v", err)
 	}
-	// 递进式纠错：终审 pass 缺意图核验声明被拒 → 漏掉要求核验被拒 → 完整裁定通过。
+	// 递进式纠错：漏掉要求核验被拒 → 必须下结论的项给 pending 被拒 → 完整裁定通过。
 	// 章节范围与发现由宿主从任务输入和审阅记录填入（D60），模型不再复述，
 	// "漏审范围""与记录不一致"这两类错误在结构上已不可能发生。
 	findings := []map[string]any{{"chapter_id": "chapter-2", "severity": "note", "note": "第二章节奏偏慢"}}
 	review, _ := json.Marshal(map[string]any{
 		"key": "review/findings", "findings": findings,
 	})
-	intent := map[string]any{"required_present": true, "forbidden_absent": true, "ending_consistent": true}
-	noIntent, _ := json.Marshal(map[string]any{"status": "pass", "review_key": "review/findings"})
-	noDirectives, _ := json.Marshal(map[string]any{"status": "pass", "review_key": "review/findings", "intent": intent})
-	complete, _ := json.Marshal(map[string]any{
-		"status": "pass", "review_key": "review/findings", "intent": intent,
-		"directives": []map[string]any{{"directive_id": "hook", "satisfied": true}},
-	})
+	noChecks, _ := json.Marshal(map[string]any{"status": "pass", "review_key": "review/findings"})
+	unsettled, _ := json.Marshal(map[string]any{"status": "pass", "review_key": "review/findings", "checks": []map[string]any{
+		{"id": "directive:hook", "status": "pending"}, {"id": "intent:forbidden:0", "status": "pending"},
+	}})
+	complete, _ := json.Marshal(map[string]any{"status": "pass", "review_key": "review/findings", "checks": []map[string]any{
+		{"id": "directive:hook", "status": "pending"}, {"id": "intent:forbidden:0", "status": "satisfied"},
+	}})
 	model := &verdictRuntimeModel{
-		review: review, steps: []json.RawMessage{noIntent, noDirectives, complete},
+		review: review, steps: []json.RawMessage{noChecks, unsettled, complete},
 		now: now.Add(2 * time.Second),
 	}
 	runtime := boundRuntime(authorityStore, model)
@@ -392,8 +404,8 @@ func TestRuntimeReviewSubmitsVerdictWithoutProposal(t *testing.T) {
 	}
 	if verdict.Status != domainmodel.ReviewPass || verdict.Revision != 3 ||
 		len(verdict.ChapterIDs) != 2 || len(verdict.Findings) != 1 ||
-		verdict.ReviewKey != "review/findings" || !verdict.IntentSatisfied() ||
-		len(verdict.Directives) != 1 || !verdict.DirectivesSatisfied() {
+		verdict.ReviewKey != "review/findings" || len(verdict.Checks) != 2 ||
+		verdict.CheckStatus("intent:forbidden:0") != domainmodel.CheckSatisfied || verdict.CheckStatus("directive:hook") != domainmodel.CheckPending {
 		t.Fatalf("verdict = %#v", verdict)
 	}
 	artifact, err := authorityStore.GetWorkspaceArtifact(ctx, operation.ID, verdict.ReviewKey)
@@ -857,8 +869,8 @@ func TestRuntimeAnalyzesSemanticImpactWithStrictContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("analyze semantic impact: %v", err)
 	}
-	var report change.SemanticImpactReport
-	if err := json.Unmarshal(reportJSON, &report); err != nil || report.Status != change.SemanticImpactConflict || !model.usedJSONSchema {
+	var report domainmodel.SemanticImpactReport
+	if err := json.Unmarshal(reportJSON, &report); err != nil || report.Status != domainmodel.SemanticImpactConflict || !model.usedJSONSchema {
 		t.Fatalf("report = %#v, schema = %v, error = %v", report, model.usedJSONSchema, err)
 	}
 }
@@ -937,71 +949,8 @@ func TestAffectedRewriteSubmissionCoversEveryWorkspaceChapter(t *testing.T) {
 	if _, err := runtime.materializeWorkspaceChapters(ctx, operation, keys, versions, attachments); err == nil {
 		t.Fatal("missing chapter version accepted")
 	}
-	partial, err := runtime.materializeWorkspaceChapters(ctx, operation, keys[:1], versions, attachments[:1])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := runtime.validateSubmissionArtifact(ctx, operation, keys[:1], "", partial); err == nil {
-		t.Fatal("reference submission bypassed affected chapter coverage")
-	}
-}
-
-func TestWriterSubmissionEnforcesDirectiveWordCounts(t *testing.T) {
-	// S13：量化要求由宿主确定性校验——越界提交连同实际值与区间被拒回给模型自纠。
-	ctx := context.Background()
-	now := time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)
-	authorityStore, err := store.Open(ctx, filepath.Join(t.TempDir(), "ainovel.db"))
-	if err != nil {
-		t.Fatalf("open store: %v", err)
-	}
-	defer authorityStore.Close()
-	operation := domainmodel.Operation{
-		ID: "write-counted", Kind: domainmodel.OperationWriteChapter,
-		Target: domainmodel.AuthorityTarget{Kind: domainmodel.AuthorityProject, ID: "book-1"}, State: domainmodel.OperationQueued,
-		RunID: createRuntimeTestRun(t, ctx, authorityStore, "book-1", now),
-		Snapshot: runtimeSnapshot(
-			json.RawMessage(`{"chapter_plan_id":"plan-1","chapter_number":1,"directives":[{"id":"length","scope":"project","text":"每章十字左右","constraints":{"target_words":10},"status":"active"}]}`),
-			2, domainmodel.ApprovalAuto, "profile",
-		),
-		Input:     json.RawMessage(`{"chapter_plan_id":"plan-1","chapter_number":1,"directives":[{"id":"length","scope":"project","text":"每章十字左右","constraints":{"target_words":10},"status":"active"}]}`),
-		CreatedAt: now, UpdatedAt: now,
-	}
-	if _, err := authorityStore.CreateOperation(ctx, operation); err != nil {
-		t.Fatalf("create operation: %v", err)
-	}
-	operation, err = authorityStore.ClaimOperationForExecutor(ctx, operation.ID, "worker-1", prompt.ExecutorIdentity, time.Minute, now)
-	if err != nil {
-		t.Fatalf("claim operation: %v", err)
-	}
-	runtime := NewRuntime(authorityStore)
-	submit := func(text string, version int64) error {
-		chapter := domainmodel.ManuscriptChapter{
-			ID: "chapter-1", PlanNodeID: "plan-1", Number: 1, Title: "标题不计入字数", Author: domainmodel.AuthorAI,
-			Blocks: []domainmodel.ManuscriptBlock{{ID: "block-1", Text: text}},
-		}
-		content, _ := json.Marshal(chapter)
-		if _, err := authorityStore.PutWorkspaceArtifact(ctx, domainmodel.WorkspaceArtifact{
-			OperationID: operation.ID, Key: "chapter/chapter-1", MediaType: workspace.ChapterMediaType,
-			Content: content, UpdatedAt: now,
-		}, &version, operation.Attempt); err != nil {
-			t.Fatalf("put workspace chapter: %v", err)
-		}
-		patches := []domainmodel.Patch{
-			{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentManuscript, ID: chapter.ID}, Operation: domainmodel.PatchPut, Content: content},
-			{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: "fact-1"}, Operation: domainmodel.PatchPut,
-				Content: json.RawMessage(`{"id":"fact-1","kind":"event","subject_id":"hero","predicate":"event.done","new_value":true,"source_chapter_id":"chapter-1"}`)},
-		}
-		return runtime.validateSubmissionArtifact(ctx, operation, []string{"chapter/chapter-1"}, "", patches)
-	}
-	if err := submit("太短", 0); !errors.Is(err, domainmodel.ErrInvalid) || !strings.Contains(err.Error(), "9-11") {
-		t.Fatalf("short chapter err = %v", err)
-	}
-	if err := submit(strings.Repeat("长", 12), 1); !errors.Is(err, domainmodel.ErrInvalid) {
-		t.Fatalf("long chapter err = %v", err)
-	}
-	if err := submit(strings.Repeat("好", 10), 2); err != nil {
-		t.Fatalf("in-range chapter err = %v", err)
-	}
+	// 只引用部分章节在工作区层面是一致的；是否覆盖任务的全部章节由任务提交契约判定
+	// （model.ValidateChange，工具边界经 changes.Validate 执行）。
 }
 
 func TestRuntimePlanSubmissionEnforcesRequestedChapters(t *testing.T) {
@@ -1018,7 +967,7 @@ func TestRuntimePlanSubmissionEnforcesRequestedChapters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load architect capability: %v", err)
 	}
-	task := json.RawMessage(`{"intent":"规划开篇","target_chapters":3,"requested_chapters":1}`)
+	task := json.RawMessage(`{"intent":"规划开篇","fixed_chapters":3,"requested_chapters":1}`)
 	operation := domainmodel.Operation{
 		ID: "plan-1", Kind: domainmodel.OperationDevelopPlan,
 		Target: domainmodel.AuthorityTarget{Kind: domainmodel.AuthorityProject, ID: "book-plan"},
@@ -1243,11 +1192,11 @@ func TestWriterSubmissionRequiresRedeclaringChapterFacts(t *testing.T) {
 		return err
 	}
 	fresh := `{"id":"fact-2","kind":"event","subject_id":"hero","predicate":"event.left","new_value":true,"source_chapter_id":"chapter-1"}`
-	if err := submit(canon(fresh)); !errors.Is(err, change.ErrStructuralConflict) || !strings.Contains(err.Error(), `redeclare canon "fact-1"`) {
+	if err := submit(canon(fresh)); !errors.Is(err, domainmodel.ErrStructuralConflict) || !strings.Contains(err.Error(), `redeclare canon "fact-1"`) {
 		t.Fatalf("missing redeclaration err = %v", err)
 	}
 	foreign := `{"id":"fact-3","kind":"event","subject_id":"hero","predicate":"event.elsewhere","new_value":true,"source_chapter_id":"chapter-9"}`
-	if err := submit(canon(fresh), canon(foreign)); !errors.Is(err, change.ErrStructuralConflict) || !strings.Contains(err.Error(), "chapter-9") {
+	if err := submit(canon(fresh), canon(foreign)); !errors.Is(err, domainmodel.ErrStructuralConflict) || !strings.Contains(err.Error(), "chapter-9") {
 		t.Fatalf("foreign source err = %v", err)
 	}
 	confirmed := `{"id":"fact-1","kind":"event","subject_id":"hero","predicate":"event.done","old_value":true,"new_value":true,"source_chapter_id":"chapter-1"}`
@@ -1266,44 +1215,6 @@ func TestWriterSubmissionRequiresRedeclaringChapterFacts(t *testing.T) {
 	deleted := domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: "fact-1"}, Operation: domainmodel.PatchDelete}
 	if err := submit(deleted, canon(fresh)); err != nil {
 		t.Fatalf("deletion counts as redeclaration: %v", err)
-	}
-}
-
-// TestReviseCanonSubmissionCoversRequestedFacts：事实核验任务只提交 canon 补丁、
-// 来源固定为任务章节、待核验事实全部处理且至少留一条事实。
-func TestReviseCanonSubmissionCoversRequestedFacts(t *testing.T) {
-	input := json.RawMessage(`{"chapter_id":"chapter-1","fact_ids":["fact-1"],"reason":"正文被改过"}`)
-	operation := domainmodel.Operation{
-		ID: "canon-1", Kind: domainmodel.OperationReviseCanon,
-		Target:   domainmodel.AuthorityTarget{Kind: domainmodel.AuthorityProject, ID: "book-1"},
-		Snapshot: runtimeSnapshot(input, 3, domainmodel.ApprovalAuto, "profile"), Input: input,
-	}
-	canon := func(id, source string) domainmodel.Patch {
-		return domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: id}, Operation: domainmodel.PatchPut,
-			Content: json.RawMessage(fmt.Sprintf(`{"id":%q,"kind":"event","subject_id":"hero","predicate":"event.done","old_value":true,"new_value":true,"source_chapter_id":%q}`, id, source))}
-	}
-	deleted := domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: "fact-1"}, Operation: domainmodel.PatchDelete}
-	manuscript := domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentManuscript, ID: "chapter-1"}, Operation: domainmodel.PatchPut, Content: json.RawMessage(`{}`)}
-	cases := []struct {
-		name    string
-		patches []domainmodel.Patch
-		wantErr string
-	}{
-		{"manuscript patches are rejected", []domainmodel.Patch{manuscript, canon("fact-1", "chapter-1")}, "only change canon facts"},
-		{"pending fact must be handled", []domainmodel.Patch{canon("fact-2", "chapter-1")}, "pending verification"},
-		{"chapter keeps at least one fact", []domainmodel.Patch{deleted}, "at least one canon fact"},
-		{"source must be the task chapter", []domainmodel.Patch{canon("fact-1", "chapter-2")}, "sourced from chapter"},
-		{"confirmation passes", []domainmodel.Patch{canon("fact-1", "chapter-1")}, ""},
-		{"replacement passes", []domainmodel.Patch{deleted, canon("fact-2", "chapter-1")}, ""},
-	}
-	for _, tc := range cases {
-		err := validateCanonRevision(operation, tc.patches)
-		if tc.wantErr == "" && err != nil {
-			t.Fatalf("%s: unexpected err %v", tc.name, err)
-		}
-		if tc.wantErr != "" && (!errors.Is(err, domainmodel.ErrInvalid) || !strings.Contains(err.Error(), tc.wantErr)) {
-			t.Fatalf("%s: err = %v, want %q", tc.name, err, tc.wantErr)
-		}
 	}
 }
 

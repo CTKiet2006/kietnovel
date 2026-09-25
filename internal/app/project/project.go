@@ -44,6 +44,7 @@ type Snapshot struct {
 	ID       string            `json:"id"`
 	Revision model.Revision    `json:"revision"`
 	Intent   model.Intent      `json:"intent"`
+	Compass  *model.Compass    `json:"compass,omitempty"` // 故事罗盘（D63），尚未给出为 nil
 	Plan     []model.PlanNode  `json:"plan"`
 	Entities []model.Entity    `json:"entities,omitempty"`
 	Canon    []model.CanonFact `json:"canon"`
@@ -129,6 +130,13 @@ func (s *Repository) Project(ctx context.Context, projectID string, revision mod
 	}
 	if err := result.Index.Add(intent); err != nil {
 		return Snapshot{}, err
+	}
+	compass, err := loadIndexedDocuments[model.Compass](ctx, s.store, target, model.DocumentCompass, revision, result.Index)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if len(compass) > 0 {
+		result.Compass = &compass[0]
 	}
 	if result.Plan, err = loadIndexedDocuments[model.PlanNode](ctx, s.store, target, model.DocumentPlan, revision, result.Index); err != nil {
 		return Snapshot{}, err

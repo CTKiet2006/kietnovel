@@ -7,7 +7,9 @@ import (
 	"github.com/voocel/ainovel-cli/internal/domain/model"
 )
 
-func authorize(change model.Proposal, base documentState) error {
+// authorize 执行裁决者的权限边界。basis 是提案受 locked/guided 约束时合规证据必须绑定
+// 的摘要（无约束为空）：guided 文档的系统放行与 Admit 共用 complianceGap。
+func authorize(change model.Proposal, base model.DocumentSet, basis string) error {
 	decider := change.DecidedBy
 	if decider == nil {
 		return fmt.Errorf("approval decider is missing: %w", ErrUnauthorized)
@@ -16,8 +18,18 @@ func authorize(change model.Proposal, base documentState) error {
 		return fmt.Errorf("user-authored change requires user decision: %w", ErrUnauthorized)
 	}
 	if change.Target.Kind == model.AuthorityProfile || change.Target.Kind == model.AuthorityPack {
-		if change.Author.Kind != model.AuthorUser && decider.Kind != model.AuthorUser {
+		if change.Author.Machine() && decider.Kind != model.AuthorUser {
 			return fmt.Errorf("AI changes to creator assets require user approval: %w", ErrUnauthorized)
+		}
+	}
+	// 创作领域规定的必须由用户裁决的 AI 变更（Intent、罗盘护栏）。
+	if change.Author.Machine() && decider.Kind != model.AuthorUser {
+		reason, err := model.RequiresUser(change, base)
+		if err != nil {
+			return err
+		}
+		if reason != "" {
+			return fmt.Errorf("%s: %w", reason, ErrUnauthorized)
 		}
 	}
 	for _, patch := range change.Patches {
@@ -34,14 +46,8 @@ func authorize(change model.Proposal, base documentState) error {
 		if err != nil {
 			return err
 		}
-		if change.Author.Kind == model.AuthorUser {
+		if !change.Author.Machine() {
 			continue
-		}
-		// D25/D28：Intent 变更无条件用户确认；唯一例外是初始化事务
-		// （BaseRevision == InitialRevision，即项目的第一个 Revision）。
-		if patch.Document.Kind == model.DocumentIntent &&
-			change.BaseRevision != model.InitialRevision && decider.Kind != model.AuthorUser {
-			return fmt.Errorf("intent changes after initialization require user approval: %w", ErrUnauthorized)
 		}
 		switch control {
 		case model.ControlLocked:
@@ -50,8 +56,12 @@ func authorize(change model.Proposal, base documentState) error {
 			}
 		case model.ControlGuided:
 			if decider.Kind != model.AuthorUser {
-				if err := compliancePasses(change.Impact.Compliance); err != nil {
-					return fmt.Errorf("guided document %q: %w", patch.Document.Key(), err)
+				reason, _, err := complianceGap(change, basis)
+				if err != nil {
+					return err
+				}
+				if reason != "" {
+					return fmt.Errorf("guided document %q: %s: %w", patch.Document.Key(), reason, ErrUnauthorized)
 				}
 			}
 		}
@@ -59,41 +69,13 @@ func authorize(change model.Proposal, base documentState) error {
 	return nil
 }
 
-// compliancePasses 兑现 D14：只有独立合规裁定明确返回 pass 才允许自动提交；
-// 证据缺失、不合法或任何非 pass 状态都不得放行。
-func compliancePasses(compliance json.RawMessage) error {
-	if len(compliance) == 0 {
-		return fmt.Errorf("semantic compliance evidence is required: %w", ErrUnauthorized)
-	}
-	var report model.SemanticComplianceReport
-	if err := json.Unmarshal(compliance, &report); err != nil {
-		return fmt.Errorf("decode semantic compliance report: %w", err)
-	}
-	if err := report.Validate(); err != nil {
-		return err
-	}
-	if report.Status != model.SemanticCompliancePass {
-		return fmt.Errorf("semantic compliance is %s: %w", report.Status, ErrUnauthorized)
-	}
-	return nil
-}
-
-// controlLevel 取文档的控制级别：有 Ownership 规则以规则为准；没有规则时，用户
-// 亲笔的章节默认 locked（D34），其余 open。
-func controlLevel(state documentState, ref model.DocumentRef) (model.ControlLevel, error) {
+// controlLevel 取文档的控制级别：有 Ownership 规则以规则为准，没有时取创作领域的
+// 默认级别（用户亲笔的章节 locked，D34）。
+func controlLevel(state model.DocumentSet, ref model.DocumentRef) (model.ControlLevel, error) {
 	ownershipRef := model.DocumentRef{Kind: model.DocumentOwnership, ID: ref.Key()}
 	document, ok := state[ownershipRef.Key()]
 	if !ok {
-		if base, exists := state[ref.Key()]; exists && ref.Kind == model.DocumentManuscript {
-			var chapter model.ManuscriptChapter
-			if err := json.Unmarshal(base.Content, &chapter); err != nil {
-				return "", fmt.Errorf("decode chapter author for %q: %w", ref.Key(), err)
-			}
-			if chapter.Author == model.AuthorUser {
-				return model.ControlLocked, nil
-			}
-		}
-		return model.ControlOpen, nil
+		return model.DefaultControl(ref, state)
 	}
 	var rule model.OwnershipRule
 	if err := json.Unmarshal(document.Content, &rule); err != nil {

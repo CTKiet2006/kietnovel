@@ -21,7 +21,7 @@ func TestPreparedProposalCannotBeWrittenBySupersededAttempt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.AssertActiveAttempt(ctx, first.ID, first.Attempt); err != nil {
+	if err := assertActiveAttempt(ctx, s.db, first.ID, first.Attempt); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.RecoverExpiredOperations(ctx, now.Add(2*time.Minute)); err != nil {

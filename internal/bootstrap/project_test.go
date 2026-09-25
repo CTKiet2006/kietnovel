@@ -478,16 +478,16 @@ func (preferenceTestExecutor) Analyze(
 	_ model.Proposal,
 	_ change.StructuralImpact,
 ) (json.RawMessage, error) {
-	report := change.SemanticImpactReport{
-		Status: change.SemanticImpactConflict,
-		Findings: []change.SemanticImpactFinding{{
+	report := model.SemanticImpactReport{
+		Status: model.SemanticImpactConflict,
+		Findings: []model.SemanticImpactFinding{{
 			Document:    &model.DocumentRef{Kind: model.DocumentManuscript, ID: "chapter-1"},
 			Explanation: "第一章已经用行动落实了旧底线",
 		}},
-		Options: []change.ResolutionOption{
-			{Strategy: change.ResolutionRewriteAffected, ChapterIDs: []string{"chapter-1"}, Explanation: "同步重写第一章"},
-			{Strategy: change.ResolutionReinterpretFuture, Explanation: "保留旧章并在后文解释变化"},
-			{Strategy: change.ResolutionAbandon, Explanation: "放弃本次事实变更"},
+		Options: []model.ResolutionOption{
+			{Strategy: model.ResolutionRewriteAffected, ChapterIDs: []string{"chapter-1"}, Explanation: "同步重写第一章"},
+			{Strategy: model.ResolutionReinterpretFuture, Explanation: "保留旧章并在后文解释变化"},
+			{Strategy: model.ResolutionAbandon, Explanation: "放弃本次事实变更"},
 		},
 	}
 	return json.Marshal(report)
@@ -533,12 +533,12 @@ func TestSemanticConflictResolutionCreatesOneAtomicAffectedRewrite(t *testing.T)
 	if err != nil {
 		t.Fatalf("prepare semantic change: %v", err)
 	}
-	var report change.SemanticImpactReport
-	if err := json.Unmarshal(proposal.Impact.Semantic, &report); err != nil || report.Status != change.SemanticImpactConflict {
+	var report model.SemanticImpactReport
+	if err := json.Unmarshal(proposal.Impact.Semantic, &report); err != nil || report.Status != model.SemanticImpactConflict {
 		t.Fatalf("semantic impact = %#v, %v", report, err)
 	}
 	resolved, err := api.Decisions.ResolveProposal(ctx, decisions.ResolveProposalCommand{
-		ProposalID: proposal.ID, UserID: "user-1", Strategy: string(change.ResolutionRewriteAffected),
+		ProposalID: proposal.ID, UserID: "user-1", Strategy: string(model.ResolutionRewriteAffected),
 		RunID:     ensureTestRun(t, ctx, authorityStore, "semantic-book", now),
 		CreatedAt: now.Add(4 * time.Minute),
 	})

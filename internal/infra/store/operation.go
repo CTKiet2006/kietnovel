@@ -52,10 +52,6 @@ func (s *Store) CreateSuccessorOperation(ctx context.Context, previousID string,
 		return model.Operation{}, fmt.Errorf("begin successor creation: %w", err)
 	}
 	defer tx.Rollback()
-	// Serialize source validation, insertion and seeding against task claims.
-	if _, err := tx.ExecContext(ctx, `UPDATE operations SET id = id WHERE id = ?`, previousID); err != nil {
-		return model.Operation{}, fmt.Errorf("lock restart source: %w", err)
-	}
 	previous, err := getOperationTx(ctx, tx, previousID)
 	if err != nil {
 		return model.Operation{}, err
@@ -216,6 +212,36 @@ func (s *Store) GetOperation(ctx context.Context, id string) (model.Operation, e
 		return model.Operation{}, err
 	}
 	return operation, nil
+}
+
+// AwaitingRunOperations 列出运行里等待审批的任务：驱动据此作废被新推导取代的旧稿（D64）。
+func (s *Store) AwaitingRunOperations(ctx context.Context, runID string) ([]model.Operation, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+operationColumns+` FROM operations
+		WHERE run_id = ? AND state = ? ORDER BY id`, runID, model.OperationAwaitingApproval)
+	if err != nil {
+		return nil, fmt.Errorf("list awaiting operations: %w", err)
+	}
+	var operations []model.Operation
+	for rows.Next() {
+		operation, err := scanOperation(rows)
+		if err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("read awaiting operation: %w", err)
+		}
+		operations = append(operations, operation)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, fmt.Errorf("close awaiting operations: %w", err)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate awaiting operations: %w", err)
+	}
+	for i := range operations {
+		if operations[i].DependsOn, err = loadOperationDependencies(ctx, s.db, operations[i].ID); err != nil {
+			return nil, err
+		}
+	}
+	return operations, nil
 }
 
 func (s *Store) SetOperationPriority(ctx context.Context, id string, priority int, now time.Time) (model.Operation, error) {

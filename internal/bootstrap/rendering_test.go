@@ -181,7 +181,7 @@ func newRenderingApp(t *testing.T, approval model.ApprovalPolicy) (*testApp, *ex
 	executor := &externalGenerationExecutor{store: authorityStore, service: &fakeGenerationService{recoverable: true}, now: testTime()}
 	api := newMediaApp(authorityStore, tasks.ExecutorSet{External: executor}, renderingDeriver{})
 	draft := projectdoc.ProjectDraft{
-		Intent: model.Intent{Premise: "三章的书", TargetChapters: 3}, Approval: approval,
+		Intent: model.Intent{Premise: "三章的书"}, Approval: approval,
 		Plan: []model.PlanNode{
 			{ID: "volume-1", Kind: model.PlanVolume, Order: 1, Title: "卷一", Summary: "开端"},
 			{ID: "arc-1", Kind: model.PlanArc, ParentID: "volume-1", Order: 1, Title: "弧一", Summary: "启程"},

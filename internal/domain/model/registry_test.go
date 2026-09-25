@@ -10,7 +10,7 @@ import (
 
 func TestDocumentTypeTableCoversEveryKindAndAuthority(t *testing.T) {
 	all := []DocumentKind{
-		DocumentIntent, DocumentPlan, DocumentEntity, DocumentCanon, DocumentManuscript, DocumentAttachment,
+		DocumentIntent, DocumentCompass, DocumentPlan, DocumentEntity, DocumentCanon, DocumentManuscript, DocumentAttachment,
 		DocumentOwnership, DocumentApproval, DocumentOverlay, DocumentAssets, DocumentDirective, DocumentAdjudication,
 		DocumentCreatorProfile, DocumentPack,
 	}
@@ -43,7 +43,7 @@ func TestDocumentTypeTableCoversEveryKindAndAuthority(t *testing.T) {
 	if want := []DocumentKind{DocumentAdjudication, DocumentApproval, DocumentAssets, DocumentDirective, DocumentOverlay, DocumentOwnership}; !slices.Equal(userOnly, want) {
 		t.Fatalf("user-only kinds = %v, want %v", userOnly, want)
 	}
-	if want := []DocumentKind{DocumentApproval, DocumentAssets, DocumentIntent, DocumentOverlay}; !slices.Equal(singleton, want) {
+	if want := []DocumentKind{DocumentApproval, DocumentAssets, DocumentCompass, DocumentIntent, DocumentOverlay}; !slices.Equal(singleton, want) {
 		t.Fatalf("singleton kinds = %v, want %v", singleton, want)
 	}
 	if err := ValidateDocumentContent(DocumentRef{Kind: DocumentIntent, ID: "other"}, []byte(`{"premise":"x"}`)); !errors.Is(err, ErrInvalid) {
@@ -121,7 +121,7 @@ func TestDecodeTaskInputRejectsUnknownFieldsPerKind(t *testing.T) {
 	}
 }
 
-func TestBindChapterDependenciesFollowsCanonDelta(t *testing.T) {
+func TestNormalizeSubmissionBindsCanonSubjects(t *testing.T) {
 	chapter, _ := json.Marshal(ManuscriptChapter{
 		ID: "chapter-1", PlanNodeID: "chapter-plan-1", Number: 1, Title: "山门", Author: AuthorAI,
 		Blocks:    []ManuscriptBlock{{ID: "p-1", Text: "第一段"}},
@@ -134,7 +134,7 @@ func TestBindChapterDependenciesFollowsCanonDelta(t *testing.T) {
 		})
 		return content
 	}
-	patches, err := BindChapterDependencies([]Patch{
+	patches, err := NormalizeSubmission([]Patch{
 		{Document: DocumentRef{Kind: DocumentManuscript, ID: "chapter-1"}, Operation: PatchPut, Content: chapter},
 		{Document: DocumentRef{Kind: DocumentCanon, ID: "meet"}, Operation: PatchPut, Content: fact("meet", "villain", "chapter-1")},
 		{Document: DocumentRef{Kind: DocumentCanon, ID: "arrive"}, Operation: PatchPut, Content: fact("arrive", "hero", "chapter-1")},

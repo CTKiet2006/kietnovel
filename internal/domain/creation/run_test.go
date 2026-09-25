@@ -152,7 +152,7 @@ func TestDriverHonorsPauseDuringGoalEvaluation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			st, run := fixture(t)
 			goal := goalFunc(func(ctx context.Context, run model.CreationRun) (creation.Decision, error) {
-				_, err := st.TransitionCreationRun(ctx, run.ID, model.RunRunning, model.RunPaused, "user pause", 0, run.CreatedAt.Add(time.Second))
+				_, err := st.TransitionCreationRun(ctx, run.ID, model.RunTransition{From: model.RunRunning, To: model.RunPaused, Reason: "user pause"}, run.CreatedAt.Add(time.Second))
 				return creation.Decision{Revision: 1, Step: step}, err
 			})
 			goals := map[model.GoalKind]creation.Goal{run.Goal.Kind: goal}
@@ -176,7 +176,7 @@ func advanceProjectRevision(t *testing.T, st *store.Store, base model.Revision) 
 	proposal := model.Proposal{
 		ID: fmt.Sprintf("edit-%d", base+1), Target: model.AuthorityTarget{Kind: model.AuthorityProject, ID: "project"},
 		BaseRevision: base, Author: author, Reason: "edit observed source", ApprovalState: model.ApprovalPending, CreatedAt: at,
-		Patches: []model.Patch{{Document: model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, Operation: model.PatchPut, Content: json.RawMessage(fmt.Sprintf(`{"premise":"source %d","target_chapters":1}`, base+1))}},
+		Patches: []model.Patch{{Document: model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, Operation: model.PatchPut, Content: json.RawMessage(fmt.Sprintf(`{"premise":"source %d"}`, base+1))}},
 	}
 	if _, err := st.SaveProposal(ctx, proposal); err != nil {
 		t.Fatal(err)
@@ -323,7 +323,7 @@ func TestDriverReevaluatesWhenObservationChangesAtCommit(t *testing.T) {
 				case "source":
 					advanceProjectRevision(t, st, 1)
 				case "pause":
-					_, err = st.TransitionCreationRun(ctx, run.ID, model.RunRunning, model.RunPaused, "user pause", 0, time.Now())
+					_, err = st.TransitionCreationRun(ctx, run.ID, model.RunTransition{From: model.RunRunning, To: model.RunPaused, Reason: "user pause"}, time.Now())
 				}
 				if err != nil {
 					t.Fatal(err)

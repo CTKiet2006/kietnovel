@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// SingletonDocumentID 是单例文档（Intent、Approval、Overlay、Assets）的唯一 ID。
+// SingletonDocumentID 是单例文档（Intent、Compass、Approval、Overlay、Assets）的唯一 ID。
 const SingletonDocumentID = "root"
 
 // DocumentTypeSpec 是一种权威文档的登记项：属于哪个权威流、是否单例、是否只有
@@ -21,6 +21,8 @@ type DocumentTypeSpec struct {
 	UserOnly   bool
 	AppendOnly bool
 	codec      documentCodec
+	// artifacts 提取文档引用的工件（D47）：权威只能指向已发布的不可变内容。
+	artifacts func(json.RawMessage) ([]ArtifactRef, error)
 }
 
 type documentCodec struct {
@@ -38,6 +40,9 @@ var documentTypes = []DocumentTypeSpec{
 			}
 			return append(slices.Clone(v.DependsOn), DocumentRef{Kind: DocumentPlan, ID: v.ParentID})
 		})},
+	// 故事罗盘（D63）不作任何文档的依赖：篇幅与终局的修订不作废已有证据。
+	{Kind: DocumentCompass, Authority: AuthorityProject, Singleton: true,
+		codec: codec[Compass]("compass", nil, nil)},
 	{Kind: DocumentEntity, Authority: AuthorityProject,
 		codec: codec("entity", func(v Entity) string { return v.ID }, nil)},
 	// Canon 主体引用实体（D35）：事实随实体失效，实体缺失即结构冲突。
@@ -52,7 +57,14 @@ var documentTypes = []DocumentTypeSpec{
 	{Kind: DocumentAttachment, Authority: AuthorityProject,
 		codec: codec("attachment", func(v Attachment) string { return v.ID }, func(v Attachment) []DocumentRef {
 			return append(slices.Clone(v.DependsOn), v.Target)
-		})},
+		}),
+		artifacts: func(content json.RawMessage) ([]ArtifactRef, error) {
+			var v Attachment
+			if err := json.Unmarshal(content, &v); err != nil {
+				return nil, fmt.Errorf("decode attachment: %w", err)
+			}
+			return []ArtifactRef{v.Artifact}, nil
+		}},
 	{Kind: DocumentOwnership, Authority: AuthorityProject, UserOnly: true,
 		codec: codec("ownership", func(v OwnershipRule) string { return v.Target.Key() }, func(v OwnershipRule) []DocumentRef {
 			return []DocumentRef{v.Target}
@@ -119,6 +131,15 @@ func DocumentDependencies(ref DocumentRef, content json.RawMessage) ([]DocumentR
 	}
 	slices.SortFunc(dependencies, func(a, b DocumentRef) int { return strings.Compare(a.Key(), b.Key()) })
 	return slices.CompactFunc(dependencies, func(a, b DocumentRef) bool { return a.Key() == b.Key() }), nil
+}
+
+// DocumentArtifacts 返回文档引用的工件；不引用工件的种类返回空。
+func DocumentArtifacts(ref DocumentRef, content json.RawMessage) ([]ArtifactRef, error) {
+	spec, err := DocumentType(ref.Kind)
+	if err != nil || spec.artifacts == nil {
+		return nil, err
+	}
+	return spec.artifacts(content)
 }
 
 // codec 由文档类型的 Go 结构生成校验与依赖提取：identity 非空时要求内容 ID 与

@@ -112,14 +112,33 @@ func TestGuidedDocumentRequiresPassingCompliance(t *testing.T) {
 		t.Fatalf("commit guided ownership: %v", err)
 	}
 
-	base := pendingChange("guided-update", target, 2, model.AuthorAI, model.Patch{
+	// guided 约束作用于在途正文：AI 写第 2 章并随章更新受限的出身事实。
+	revision := commitUserChange(t, ctx, s, target, "plan-2", model.Patch{
+		Document: model.DocumentRef{Kind: model.DocumentPlan, ID: "chapter-plan-2"}, Operation: model.PatchPut,
+		Content: documentJSON(t, model.PlanNode{ID: "chapter-plan-2", Kind: model.PlanChapter, ParentID: "arc-1", Order: 2, Title: "第二章", Summary: "身世"}),
+	})
+	base := pendingChange("guided-update", target, revision, model.AuthorAI, model.Patch{
+		Document: model.DocumentRef{Kind: model.DocumentManuscript, ID: "chapter-2"}, Operation: model.PatchPut,
+		Content: documentJSON(t, model.ManuscriptChapter{
+			ID: "chapter-2", PlanNodeID: "chapter-plan-2", Number: 2, Title: "身世", Author: model.AuthorAI,
+			Blocks: []model.ManuscriptBlock{{ID: "p-1", Text: "他原是寒门孤儿。"}},
+		}),
+	}, model.Patch{
 		Document:  canon,
 		Operation: model.PatchPut,
 		Content: documentJSON(t, model.CanonFact{
 			ID: "hero-origin", Kind: model.CanonState, SubjectID: "hero", Predicate: "state.origin",
-			PreviousValue: json.RawMessage(`"农家子"`), Value: json.RawMessage(`"寒门孤儿"`),
+			PreviousValue: json.RawMessage(`"农家子"`), Value: json.RawMessage(`"寒门孤儿"`), SourceChapterID: "chapter-2",
 		}),
 	})
+	constraints, err := engine.constraints(ctx, nil, base)
+	if err != nil || len(constraints) != 1 || constraints[0].Control != model.ControlGuided {
+		t.Fatalf("constraints = %#v, %v", constraints, err)
+	}
+	basis, err := complianceBasis(base, constraints)
+	if err != nil {
+		t.Fatalf("compliance basis: %v", err)
+	}
 	decidedAt := testTime().Add(time.Minute)
 	system := model.Author{Kind: model.AuthorSystem, ID: "auto-policy"}
 
@@ -130,12 +149,14 @@ func TestGuidedDocumentRequiresPassingCompliance(t *testing.T) {
 	}{
 		{"missing evidence", nil, true},
 		{"conflict report", documentJSON(t, model.SemanticComplianceReport{
-			Status: model.SemanticComplianceConflict,
+			Status: model.SemanticComplianceConflict, BasisDigest: basis,
 			Findings: []model.SemanticComplianceFinding{{
 				Constraint: canon, Explanation: "正文实质改写了受限出身",
 			}},
 		}), true},
-		{"pass report", documentJSON(t, model.SemanticComplianceReport{Status: model.SemanticCompliancePass}), false},
+		// 授权与执行收尾共用 complianceGap：不绑定当前候选与约束的 pass 不能放行。
+		{"pass report for another candidate", documentJSON(t, model.SemanticComplianceReport{Status: model.SemanticCompliancePass, BasisDigest: "stale"}), true},
+		{"pass report", documentJSON(t, model.SemanticComplianceReport{Status: model.SemanticCompliancePass, BasisDigest: basis}), false},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -215,6 +236,54 @@ func TestIntentChangesAfterInitializationRequireUserApproval(t *testing.T) {
 	if _, err := engine.Commit(ctx, userApproved); err != nil {
 		t.Fatalf("user-approved intent change: %v", err)
 	}
+}
+
+// D63 篇幅护栏：AI 首次给出护栏内的罗盘、下调上限、声明收官直接放行；首次超护栏、
+// 上调上限与删除罗盘都必须用户裁决。
+func TestCompassAutonomyRequiresUserForScaleRaises(t *testing.T) {
+	ctx := context.Background()
+	engine := New(openStore(t))
+	target := model.AuthorityTarget{Kind: model.AuthorityProject, ID: "book-1"}
+	decidedAt := testTime().Add(time.Minute)
+	ref := model.DocumentRef{Kind: model.DocumentCompass, ID: model.SingletonDocumentID}
+	put := func(scaleMax, final int) model.Patch {
+		return model.Patch{Document: ref, Operation: model.PatchPut,
+			Content: documentJSON(t, model.Compass{ScaleMax: scaleMax, Ending: "问鼎大道", Final: final})}
+	}
+	revision := model.Revision(0)
+	commit := func(name string, patch model.Patch, wantUser bool) {
+		t.Helper()
+		prepared, err := engine.Prepare(ctx, pendingChange(name, target, revision, model.AuthorAI, patch))
+		if err != nil {
+			t.Fatalf("prepare %s: %v", name, err)
+		}
+		auto, err := Decide(prepared, model.ApprovalApproved, model.Author{Kind: model.AuthorSystem, ID: "approval-policy:auto"}, decidedAt)
+		if err != nil {
+			t.Fatalf("decide %s: %v", name, err)
+		}
+		_, err = engine.Commit(ctx, auto)
+		if wantUser != errors.Is(err, ErrUnauthorized) {
+			t.Fatalf("%s auto commit error = %v, want user approval %v", name, err, wantUser)
+		}
+		if err == nil {
+			revision++
+			return
+		}
+		user, err := Decide(prepared, model.ApprovalApproved, model.Author{Kind: model.AuthorUser, ID: "user-1"}, decidedAt)
+		if err != nil {
+			t.Fatalf("user decide %s: %v", name, err)
+		}
+		if _, err := engine.Commit(ctx, user); err != nil {
+			t.Fatalf("user-approved %s: %v", name, err)
+		}
+		revision++
+	}
+	commit("first-above-ceiling", put(model.CompassAutonomyCeiling+1, 0), true)
+	commit("lower", put(120, 0), false)
+	commit("raise", put(121, 0), true)
+	commit("finale", put(121, 90), false)
+	commit("delete", model.Patch{Document: ref, Operation: model.PatchDelete}, true)
+	commit("first-within-ceiling", put(model.CompassAutonomyCeiling, 0), false)
 }
 
 func TestApprovalPolicyChangesRequireUserApproval(t *testing.T) {
@@ -314,8 +383,8 @@ func TestPrepareRejectsMissingPlanParent(t *testing.T) {
 			Title: "第一章", Summary: "开篇",
 		}),
 	})
-	if _, err := engine.Prepare(context.Background(), proposal); !errors.Is(err, ErrStructuralConflict) {
-		t.Fatalf("prepare error = %v, want ErrStructuralConflict", err)
+	if _, err := engine.Prepare(context.Background(), proposal); !errors.Is(err, model.ErrStructuralConflict) {
+		t.Fatalf("prepare error = %v, want model.ErrStructuralConflict", err)
 	}
 }
 
@@ -543,7 +612,7 @@ func TestUserAuthoredChapterIsLockedByDefault(t *testing.T) {
 		})
 	}
 	// AI 提案里的章节必须署 AI 自己的名（D34）。
-	if _, err := engine.Prepare(ctx, rewrite("forged", model.AuthorUser)); !errors.Is(err, ErrStructuralConflict) {
+	if _, err := engine.Prepare(ctx, rewrite("forged", model.AuthorUser)); !errors.Is(err, model.ErrStructuralConflict) {
 		t.Fatalf("forged author err = %v", err)
 	}
 	prepared, err := engine.Prepare(ctx, rewrite("ai-rewrite", model.AuthorAI))
@@ -585,11 +654,11 @@ func TestAttachmentRequiresPublishedArtifactAndFollowsTarget(t *testing.T) {
 	}
 	// 未发布或摘要漂移的工件都不能进入权威（D47）。
 	if _, err := engine.Prepare(ctx, pendingChange("unpublished", target, 1, model.AuthorUser,
-		attachment("cover-1", model.ArtifactRef{ID: "asset-op/missing", Digest: artifact.Digest}))); !errors.Is(err, ErrStructuralConflict) {
+		attachment("cover-1", model.ArtifactRef{ID: "asset-op/missing", Digest: artifact.Digest}))); !errors.Is(err, model.ErrStructuralConflict) {
 		t.Fatalf("unpublished artifact err = %v", err)
 	}
 	if _, err := engine.Prepare(ctx, pendingChange("drifted", target, 1, model.AuthorUser,
-		attachment("cover-1", model.ArtifactRef{ID: artifact.ID, Digest: model.Digest([]byte("different"))}))); !errors.Is(err, ErrStructuralConflict) {
+		attachment("cover-1", model.ArtifactRef{ID: artifact.ID, Digest: model.Digest([]byte("different"))}))); !errors.Is(err, model.ErrStructuralConflict) {
 		t.Fatalf("drifted digest err = %v", err)
 	}
 	prepared, err := engine.Prepare(ctx, pendingChange("attach", target, 1, model.AuthorUser, attachment("cover-1", artifact.Ref())))
@@ -703,11 +772,11 @@ func TestAppendOnlyDocumentsRejectOverwriteAndDeleteAndSurviveRevert(t *testing.
 		t.Fatalf("append adjudication: %v", err)
 	}
 	record.Reason = "改写理由"
-	if err := commit("overwrite", 2, model.Patch{Document: ref, Operation: model.PatchPut, Content: documentJSON(t, record)}); !errors.Is(err, ErrStructuralConflict) {
-		t.Fatalf("overwrite err = %v, want ErrStructuralConflict", err)
+	if err := commit("overwrite", 2, model.Patch{Document: ref, Operation: model.PatchPut, Content: documentJSON(t, record)}); !errors.Is(err, model.ErrStructuralConflict) {
+		t.Fatalf("overwrite err = %v, want model.ErrStructuralConflict", err)
 	}
-	if err := commit("delete", 2, model.Patch{Document: ref, Operation: model.PatchDelete}); !errors.Is(err, ErrStructuralConflict) {
-		t.Fatalf("delete err = %v, want ErrStructuralConflict", err)
+	if err := commit("delete", 2, model.Patch{Document: ref, Operation: model.PatchDelete}); !errors.Is(err, model.ErrStructuralConflict) {
+		t.Fatalf("delete err = %v, want model.ErrStructuralConflict", err)
 	}
 	if _, err := engine.PrepareRevert(ctx, "revert", target, 1, model.Author{Kind: model.AuthorUser, ID: "user-1"}, "回滚", testTime().Add(2*time.Minute)); !errors.Is(err, ErrInvalidState) {
 		t.Fatalf("revert across an adjudication-only revision must be a no-op, got %v", err)
@@ -742,8 +811,9 @@ func TestAICanonRulesForFlashbacksEventsAndRedeclaration(t *testing.T) {
 	}
 	event := model.CanonFact{ID: "ch2-event", Kind: model.CanonEvent, SubjectID: "hero", Predicate: "event.arrival", Value: json.RawMessage(`"抵达"`), SourceChapterID: "chapter-2"}
 	mood := model.CanonFact{ID: "hero-mood", Kind: model.CanonState, SubjectID: "hero", Predicate: "state.mood", Value: json.RawMessage(`"忐忑"`), SourceChapterID: "chapter-2"}
+	hook := model.CanonFact{ID: "jade-hook", Kind: model.CanonForeshadow, SubjectID: "hero", Predicate: "foreshadow.jade_origin", Value: json.RawMessage(`"玉佩来历揭晓"`), SourceChapterID: "chapter-2", Resolved: true}
 	base := commitUserChange(t, ctx, s, target, "chapter-2",
-		plan("chapter-plan-2", 2), plan("chapter-plan-3", 3), chapter("chapter-2", 2, model.AuthorAI), fact(event), fact(mood))
+		plan("chapter-plan-2", 2), plan("chapter-plan-3", 3), chapter("chapter-2", 2, model.AuthorAI), fact(event), fact(mood), fact(hook))
 	updated := func(f model.CanonFact, source, effective string) model.CanonFact {
 		f.PreviousValue, f.Value = f.Value, json.RawMessage(`"新值"`)
 		f.SourceChapterID, f.EffectiveChapterID = source, effective
@@ -758,6 +828,17 @@ func TestAICanonRulesForFlashbacksEventsAndRedeclaration(t *testing.T) {
 		return f
 	}
 	newEvent := model.CanonFact{ID: "ch3-event", Kind: model.CanonEvent, SubjectID: "hero", Predicate: "event.departure", Value: json.RawMessage(`"离开"`), SourceChapterID: "chapter-3"}
+	fresh := func(id string, kind model.CanonFactKind, predicate string) model.CanonFact {
+		return model.CanonFact{ID: id, Kind: kind, SubjectID: "hero", Predicate: predicate, Value: json.RawMessage(`"新"`), SourceChapterID: "chapter-3"}
+	}
+	reopened := func(f model.CanonFact, source string) model.CanonFact {
+		f.PreviousValue, f.SourceChapterID, f.Resolved = f.Value, source, false
+		return f
+	}
+	entity := func(id, name string) model.Patch {
+		return model.Patch{Document: model.DocumentRef{Kind: model.DocumentEntity, ID: id}, Operation: model.PatchPut,
+			Content: documentJSON(t, model.Entity{ID: id, Kind: model.EntityCharacter, Name: name})}
+	}
 	cases := []struct {
 		name    string
 		author  model.AuthorKind
@@ -765,9 +846,30 @@ func TestAICanonRulesForFlashbacksEventsAndRedeclaration(t *testing.T) {
 		wantErr string
 	}{
 		{"rewrite must redeclare every chapter fact", model.AuthorAI,
-			[]model.Patch{chapter("chapter-2", 2, model.AuthorAI), fact(confirmed(event))}, `redeclare canon "hero-mood"`},
+			[]model.Patch{chapter("chapter-2", 2, model.AuthorAI), fact(confirmed(event)), fact(confirmed(hook))}, `redeclare canon "hero-mood"`},
 		{"rewrite redeclaring every fact passes", model.AuthorAI,
-			[]model.Patch{chapter("chapter-2", 2, model.AuthorAI), fact(confirmed(event)), fact(confirmed(mood))}, ""},
+			[]model.Patch{chapter("chapter-2", 2, model.AuthorAI), fact(confirmed(event)), fact(confirmed(mood)), fact(confirmed(hook))}, ""},
+		// D61：同一主体+谓词只有一个节点，对所有作者生效；事件与关系不按键归并。
+		{"a new id for an existing state key is rejected", model.AuthorAI,
+			[]model.Patch{chapter("chapter-3", 3, model.AuthorAI), fact(newEvent), fact(fresh("hero-mood-2", model.CanonState, "state.mood"))},
+			`duplicates hero/state.mood of "hero-mood"`},
+		{"users also keep one fact per key", model.AuthorUser,
+			[]model.Patch{fact(fresh("hero-mood-2", model.CanonState, "state.mood"))}, `update "hero-mood" instead`},
+		{"one proposal cannot create two facts for one key", model.AuthorAI,
+			[]model.Patch{chapter("chapter-3", 3, model.AuthorAI), fact(newEvent),
+				fact(fresh("resolve-a", model.CanonState, "state.resolve")), fact(fresh("resolve-b", model.CanonState, "state.resolve"))},
+			"duplicates hero/state.resolve"},
+		{"events and relationships are not keyed", model.AuthorAI,
+			[]model.Patch{chapter("chapter-3", 3, model.AuthorAI), fact(newEvent),
+				fact(fresh("ch3-event-2", model.CanonEvent, "event.departure")),
+				fact(fresh("bond-a", model.CanonRelationship, "relation.sworn")), fact(fresh("bond-b", model.CanonRelationship, "relation.sworn"))}, ""},
+		{"a resolved foreshadow cannot be reopened from another chapter", model.AuthorAI,
+			[]model.Patch{chapter("chapter-3", 3, model.AuthorAI), fact(newEvent), fact(reopened(hook, "chapter-3"))}, "new thread with a new predicate"},
+		{"a rewrite may reopen its own resolution", model.AuthorAI,
+			[]model.Patch{chapter("chapter-2", 2, model.AuthorAI), fact(confirmed(event)), fact(confirmed(mood)), fact(reopened(hook, "chapter-2"))}, ""},
+		{"AI cannot recreate an existing entity by name", model.AuthorAI,
+			[]model.Patch{chapter("chapter-3", 3, model.AuthorAI), fact(newEvent), entity("hero-2", "主角")}, `already used by "hero"`},
+		{"users may reuse entity names", model.AuthorUser, []model.Patch{entity("hero-2", "主角")}, ""},
 		{"facts must be sourced from proposal chapters", model.AuthorAI,
 			[]model.Patch{chapter("chapter-3", 3, model.AuthorAI), fact(placed(newEvent, "chapter-2", ""))}, "sourced from a chapter in the same proposal"},
 		{"events of other chapters are append-only", model.AuthorAI,
@@ -786,7 +888,7 @@ func TestAICanonRulesForFlashbacksEventsAndRedeclaration(t *testing.T) {
 		if tc.wantErr == "" && err != nil {
 			t.Fatalf("%s: unexpected err %v", tc.name, err)
 		}
-		if tc.wantErr != "" && (!errors.Is(err, ErrStructuralConflict) || !strings.Contains(err.Error(), tc.wantErr)) {
+		if tc.wantErr != "" && (!errors.Is(err, model.ErrStructuralConflict) || !strings.Contains(err.Error(), tc.wantErr)) {
 			t.Fatalf("%s: err = %v, want %q", tc.name, err, tc.wantErr)
 		}
 	}
@@ -811,7 +913,7 @@ func TestValidateReportsStructuralConflictWithoutWriting(t *testing.T) {
 		}),
 	})
 	err := engine.Validate(ctx, renamed)
-	if !errors.Is(err, ErrStructuralConflict) || !strings.Contains(err.Error(), "cannot declare old_value") {
+	if !errors.Is(err, model.ErrStructuralConflict) || !strings.Contains(err.Error(), "cannot declare old_value") {
 		t.Fatalf("validate renamed fact: %v", err)
 	}
 	if _, err := s.GetProposal(ctx, renamed.ID); !errors.Is(err, model.ErrNotFound) {

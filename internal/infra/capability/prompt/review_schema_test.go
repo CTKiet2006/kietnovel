@@ -49,8 +49,8 @@ func TestReviewFindingSchemaIsConstrained(t *testing.T) {
 	if want := []string{string(model.FindingBlocking), string(model.FindingNote)}; !reflect.DeepEqual(got, want) {
 		t.Errorf("severity 枚举 = %v, want %v", got, want)
 	}
-	// 只有 blocking 能链接核验项——这条约束校验器会拒，schema 必须先讲清楚。
-	for _, field := range []string{"severity", "directive_id", "intent"} {
+	// 只有 blocking 能链接要求——这条约束校验器会拒，schema 必须先讲清楚。
+	for _, field := range []string{"severity", "requirement"} {
 		constraint, _ := properties[field].(map[string]any)
 		if description, _ := constraint["description"].(string); description == "" {
 			t.Errorf("%s 缺少说明：模型只能靠猜，撞了规则也不知道改哪个字段", field)
@@ -59,6 +59,34 @@ func TestReviewFindingSchemaIsConstrained(t *testing.T) {
 	required, _ := items["required"].([]any)
 	if len(required) != 3 {
 		t.Errorf("必填字段 = %v，want chapter_id / severity / note", required)
+	}
+}
+
+// 三态核验（D62）的枚举必须与领域取值一致，否则模型写得出 Validate 不认的状态。
+func TestVerdictCheckStatusMatchesDomain(t *testing.T) {
+	var parsed struct {
+		Properties struct {
+			Checks struct {
+				Items struct {
+					Properties struct {
+						Status struct {
+							Enum        []string `json:"enum"`
+							Description string   `json:"description"`
+						} `json:"status"`
+					} `json:"properties"`
+				} `json:"items"`
+			} `json:"checks"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal([]byte(verdictSubmitSchema), &parsed); err != nil {
+		t.Fatalf("verdict schema: %v", err)
+	}
+	status := parsed.Properties.Checks.Items.Properties.Status
+	if want := []string{model.CheckSatisfied, model.CheckViolated, model.CheckPending}; !reflect.DeepEqual(status.Enum, want) {
+		t.Errorf("checks.status 枚举 = %v, want %v", status.Enum, want)
+	}
+	if !strings.Contains(status.Description, "settle") {
+		t.Errorf("checks.status 没讲清 settle 项不得 pending：%q", status.Description)
 	}
 }
 
@@ -101,15 +129,14 @@ func TestReviewFindingRejectionNamesTheFieldToFix(t *testing.T) {
 		Basis: model.EvidenceBasis{Documents: []model.DocumentBasis{{
 			Ref: model.DocumentRef{Kind: model.DocumentManuscript, ID: "ch-001"}, Revision: 2}}},
 		Findings: []model.ReviewFinding{{
-			ChapterID: "ch-001", Severity: model.FindingNote, Note: "满足",
-			DirectiveID: "intent-required-present", Intent: "required_present",
+			ChapterID: "ch-001", Severity: model.FindingNote, Note: "满足", Requirement: "intent:required:0",
 		}},
 	}
 	err := verdict.Validate()
 	if err == nil {
 		t.Fatal("note 发现链接核验项却通过了校验")
 	}
-	for _, want := range []string{"directive_id", "intent", string(model.FindingBlocking)} {
+	for _, want := range []string{"requirement", "checks", string(model.FindingBlocking)} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("错误信息没提到 %q，模型无法自纠：%v", want, err)
 		}

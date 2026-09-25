@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/voocel/ainovel-cli/internal/app/novel"
 	"github.com/voocel/ainovel-cli/internal/bootstrap"
 	"github.com/voocel/ainovel-cli/internal/domain/creation"
 	"github.com/voocel/ainovel-cli/internal/domain/model"
@@ -21,17 +22,14 @@ func runCreation(ctx context.Context, api *bootstrap.App, args []string, stdout,
 		runID := flags.String("id", "", "Creation Run ID")
 		projectID := flags.String("project", "", "Project ID")
 		premise := flags.String("premise", "", "本轮创作目标")
-		chapters := flags.Int("chapters", 0, "目标章节数")
+		chapters := flags.Int("chapters", 0, "全书章数；0 表示交给 AI")
 		window := flags.Int("window", 3, "滚动规划窗口")
-		repairBudget := flags.Int("repair-budget", -1, "允许自动修订次数；默认等于目标章节数")
+		repairBudget := flags.Int("repair-budget", novel.DefaultRepairBudget, "每章允许的自动修订次数")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *runID == "" || *projectID == "" || *premise == "" || *chapters <= 0 || *window <= 0 || *repairBudget < -1 {
-			return fmt.Errorf("creation start 需要 --id --project --premise、正数 --chapters/--window 和非负 --repair-budget")
-		}
-		if *repairBudget == -1 {
-			*repairBudget = *chapters
+		if *runID == "" || *projectID == "" || *premise == "" || *chapters < 0 || *window <= 0 || *repairBudget < 0 {
+			return fmt.Errorf("creation start 需要 --id --project --premise、非负 --chapters、正数 --window 和非负 --repair-budget")
 		}
 		project, err := api.Projects.Project(ctx, *projectID, model.InitialRevision)
 		if err != nil {

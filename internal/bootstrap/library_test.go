@@ -2,6 +2,7 @@ package bootstrap_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -14,11 +15,15 @@ func TestLibraryUsesCurrentRunGoalAndRecentActivity(t *testing.T) {
 	store := openTestStore(t)
 	api := newTestApp(store)
 	for _, id := range []string{"a", "z", "idle"} {
-		draft := testProjectDraft()
-		draft.Intent.TargetChapters = 500
-		if _, err := api.Projects.CreateProject(ctx, projectdoc.CreateProjectCommand{ProjectID: id, ChangeID: "create-" + id, UserID: "user", Reason: "test", Draft: draft, CreatedAt: testTime()}); err != nil {
+		project, err := api.Projects.CreateProject(ctx, projectdoc.CreateProjectCommand{ProjectID: id, ChangeID: "create-" + id, UserID: "user", Reason: "test", Draft: testProjectDraft(), CreatedAt: testTime()})
+		if err != nil {
 			t.Fatal(err)
 		}
+		// 固定篇幅的运行优先于罗盘；没有运行时全书章数取收官承诺（D63）。
+		compass, _ := json.Marshal(model.Compass{ScaleMax: 600, Ending: "送完最后一封信", Final: 500})
+		editCanonEvidence(t, api, project, "compass-"+id, model.Patch{
+			Document: model.DocumentRef{Kind: model.DocumentCompass, ID: model.SingletonDocumentID}, Operation: model.PatchPut, Content: compass,
+		})
 	}
 	a := ensureTestRun(t, ctx, store, "a", testTime())
 	ensureTestRun(t, ctx, store, "z", testTime().Add(time.Minute))

@@ -244,16 +244,13 @@ func (s *Store) SaveExecutionArtifacts(ctx context.Context, artifacts []model.Ar
 	return nil
 }
 
-// beginArtifactWrite 先取得 SQLite 写锁，再检查文件和引用。Publish、元数据提交和
-// GC 使用同一顺序，因此多个 Store 或进程间也不存在查完引用后被并发删除的窗口。
+// beginArtifactWrite 开启写事务（BEGIN IMMEDIATE，见 Open）：先取得写锁再检查文件和
+// 引用。Publish、元数据提交和 GC 使用同一顺序，多个 Store 或进程间也不存在查完引用后
+// 被并发删除的窗口。
 func (s *Store) beginArtifactWrite(ctx context.Context) (*sql.Tx, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin artifact transaction: %w", err)
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE artifact_publications SET attempt = attempt WHERE 0`); err != nil {
-		tx.Rollback()
-		return nil, fmt.Errorf("lock artifact publication and collection: %w", err)
 	}
 	return tx, nil
 }

@@ -124,6 +124,21 @@ func (v Directive) Covers(target DirectiveTarget) bool {
 	return scope.to == 0 || target.ChapterNumber <= scope.to
 }
 
+// PlanScoped 报告作用域是否按 Plan 节点划定：这类作用域的末章要等蓝图覆盖目标后
+// 才能确定（D62），章号类作用域立即确定。
+func (v Directive) PlanScoped() bool {
+	return strings.HasPrefix(v.Scope, scopePlanNode)
+}
+
+// BoundedEnd 返回章号区间作用域的末章；其余作用域没有自带的末章，返回 0（D63）。
+func (v Directive) BoundedEnd() int {
+	scope, err := parseDirectiveScope(v.Scope)
+	if err != nil {
+		return 0
+	}
+	return scope.to
+}
+
 // ActiveDirectives 返回全部 active Directive，按 ID 排序保证确定性。
 func ActiveDirectives(directives []Directive) []Directive {
 	var active []Directive

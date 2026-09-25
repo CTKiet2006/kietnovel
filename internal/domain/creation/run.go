@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/voocel/ainovel-cli/internal/domain/model"
@@ -110,10 +112,12 @@ func (s *Coordinator) deriver(kind model.GoalKind) (Goal, error) {
 }
 
 // Outcome records the persisted stopping point and the revision evaluated by the goal.
+// Recovered 是驱动开始前放回队列的过期执行。
 type Outcome struct {
-	Run      model.CreationRun
-	Revision model.Revision
-	Waiting  string
+	Run       model.CreationRun
+	Revision  model.Revision
+	Waiting   string
+	Recovered []string
 }
 
 // 运行状态文案分工：应用经 WorkReasons 说明"在做什么工作"（只有它知道是规划还是
@@ -128,8 +132,11 @@ const (
 	reasonCancelJob = "创作任务被取消"
 	// reasonDiagnostics 接在失败文案后面，指向事件日志里的原始诊断。
 	reasonDiagnostics = "可展开 %s 的事件记录查看原始诊断"
+	reasonSuperseded  = "已被新的推导取代，这份待审批稿件作废"
 )
 
+// Drive 推进一轮创作直到落点。开始前回收过期租约：崩溃留下的 running 任务放回队列，
+// 驱动才能续跑它。
 func (s *Coordinator) Drive(
 	ctx context.Context,
 	run model.CreationRun,
@@ -137,8 +144,25 @@ func (s *Coordinator) Drive(
 	command DriveCommand,
 ) (Outcome, error) {
 	clock := &stepClock{now: s.now, last: command.CreatedAt}
+	recovered, err := s.store.RecoverExpiredOperations(ctx, clock.next())
+	if err != nil {
+		return Outcome{}, err
+	}
+	outcome, err := s.drive(ctx, run, tasks, command, clock)
+	outcome.Recovered = recovered
+	return outcome, err
+}
+
+func (s *Coordinator) drive(
+	ctx context.Context,
+	run model.CreationRun,
+	tasks Tasks,
+	command DriveCommand,
+	clock *stepClock,
+) (Outcome, error) {
 	if run.State == model.RunWaitingUser || run.State == model.RunPaused {
-		resumed, err := s.store.TransitionCreationRun(ctx, run.ID, run.State, model.RunRunning, reasonResumed, 0, clock.next())
+		resumed, err := s.store.TransitionCreationRun(ctx, run.ID,
+			model.RunTransition{From: run.State, To: model.RunRunning, Reason: reasonResumed}, clock.next())
 		if err != nil {
 			return Outcome{}, err
 		}
@@ -213,32 +237,30 @@ func (s *Coordinator) Drive(
 			return Outcome{Run: settled, Revision: decision.Revision}, decisionErr
 		}
 		work := *next.Work
+		if err := s.supersede(ctx, run.ID, work, clock.next()); err != nil {
+			return Outcome{}, err
+		}
 		operation, err := s.ensureChainedOperation(ctx, tasks, run, work, clock.next())
 		if err != nil {
 			return Outcome{}, err
 		}
 		if operation.State == model.OperationQueued {
-			result, err := tasks.Run(ctx, operation.ID, command.WorkerID, command.LeaseDuration, clock.next())
-			if result.ID != "" {
-				operation = result
-			}
+			ran, err := tasks.Run(ctx, operation.ID, command.WorkerID, command.LeaseDuration, clock.next())
 			// 进程退出等取消不是创作失败：引擎已把任务放回队列，Run 保持 running 可续跑。
 			if err != nil && ctx.Err() != nil {
 				return Outcome{Run: run, Revision: decision.Revision}, err
 			}
-			// stale 不是失败（§6.3）：基线在执行期间变化时由下一轮安全迁移到后继。
-			if err != nil && operation.State != model.OperationStale {
-				if operation.State != model.OperationFailed {
-					settled, settleErr := s.settleRun(ctx, run, model.RunFailed, failureReason(work, operation.ID), 0, clock.next())
-					return Outcome{Run: settled, Revision: decision.Revision}, errors.Join(err, settleErr)
+			// 执行按持久化结局落点（引擎在围栏拒绝写入时回读真实状态）。没有落到任何结局
+			// 属于基础设施错误（执行器缺失、存储失败）：不作决定，Run 保持可续跑。
+			if ran.ID != operation.ID || ran.State == model.OperationQueued || ran.State == model.OperationRunning {
+				if err == nil {
+					err = fmt.Errorf("operation %q did not conclude: %w", operation.ID, model.ErrStateConflict)
 				}
-				outcome, reopen, err := s.reopenOrWait(ctx, tasks, run, decision.Revision, work, operation, clock.next())
-				if reopen {
-					continue
-				}
-				return outcome, err
+				return Outcome{Run: run, Revision: decision.Revision}, err
 			}
+			operation = ran
 		}
+		// 单点分派：结局的原因已记在任务上，执行错误不再另行判断。
 		switch operation.State {
 		case model.OperationSucceeded:
 			// 同一个已完成 Operation 第二次出现说明目标没有被它推进（例如规划
@@ -249,13 +271,15 @@ func (s *Coordinator) Drive(
 			lastSettled = operation.ID
 		case model.OperationAwaitingApproval:
 			// 无人值守的等待（D26）：不是失败，Run 停在这里等用户裁决。
-			settled, err := s.settleRun(ctx, run, model.RunWaitingUser, work.Reasons.Waiting, 0, clock.next())
+			settled, err := s.settleRun(ctx, run, model.RunTransition{
+				To: model.RunWaitingUser, Reason: work.Reasons.Waiting, WaitingOperationID: operation.ID,
+			}, clock.next())
 			if err != nil {
 				return Outcome{Run: settled, Revision: decision.Revision}, err
 			}
 			return Outcome{Run: settled, Revision: decision.Revision, Waiting: operation.ID}, nil
 		case model.OperationPaused:
-			settled, err := s.settleRun(ctx, run, model.RunPaused, reasonPausedJob, 0, clock.next())
+			settled, err := s.settleRun(ctx, run, model.RunTransition{To: model.RunPaused, Reason: reasonPausedJob}, clock.next())
 			return Outcome{Run: settled, Revision: decision.Revision}, err
 		case model.OperationFailed:
 			outcome, reopen, err := s.reopenOrWait(ctx, tasks, run, decision.Revision, work, operation, clock.next())
@@ -264,7 +288,7 @@ func (s *Coordinator) Drive(
 			}
 			return outcome, err
 		case model.OperationCancelled:
-			settled, err := s.settleRun(ctx, run, model.RunCancelled, reasonCancelJob, 0, clock.next())
+			settled, err := s.settleRun(ctx, run, model.RunTransition{To: model.RunCancelled, Reason: reasonCancelJob}, clock.next())
 			return Outcome{Run: settled, Revision: decision.Revision}, err
 		case model.OperationStale:
 			// 控制收紧或基线漂移导致失效：下一轮由 ensureChainedOperation 安全迁移到后继。
@@ -282,7 +306,7 @@ func (s *Coordinator) failRun(
 	reason string,
 	at time.Time,
 ) (Outcome, error) {
-	settled, settleErr := s.settleRun(ctx, run, model.RunFailed, reason, 0, at)
+	settled, settleErr := s.settleRun(ctx, run, model.RunTransition{To: model.RunFailed, Reason: reason}, at)
 	return Outcome{Run: settled, Revision: revision}, errors.Join(fmt.Errorf("%s: %w", reason, model.ErrStateConflict), settleErr)
 }
 
@@ -307,7 +331,7 @@ func (s *Coordinator) reopenOrWait(
 	if operation.FailureCode == model.FailureSubmissionBlocked || operation.FailureCode == model.FailureResultUnknown {
 		reason := fmt.Sprintf("%s：%s。已停止自动重试并保留工作区，请处理原因后显式续跑；"+reasonDiagnostics,
 			work.Reasons.Failure, operation.Error, operation.ID)
-		settled, err := s.settleRun(ctx, run, model.RunWaitingUser, reason, 0, at)
+		settled, err := s.settleRun(ctx, run, model.RunTransition{To: model.RunWaitingUser, Reason: reason}, at)
 		return Outcome{Run: settled, Revision: revision}, false, err
 	}
 	failures, err := tasks.Failures(ctx, operation.ID)
@@ -319,12 +343,8 @@ func (s *Coordinator) reopenOrWait(
 	}
 	reason := fmt.Sprintf("%s：已自动重试 %d 次仍未成功，停下等你处理（最近一次原因：%s）。续跑会带着已有草稿再试一次；"+reasonDiagnostics,
 		work.Reasons.Failure, failures-1, operation.Error, operation.ID)
-	settled, err := s.settleRun(ctx, run, model.RunWaitingUser, reason, 0, at)
+	settled, err := s.settleRun(ctx, run, model.RunTransition{To: model.RunWaitingUser, Reason: reason}, at)
 	return Outcome{Run: settled, Revision: revision}, false, err
-}
-
-func failureReason(work WorkItem, operationID string) string {
-	return fmt.Sprintf("%s；"+reasonDiagnostics, work.Reasons.Failure, operationID)
 }
 
 // ensureChainedOperation 解析创作槽位当前有效的 Operation：沿确定性后继链
@@ -389,6 +409,37 @@ func chainID(base string, attempt int) string {
 	return fmt.Sprintf("%s:r%d", base, attempt)
 }
 
+// inChain 报告 id 是否是槽位 base 后继链上的成员。
+func inChain(base, id string) bool {
+	if id == base {
+		return true
+	}
+	suffix, ok := strings.CutPrefix(id, base+":r")
+	attempt, err := strconv.Atoi(suffix)
+	return ok && err == nil && chainID(base, attempt) == id && attempt > 1
+}
+
+// supersede 作废被新推导取代的待审批任务（D64）：推导给出同种类的另一项工作（不在它的
+// 后继链上）时，旧稿不再是这一步的候选，转 stale——之后既不呈现也不能被批准入账。推导
+// 暂时去做别的（审阅、核验）或停下等待都不算取代。用户同时裁决了它就以用户为准。
+func (s *Coordinator) supersede(ctx context.Context, runID string, work WorkItem, at time.Time) error {
+	awaiting, err := s.store.AwaitingRunOperations(ctx, runID)
+	if err != nil {
+		return err
+	}
+	for _, operation := range awaiting {
+		if operation.Kind != work.Kind || inChain(work.ID, operation.ID) {
+			continue
+		}
+		_, err := s.store.TransitionOperation(ctx, operation.ID,
+			model.OperationAwaitingApproval, model.OperationStale, reasonSuperseded, at)
+		if err != nil && !errors.Is(err, model.ErrStateConflict) {
+			return err
+		}
+	}
+	return nil
+}
+
 // LatestChainOperation 只读地取槽位后继链上最新的 Operation，用于结果汇报。
 func (s *Coordinator) LatestChainOperation(
 	ctx context.Context,
@@ -430,41 +481,34 @@ func (s *Coordinator) RunOperationIDs(ctx context.Context, runID string) ([]stri
 	return ids, nil
 }
 
-// WaitingProposal 定位 Run 当前等待用户裁决的稿件，用于恢复落点时重建决定卡；
-// ok=false 表示等待不携带稿件（例如预算用尽）。
+// WaitingProposal 取 Run 停下等待审批的稿件，用于恢复落点时重建决定卡。ok=false 表示
+// 等待不携带稿件（例如预算用尽），或那个任务已不在等待（被裁决或被新的推导取代）。
 func (s *Coordinator) WaitingProposal(ctx context.Context, runID string) (model.Proposal, bool, error) {
-	ids, err := s.RunOperationIDs(ctx, runID)
+	run, err := s.store.GetCreationRun(ctx, runID)
+	if err != nil || run.WaitingOperationID == "" {
+		return model.Proposal{}, false, err
+	}
+	operation, err := s.store.GetOperation(ctx, run.WaitingOperationID)
+	if err != nil || operation.State != model.OperationAwaitingApproval {
+		return model.Proposal{}, false, err
+	}
+	proposal, err := s.store.GetProposalByOperation(ctx, operation.ID)
 	if err != nil {
 		return model.Proposal{}, false, err
 	}
-	for i := len(ids) - 1; i >= 0; i-- {
-		operation, err := s.store.GetOperation(ctx, ids[i])
-		if err != nil {
-			return model.Proposal{}, false, err
-		}
-		if operation.State != model.OperationAwaitingApproval {
-			continue
-		}
-		proposal, err := s.store.GetProposalByOperation(ctx, operation.ID)
-		if err != nil {
-			return model.Proposal{}, false, err
-		}
-		return proposal, true, nil
-	}
-	return model.Proposal{}, false, nil
+	return proposal, true, nil
 }
 
-// settleRun 落盘 Run 的落点状态；落盘失败返回原 Run 与错误，调用方与主错误
-// 一并上抛，不吞错（§6.3）。
+// settleRun 从运行现状落盘落点（transition.From 取 run.State）；落盘失败返回原 Run 与
+// 错误，调用方与主错误一并上抛，不吞错（§6.3）。
 func (s *Coordinator) settleRun(
 	ctx context.Context,
 	run model.CreationRun,
-	to model.CreationRunState,
-	reason string,
-	completedRevision model.Revision,
+	transition model.RunTransition,
 	at time.Time,
 ) (model.CreationRun, error) {
-	settled, err := s.store.TransitionCreationRun(ctx, run.ID, run.State, to, reason, completedRevision, at)
+	transition.From = run.State
+	settled, err := s.store.TransitionCreationRun(ctx, run.ID, transition, at)
 	if err == nil {
 		return settled, nil
 	}
@@ -475,7 +519,7 @@ func (s *Coordinator) settleRun(
 			return current, nil
 		}
 	}
-	return run, fmt.Errorf("settle creation run %q to %s: %w", run.ID, to, err)
+	return run, fmt.Errorf("settle creation run %q to %s: %w", run.ID, transition.To, err)
 }
 
 func (s *Coordinator) CreationRunEvents(ctx context.Context, runID string) ([]model.CreationRunEvent, error) {
@@ -573,7 +617,7 @@ func (s *Coordinator) PauseCreationRun(ctx context.Context, runID string, at tim
 	if run.State == model.RunPaused {
 		return run, nil
 	}
-	return s.store.TransitionCreationRun(ctx, runID, run.State, model.RunPaused, reasonPausedRun, 0, at)
+	return s.store.TransitionCreationRun(ctx, runID, model.RunTransition{From: run.State, To: model.RunPaused, Reason: reasonPausedRun}, at)
 }
 
 // CancelCreationRun 终止本轮创作；已写内容保留在权威流，重新开始会开启
@@ -586,7 +630,7 @@ func (s *Coordinator) CancelCreationRun(ctx context.Context, runID string, at ti
 	if run.State == model.RunCancelled {
 		return run, nil
 	}
-	return s.store.TransitionCreationRun(ctx, runID, run.State, model.RunCancelled, reasonCancelled, 0, at)
+	return s.store.TransitionCreationRun(ctx, runID, model.RunTransition{From: run.State, To: model.RunCancelled, Reason: reasonCancelled}, at)
 }
 
 // UpdateCreationRunStrategy 让用户中途调整自动化边界（§6.3）：只影响之后创建

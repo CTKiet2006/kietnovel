@@ -24,8 +24,9 @@ func NewReviews(s *store.Store, changes *change.Engine, projects *projectdoc.Rep
 }
 
 type Evidence struct {
-	Verdicts    []StoredVerdict
-	RepairsUsed int
+	Verdicts []StoredVerdict
+	// Repairs 是本轮各章已派发的自动修订次数，预算按章计（D63）。
+	Repairs map[string]int
 }
 
 // Goal is the state-loading adapter; Policy remains a pure novel decision function.
@@ -44,19 +45,21 @@ func (g *Goal) Next(ctx context.Context, run model.CreationRun) (creation.Decisi
 		decision.Step.Fail = "审阅结果缺失或损坏，需要人工检查"
 		return decision, err
 	}
-	repairs, err := g.reader.repairCount(ctx, run.ID)
+	repairs, err := g.reader.repairCounts(ctx, run.ID)
 	if err != nil {
 		return decision, err
 	}
-	decision.Step, err = (Policy{}).Next(p, run, Evidence{Verdicts: verdicts, RepairsUsed: repairs})
+	decision.Step, err = (Policy{}).Next(p, run, Evidence{Verdicts: verdicts, Repairs: repairs})
 	return decision, err
 }
-func (s *Reviews) repairCount(ctx context.Context, runID string) (int, error) {
+
+// repairCounts 统计本轮各章已派发的自动修订任务数。
+func (s *Reviews) repairCounts(ctx context.Context, runID string) (map[string]int, error) {
 	events, err := s.store.ListCreationRunEvents(ctx, runID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	repairs := 0
+	repairs := make(map[string]int)
 	for _, event := range events {
 		if event.Kind != model.RunEventOperationCreated {
 			continue
@@ -65,18 +68,25 @@ func (s *Reviews) repairCount(ctx context.Context, runID string) (int, error) {
 			OperationID string `json:"operation_id"`
 		}
 		if err := json.Unmarshal(event.Payload, &payload); err != nil {
-			return 0, fmt.Errorf("run %q event %d payload is corrupt: %w", runID, event.Sequence, err)
+			return nil, fmt.Errorf("run %q event %d payload is corrupt: %w", runID, event.Sequence, err)
 		}
 		op, err := s.store.GetOperation(ctx, payload.OperationID)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		spec, err := model.KindSpec(op.Kind)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
-		if spec.Repair {
-			repairs++
+		if !spec.Repair {
+			continue
+		}
+		input, err := model.DecodeTaskInput(op.Kind, op.Input)
+		if err != nil {
+			return nil, err
+		}
+		for _, id := range model.RepairChapters(input) {
+			repairs[id]++
 		}
 	}
 	return repairs, nil

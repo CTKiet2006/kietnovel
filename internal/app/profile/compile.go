@@ -58,8 +58,7 @@ func (s *Compiler) Compile(ctx context.Context, command CompileCommand) (prompt.
 		}
 		intent, ownership = project.Intent, project.Ownership
 		contextValue, err := derive.BuildStoryContext(derive.ProjectContent{
-			ID: project.ID, Revision: project.Revision, Intent: project.Intent,
-			Plan: project.Plan, Entities: project.Entities, Canon: project.Canon,
+			ID: project.ID, Revision: project.Revision, Compass: project.Compass, Plan: project.Plan, Entities: project.Entities, Canon: project.Canon,
 			Manuscript: project.Manuscript, Ownership: project.Ownership,
 		}, command.Kind, command.Input)
 		if err != nil {

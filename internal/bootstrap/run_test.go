@@ -38,7 +38,7 @@ func TestDriveCreationRunSettlesByStepKind(t *testing.T) {
 	planWork := func(runID string) *runs.WorkItem {
 		return &runs.WorkItem{
 			ID: runQuickID(runID, "plan"), Kind: model.OperationDevelopPlan,
-			Input:   model.DevelopPlanInput{Intent: "故事", TargetChapters: 1, RequestedChapters: 1},
+			Input:   model.DevelopPlanInput{Intent: "故事", FixedChapters: 1, RequestedChapters: 1},
 			Reasons: runs.WorkReasons{Waiting: "等你确认", Failure: "没写完", Stuck: "规划已结束但没有推进"},
 		}
 	}
@@ -62,7 +62,7 @@ func TestDriveCreationRunSettlesByStepKind(t *testing.T) {
 			projectID := "stub-" + strings.ReplaceAll(tc.name, " ", "-")
 			if _, err := api.Projects.CreateProject(ctx, projectdoc.CreateProjectCommand{
 				ProjectID: projectID, ChangeID: "create", UserID: "user-1", Reason: "建书",
-				Draft: projectdoc.ProjectDraft{Intent: model.Intent{Premise: "故事", TargetChapters: 1}}, CreatedAt: testTime(),
+				Draft: projectdoc.ProjectDraft{Intent: model.Intent{Premise: "故事"}}, CreatedAt: testTime(),
 			}); err != nil {
 				t.Fatalf("create project: %v", err)
 			}

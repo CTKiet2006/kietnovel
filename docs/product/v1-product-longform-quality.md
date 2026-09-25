@@ -46,7 +46,7 @@ Derived 层逐步提供：
 
 ## 5. 质量审阅
 
-阶段审阅和终审继续产出 Review Artifact 与 Verdict。产品默认提供设定一致性、角色行为、节奏、叙事连贯、伏笔、钩子和语言品质等维度，但具体 Rubric 可以由 Pack/Profile 扩展，不写死进 Coordinator。
+窗口审阅（D62）继续产出 Review Artifact 与 Verdict。产品默认提供设定一致性、角色行为、节奏、叙事连贯、伏笔、钩子和语言品质等维度，但具体 Rubric 可以由 Pack/Profile 扩展，不写死进 Coordinator。
 
 审阅必须引用章节与具体发现；用户可以接受建议、局部重写、调整后续计划或忽略非阻塞建议。只有阻塞发现影响完成契约，普通审美建议不能制造无限重写循环。
 

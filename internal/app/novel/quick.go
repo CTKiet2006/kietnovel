@@ -16,12 +16,21 @@ import (
 	"github.com/voocel/ainovel-cli/internal/domain/model"
 )
 
+// KeepChapters 让 QuickWrite 沿用上一轮创作的篇幅设定；新作品按交给 AI 处理。
+const KeepChapters = -1
+
+// DefaultRepairBudget 是每章允许的自动重写次数（D63 按章计）。
+const DefaultRepairBudget = 2
+
 type QuickWriteCommand struct {
 	ProjectID string
 	UserID    string
 	Premise   string
-	// Chapters 是目标章数；0 表示沿用当前目标（见 TargetChapters）。
+	// Chapters 是篇幅：正数固定全书章数，0 交给 AI（D63），KeepChapters 沿用上一轮。
 	Chapters int
+	// Extend 是续写：篇幅交给 AI 并撤回已有的收官承诺，由 AI 决定再写多少。它是显式意图，
+	// 重复执行普通续跑不会隐式续写。
+	Extend bool
 	// Approval 请求更新 Project 的有效审批策略；Run 创建时只保留不可变预设摘要。
 	Approval        model.ApprovalPolicy
 	Packs           []resource.PackRef
@@ -59,9 +68,9 @@ func (s *Application) QuickWrite(ctx context.Context, command QuickWriteCommand)
 		return QuickWriteResult{}, fmt.Errorf("quick write requires a configured model: %w", model.ErrInvalid)
 	}
 	if strings.TrimSpace(command.ProjectID) == "" || strings.TrimSpace(command.UserID) == "" ||
-		strings.TrimSpace(command.Premise) == "" || command.Chapters < 0 ||
+		strings.TrimSpace(command.Premise) == "" || command.Chapters < KeepChapters ||
 		strings.TrimSpace(command.WorkerID) == "" || command.CreatedAt.IsZero() {
-		return QuickWriteResult{}, fmt.Errorf("quick write project, user, premise, non-negative chapters, worker and time are required: %w", model.ErrInvalid)
+		return QuickWriteResult{}, fmt.Errorf("quick write project, user, premise, chapters, worker and time are required: %w", model.ErrInvalid)
 	}
 	if command.LeaseDuration <= 0 {
 		command.LeaseDuration = task.DefaultLease
@@ -71,8 +80,14 @@ func (s *Application) QuickWrite(ctx context.Context, command QuickWriteCommand)
 	default:
 		return QuickWriteResult{}, fmt.Errorf("quick write approval must be auto, milestone or manual: %w", model.ErrInvalid)
 	}
-	if command.Chapters == 0 {
-		chapters, err := s.currentTarget(ctx, command.ProjectID)
+	if command.Extend {
+		if command.Chapters > 0 {
+			return QuickWriteResult{}, fmt.Errorf("extending leaves the length to the AI and cannot fix chapters: %w", model.ErrInvalid)
+		}
+		command.Chapters = 0
+	}
+	if command.Chapters == KeepChapters {
+		chapters, err := s.currentChapters(ctx, command.ProjectID)
 		if err != nil {
 			return QuickWriteResult{}, err
 		}
@@ -80,11 +95,6 @@ func (s *Application) QuickWrite(ctx context.Context, command QuickWriteCommand)
 	}
 
 	result := QuickWriteResult{ProjectID: command.ProjectID}
-	recovered, err := s.tasks.RecoverOperations(ctx, command.CreatedAt)
-	if err != nil {
-		return result, err
-	}
-	result.RecoveredOperations = recovered
 	project, err := s.ensureQuickProject(ctx, command)
 	if err != nil {
 		return result, err
@@ -95,30 +105,21 @@ func (s *Application) QuickWrite(ctx context.Context, command QuickWriteCommand)
 	}
 	outcome, err := s.runs.Drive(ctx, run, s.creationTasks(command), driveCommand(command))
 	result = attachRun(outcome.Run, result)
-	result.WaitingOperationID = outcome.Waiting
+	result.WaitingOperationID, result.RecoveredOperations = outcome.Waiting, outcome.Recovered
 	if err != nil {
 		return result, err
 	}
 	return s.finishQuickResult(ctx, outcome, result)
 }
 
-// currentTarget 解析"沿用当前目标"：作品还不存在时没有目标可沿用。
-func (s *Application) currentTarget(ctx context.Context, projectID string) (int, error) {
-	project, err := s.projects.Project(ctx, projectID, model.InitialRevision)
-	if projectdoc.IsNotFound(err) {
-		return 0, fmt.Errorf("quick write on a new project requires positive chapters: %w", model.ErrInvalid)
-	}
-	if err != nil {
-		return 0, err
-	}
+// currentChapters 解析"沿用篇幅设定"：取最近一轮创作的设定，没有时交给 AI。
+func (s *Application) currentChapters(ctx context.Context, projectID string) (int, error) {
 	run, ok, err := s.runs.LatestCreationRun(ctx, projectID)
-	if err != nil {
+	if err != nil || !ok {
 		return 0, err
 	}
-	if !ok {
-		return TargetChapters(project, nil), nil
-	}
-	return TargetChapters(project, &run), nil
+	goal, err := model.DecodeNovelGoal(run.Goal)
+	return goal.TargetChapters, err
 }
 
 func attachRun(run model.CreationRun, result QuickWriteResult) QuickWriteResult {
@@ -126,7 +127,8 @@ func attachRun(run model.CreationRun, result QuickWriteResult) QuickWriteResult 
 	return result
 }
 
-// finishQuickResult 把驱动落点投影成 quick 结果：目标章数内每章的状态与来源 Operation。
+// finishQuickResult 把驱动落点投影成 quick 结果：全书章数内（未收官时为整个蓝图）每章的
+// 状态与来源 Operation。
 func (s *Application) finishQuickResult(
 	ctx context.Context,
 	outcome creation.Outcome,
@@ -142,9 +144,9 @@ func (s *Application) finishQuickResult(
 		return result, err
 	}
 	result.Revision = project.Revision
-	plans := chapterPlansInOrder(project.Plan)
-	if len(plans) > goal.TargetChapters {
-		plans = plans[:goal.TargetChapters]
+	plans := model.ChapterPlansInOrder(project.Plan)
+	if final := lengthOf(project, goal.TargetChapters).Final; final > 0 && len(plans) > final {
+		plans = plans[:final]
 	}
 	written := manuscriptsByPlanNode(project.Manuscript)
 	result.Chapters = result.Chapters[:0]
@@ -195,8 +197,8 @@ func (s *Application) finishQuickResult(
 }
 
 // ensureQuickProject 建立或对账作品：首次调用在初始化事务里把 Intent 与审批
-// 策略写入权威（§6.3）；此后同一命令重入时按需更新目标章数（Intent 变更）与
-// 审批策略，全部走唯一写路径。
+// 策略写入权威（§6.3）；此后同一命令重入时按需更新审批策略与罗盘，走唯一写路径。
+// 篇幅属于运行目标与罗盘（D63），不写 Intent：改篇幅不作废任何证据。
 func (s *Application) ensureQuickProject(ctx context.Context, command QuickWriteCommand) (projectdoc.Snapshot, error) {
 	target := model.AuthorityTarget{Kind: model.AuthorityProject, ID: command.ProjectID}
 	_, err := s.store.CurrentRevision(ctx, target)
@@ -211,7 +213,7 @@ func (s *Application) ensureQuickProject(ctx context.Context, command QuickWrite
 			UserID:    command.UserID,
 			Reason:    "一句话创建作品",
 			Draft: projectdoc.ProjectDraft{
-				Intent:   model.Intent{Premise: command.Premise, TargetChapters: command.Chapters},
+				Intent:   model.Intent{Premise: command.Premise},
 				Approval: approval,
 			},
 			CreatedAt: command.CreatedAt,
@@ -241,31 +243,47 @@ func (s *Application) ensureQuickProject(ctx context.Context, command QuickWrite
 			return projectdoc.Snapshot{}, err
 		}
 	}
-	if project.Intent.TargetChapters != command.Chapters {
-		intent := project.Intent
-		intent.TargetChapters = command.Chapters
-		content, err := json.Marshal(intent)
-		if err != nil {
-			return projectdoc.Snapshot{}, fmt.Errorf("encode intent goal update: %w", err)
-		}
-		committed, err := s.changes.CommitUser(ctx, model.Proposal{
-			ID:           fmt.Sprintf("%s@r%d", quickID(command.ProjectID, "goal", strconv.Itoa(command.Chapters)), project.Revision),
-			Target:       target,
-			BaseRevision: project.Revision,
-			Author:       model.Author{Kind: model.AuthorUser, ID: command.UserID},
-			Reason:       fmt.Sprintf("把目标章数调整为 %d", command.Chapters),
-			Patches: []model.Patch{{
-				Document:  model.DocumentRef{Kind: model.DocumentIntent, ID: "root"},
-				Operation: model.PatchPut, Content: content,
-			}},
-			ApprovalState: model.ApprovalPending, CreatedAt: command.CreatedAt,
-		}, command.CreatedAt)
-		if err != nil {
-			return projectdoc.Snapshot{}, err
-		}
-		return s.projects.Project(ctx, command.ProjectID, committed.NewRevision)
+	return s.reconcileCompass(ctx, command, project)
+}
+
+// reconcileCompass 让罗盘跟随用户的篇幅意图（D63），罗盘进每个任务的上下文，篇幅只能
+// 有一个口径：固定篇幅时收官章数对齐到固定值（固定期间 AI 不得改罗盘）；续写时撤回
+// 收官承诺，上限不动——还有余量就直接续写，没有余量由 AI 提出新上限、用户确认一次。
+// 罗盘不在任何证据基线里，这些用户变更不作废审阅。
+func (s *Application) reconcileCompass(ctx context.Context, command QuickWriteCommand, project projectdoc.Snapshot) (projectdoc.Snapshot, error) {
+	if project.Compass == nil {
+		return project, nil
 	}
-	return project, nil
+	compass, action, reason := *project.Compass, "", ""
+	switch {
+	case command.Chapters > 0 && compass.Final != command.Chapters:
+		compass.Final, compass.ScaleMax = command.Chapters, max(compass.ScaleMax, command.Chapters)
+		action, reason = "length:"+strconv.Itoa(command.Chapters), fmt.Sprintf("篇幅固定为 %d 章", command.Chapters)
+	case command.Extend && compass.Final > 0:
+		compass.Final = 0
+		action, reason = "extend", fmt.Sprintf("撤回第 %d 章的收官承诺，由 AI 决定续写多少", project.Compass.Final)
+	default:
+		return project, nil
+	}
+	content, err := json.Marshal(compass)
+	if err != nil {
+		return projectdoc.Snapshot{}, fmt.Errorf("encode compass: %w", err)
+	}
+	committed, err := s.changes.CommitUser(ctx, model.Proposal{
+		ID:     fmt.Sprintf("%s@r%d", quickID(command.ProjectID, action), project.Revision),
+		Target: model.AuthorityTarget{Kind: model.AuthorityProject, ID: command.ProjectID}, BaseRevision: project.Revision,
+		Author: model.Author{Kind: model.AuthorUser, ID: command.UserID},
+		Reason: reason,
+		Patches: []model.Patch{{
+			Document:  model.DocumentRef{Kind: model.DocumentCompass, ID: model.SingletonDocumentID},
+			Operation: model.PatchPut, Content: content,
+		}},
+		ApprovalState: model.ApprovalPending, CreatedAt: command.CreatedAt,
+	}, command.CreatedAt)
+	if err != nil {
+		return projectdoc.Snapshot{}, err
+	}
+	return s.projects.Project(ctx, command.ProjectID, committed.NewRevision)
 }
 
 // ensureCreationRun 复用进行中的 Run（目标变化时更新当前 Run，不启动竞争 Run，
@@ -309,7 +327,7 @@ func (s *Application) ensureCreationRun(
 	strategy := model.CreationRunStrategy{
 		PlanWindowChapters: 3,
 		ReviewCadence:      model.ReviewPerPlanWindow,
-		AutoRepairBudget:   command.Chapters,
+		AutoRepairBudget:   DefaultRepairBudget,
 	}
 	preset, err := model.NewCreationRunPreset("quick", approval, strategy)
 	if err != nil {

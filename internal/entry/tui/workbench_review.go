@@ -120,7 +120,18 @@ func (m model) candidateSummary() string {
 			parts = append(parts, "标题已调整")
 		}
 	}
-	if attached := len(m.bench.decision.proposal.Patches) - len(chapters); attached > 0 {
+	attached := len(m.bench.decision.proposal.Patches) - len(chapters)
+	for _, patch := range m.bench.decision.proposal.Patches {
+		if patch.Document.Kind != domainmodel.DocumentCompass {
+			continue
+		}
+		text, err := compassSummary(m.bench.snap.Length.Compass, patch)
+		if err != nil {
+			return benchTheme.Warning.Render(err.Error())
+		}
+		parts, attached = append(parts, text), attached-1
+	}
+	if attached > 0 {
 		parts = append(parts, fmt.Sprintf("另有 %d 项附带变更", attached))
 	}
 	if reason := strings.TrimSpace(m.bench.decision.proposal.Reason); reason != "" {
@@ -160,6 +171,14 @@ func (m model) reviewContent() (string, error) {
 			body.WriteString("\n大纲 · " + node.Title + "\n" + node.Summary + "\n")
 			continue
 		}
+		if patch.Document.Kind == domainmodel.DocumentCompass {
+			text, err := compassSummary(m.bench.snap.Length.Compass, patch)
+			if err != nil {
+				return "", err
+			}
+			body.WriteString("\n故事罗盘 · " + text + "\n")
+			continue
+		}
 		// 少见的文档类型也原样保留，审阅不能漏掉任何附带变更。
 		body.WriteString(fmt.Sprintf("\n附带变更（原始内容） · %s · %s\n%s\n", patch.Document.ID, patch.Operation, patch.Content))
 	}
@@ -169,6 +188,37 @@ func (m model) reviewContent() (string, error) {
 		body.WriteString("\n输入 y 通过，或写下修改意见。/note 内容 可独立提出创作要求。")
 	}
 	return body.String(), nil
+}
+
+// compassSummary 把罗盘补丁说成人话（D63）：AI 上调篇幅上限时，这正是等你裁决的内容。
+func compassSummary(current *domainmodel.Compass, patch domainmodel.Patch) (string, error) {
+	if patch.Operation != domainmodel.PatchPut {
+		return "删除故事罗盘", nil
+	}
+	var next domainmodel.Compass
+	if err := json.Unmarshal(patch.Content, &next); err != nil {
+		return "", fmt.Errorf("无法读取待确认的故事罗盘：%w", err)
+	}
+	var parts []string
+	switch {
+	case current == nil:
+		parts = append(parts, fmt.Sprintf("篇幅上限 %d 章", next.ScaleMax))
+	case current.ScaleMax != next.ScaleMax:
+		parts = append(parts, fmt.Sprintf("篇幅上限 %d → %d 章", current.ScaleMax, next.ScaleMax))
+	}
+	switch {
+	case next.Final > 0 && (current == nil || current.Final != next.Final):
+		parts = append(parts, fmt.Sprintf("收官 %d 章", next.Final))
+	case next.Final == 0 && current != nil && current.Final > 0:
+		parts = append(parts, fmt.Sprintf("撤回收官（原 %d 章）", current.Final))
+	}
+	if current == nil || current.Ending != next.Ending {
+		parts = append(parts, "终局："+oneLine(next.Ending))
+	}
+	if len(parts) == 0 {
+		return "故事罗盘未变", nil
+	}
+	return strings.Join(parts, " · "), nil
 }
 
 func (m model) openReview() model {

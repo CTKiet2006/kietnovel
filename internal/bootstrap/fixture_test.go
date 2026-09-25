@@ -1,8 +1,12 @@
 package bootstrap_test
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/voocel/ainovel-cli/internal/app/task"
@@ -45,6 +49,43 @@ func newTestAppWithExecutors(s *store.Store, e task.ExecutorSet, contracts ...op
 
 // Slot IDs are asserted by integration tests because recovery preserves them.
 func runQuickID(runID string, parts ...string) string { return runID + ":" + strings.Join(parts, ":") }
-func reviewOperationID(runID string, revision model.Revision) string {
-	return runQuickID(runID, "review", "r"+strconv.FormatInt(int64(revision), 10))
+
+// planID 是首次规划的槽位 ID：带请求章数与固定篇幅（D63），窗口为 3。
+func planID(runID string, fixed int) string {
+	requested := 3
+	if fixed > 0 {
+		requested = min(3, fixed)
+	}
+	return runQuickID(runID, "plan", fmt.Sprintf("r%d:f%d", requested, fixed))
+}
+
+// reviewAt 报告任务是否为本轮在 revision 上派发的审阅：审阅 ID 还含窗口与要求摘要（D62），
+// 测试按 Revision 认领。
+func reviewAt(operationID, runID string, revision model.Revision) bool {
+	return strings.HasPrefix(operationID, runID+":review:") &&
+		strings.Contains(operationID, ":r"+strconv.FormatInt(int64(revision), 10)+":")
+}
+
+// findReview 取本轮在 revision 上派发的第一个审阅任务。
+func findReview(t *testing.T, s *store.Store, runID string, revision model.Revision) (model.Operation, bool) {
+	t.Helper()
+	ctx := context.Background()
+	events, err := s.ListCreationRunEvents(ctx, runID)
+	if err != nil {
+		t.Fatalf("list run events: %v", err)
+	}
+	for _, event := range events {
+		var payload struct {
+			OperationID string `json:"operation_id"`
+		}
+		if event.Kind != model.RunEventOperationCreated || json.Unmarshal(event.Payload, &payload) != nil || !reviewAt(payload.OperationID, runID, revision) {
+			continue
+		}
+		operation, err := s.GetOperation(ctx, payload.OperationID)
+		if err != nil {
+			t.Fatalf("read review operation: %v", err)
+		}
+		return operation, true
+	}
+	return model.Operation{}, false
 }

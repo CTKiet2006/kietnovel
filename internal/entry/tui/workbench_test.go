@@ -237,7 +237,7 @@ func TestSceneStripReflectsWaitingIdleAndLeavesWithActivityView(t *testing.T) {
 	done.bench.writing = false
 	done.bench.snap.Run.State = domainmodel.RunCompleted
 	done.bench.activity = activity.Snapshot{}
-	requireContains(t, frame(done), "✓ 已完成", "AI 创作现场 · 已完成", "全书完成 · /goal 提高目标续写", "/goal 提高目标续写")
+	requireContains(t, frame(done), "✓ 已完成", "AI 创作现场 · 已完成", "全书完成 · /continue 续写", "/continue 续写（AI 决定篇幅）")
 
 	prose := studioModel(t, 150, 40).benchLayout()
 	activityLayout := studioModel(t, 150, 40)

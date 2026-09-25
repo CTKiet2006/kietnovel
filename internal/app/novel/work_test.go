@@ -2,6 +2,7 @@ package novel
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	projectdoc "github.com/voocel/ainovel-cli/internal/app/project"
@@ -47,7 +48,7 @@ func TestCoveringDirectivesByWorkItem(t *testing.T) {
 	}{
 		{"write chapter 1", novelItem{kind: workWriteChapter, number: 1, plan: project.Plan[2]}, []string{"d-all", "d-arc"}},
 		{"rewrite chapter 2", novelItem{kind: workRewrite, number: 2, plan: project.Plan[3], chapterID: "chapter-2"}, []string{"d-all", "d-arc", "d-ch2"}},
-		{"review union", novelItem{kind: workReview, chapters: []string{"chapter-1", "chapter-2"}}, []string{"d-all", "d-arc", "d-ch2"}},
+		{"review carries requirements instead", novelItem{kind: workReview, chapters: []string{"chapter-1", "chapter-2"}}, []string{}},
 		{"extend takes all active", novelItem{kind: workExtendPlan, covered: 2}, []string{"d-all", "d-arc", "d-ch2", "d-later"}},
 	}
 	for _, tc := range cases {
@@ -68,14 +69,14 @@ func TestCoveringDirectivesByWorkItem(t *testing.T) {
 func TestNovelItemWorkCarriesDirectivesAndRewriteBase(t *testing.T) {
 	project := directiveTestProject()
 	run := model.CreationRun{ID: "run-1", ProjectID: "book-1"}
-	goal := model.NovelGoal{Premise: "故事", TargetChapters: 2}
+	length := Length{Fixed: 2, Final: 2}
 
 	item := novelItem{
 		kind: workRewrite, number: 2, plan: project.Plan[3], chapterID: "chapter-2", revision: 7,
 		notes: []string{"节奏太慢"}, basis: chapterBasis(project, 2, project.Plan[3].ID),
 	}
 	item.directives = coveringDirectives(project, item)
-	work, err := item.work(run, goal)
+	work, err := item.work(run, "故事", length)
 	if err != nil {
 		t.Fatalf("rewrite work: %v", err)
 	}
@@ -97,22 +98,25 @@ func TestNovelItemWorkCarriesDirectivesAndRewriteBase(t *testing.T) {
 		t.Fatalf("rewrite reasons = %#v", work.Reasons)
 	}
 
-	review := novelItem{kind: workReview, chapters: []string{"chapter-1"}, revision: 7}
+	// 审阅以要求核验项投递（D62）：命中窗口的 active 要求；作用域全在目标之外的跳过。
+	chapters := []string{"chapter-1"}
+	review := novelItem{kind: workReview, chapters: chapters, revision: 7,
+		requirements: newReviewLedger(project, length.Final, nil).window(chapters)}
 	review.directives = coveringDirectives(project, review)
-	work, err = review.work(run, goal)
+	work, err = review.work(run, "故事", length)
 	if err != nil {
 		t.Fatalf("review work: %v", err)
 	}
 	reviewInput, ok := work.Input.(model.ReviewRangeInput)
-	if !ok || work.ID != "run-1:review:r7" {
+	if !ok || work.ID != reviewOperationID("run-1", chapters, 7, review.requirements) || !strings.HasPrefix(work.ID, "run-1:review:chapter-1:r7:") {
 		t.Fatalf("review work = %#v", work)
 	}
-	if got := directiveIDs(reviewInput.Directives); len(got) != 2 || got[0] != "d-all" || got[1] != "d-arc" {
-		t.Fatalf("review directives = %v", got)
+	if got := reviewInput.Requirements; len(got) != 2 || got[0].ID != "directive:d-all" || got[1].ID != "directive:d-arc" || got[0].Settle {
+		t.Fatalf("review requirements = %+v", got)
 	}
 
 	plain := novelItem{kind: workWriteChapter, number: 1, plan: project.Plan[2]}
-	work, err = plain.work(run, goal)
+	work, err = plain.work(run, "故事", length)
 	if err != nil {
 		t.Fatalf("write work: %v", err)
 	}

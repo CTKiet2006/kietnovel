@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/voocel/ainovel-cli/internal/domain/model"
 )
@@ -31,20 +32,7 @@ func (e *Engine) VerifyBasis(ctx context.Context, target model.AuthorityTarget, 
 			return err
 		}
 		for _, scope := range basis.Scopes {
-			var members []model.DocumentBasis
-			switch scope.Kind {
-			case model.ScopeDirective:
-				members = model.ScopeMembers(directives, scope.Target, revisionOf)
-			case model.ScopeCanon:
-				members, err = e.canonScopeAt(ctx, target, at, *scope.Canon)
-				if err != nil {
-					return err
-				}
-			}
-			if model.ScopeDigest(members) != scope.Digest {
-				if scope.Kind == model.ScopeCanon {
-					return fmt.Errorf("Canon facts in the reviewed range changed by revision %d: %w", at, ErrBasisMismatch)
-				}
+			if model.ScopeDigest(model.ScopeMembers(directives, scope.Target, revisionOf)) != scope.Digest {
 				return fmt.Errorf("directives covering chapter %d changed by revision %d: %w",
 					scope.Target.ChapterNumber, at, ErrBasisMismatch)
 			}
@@ -75,40 +63,6 @@ func (e *Engine) BasisHolds(ctx context.Context, target model.AuthorityTarget, b
 	return err == nil, err
 }
 
-func (e *Engine) canonScopeAt(ctx context.Context, target model.AuthorityTarget, at model.Revision, scope model.CanonScope) ([]model.DocumentBasis, error) {
-	documents, err := e.store.ListDocuments(ctx, target, model.DocumentCanon, at)
-	if err != nil {
-		return nil, err
-	}
-	facts := make([]model.CanonFact, 0, len(documents))
-	revisions := make(map[string]model.Revision, len(documents))
-	for _, document := range documents {
-		var fact model.CanonFact
-		if err := json.Unmarshal(document.Content, &fact); err != nil {
-			return nil, fmt.Errorf("decode Canon scope member: %w", err)
-		}
-		facts = append(facts, fact)
-		revisions[document.Document.Key()] = document.Revision
-	}
-	documents, err = e.store.ListDocuments(ctx, target, model.DocumentManuscript, at)
-	if err != nil {
-		return nil, err
-	}
-	chapters := make([]model.ManuscriptChapter, 0, len(documents))
-	for _, document := range documents {
-		var chapter model.ManuscriptChapter
-		if err := json.Unmarshal(document.Content, &chapter); err != nil {
-			return nil, fmt.Errorf("decode Canon scope chapter: %w", err)
-		}
-		chapters = append(chapters, chapter)
-	}
-	var members []model.DocumentBasis
-	for _, ref := range model.CanonScopeRefs(facts, chapters, scope) {
-		members = append(members, model.DocumentBasis{Ref: ref, Revision: revisions[ref.Key()]})
-	}
-	return members, nil
-}
-
 func (e *Engine) directivesAt(
 	ctx context.Context,
 	target model.AuthorityTarget,
@@ -134,14 +88,34 @@ func (e *Engine) directivesAt(
 }
 
 // Relocate 落实提案重定位规则（D51 / §5.5 第 4 条）：提案基线落后于当前 Revision 时，
-// 仅当中间各 Revision 只改过用户专属文档、没碰本提案的文档，且任务基线在当前仍成立，
-// 才把基线搬到当前并重算结构影响；否则返回 model.ErrRevisionConflict 并说明原因。
-// 不落库、不经 Prepare；基线已是当前时原样返回。
-func (e *Engine) Relocate(
-	ctx context.Context,
-	proposal model.Proposal,
-	basis model.EvidenceBasis,
-) (model.Proposal, bool, error) {
+// 仅当中间各 Revision 只改过用户专属文档、没碰本提案的文档，且所属任务的基线在当前仍
+// 成立，才把基线搬到当前并重算结构影响；否则返回 model.ErrRevisionConflict 并说明原因。
+// 不落库；没有任务的提案（用户直接变更）没有可核对的基线，原样返回。
+func (e *Engine) Relocate(ctx context.Context, proposal model.Proposal) (model.Proposal, bool, error) {
+	task, err := e.task(ctx, proposal)
+	if err != nil || task == nil {
+		return proposal, false, err
+	}
+	basis, err := model.OperationBasis(*task)
+	if err != nil {
+		return model.Proposal{}, false, err
+	}
+	return e.relocate(ctx, proposal, basis)
+}
+
+// RelocatePending 重定位已保存的待裁决提案并落库；attempt 为正时受执行归属围栏保护（D42）。
+func (e *Engine) RelocatePending(ctx context.Context, proposal model.Proposal, attempt int, now time.Time) (model.Proposal, error) {
+	relocated, moved, err := e.Relocate(ctx, proposal)
+	if err != nil || !moved {
+		return relocated, err
+	}
+	if err := e.store.UpdatePendingProposal(ctx, relocated, attempt, now); err != nil {
+		return model.Proposal{}, err
+	}
+	return relocated, nil
+}
+
+func (e *Engine) relocate(ctx context.Context, proposal model.Proposal, basis model.EvidenceBasis) (model.Proposal, bool, error) {
 	current, err := e.currentRevision(ctx, proposal.Target)
 	if err != nil {
 		return model.Proposal{}, false, err
@@ -180,14 +154,10 @@ func (e *Engine) Relocate(
 	}
 	relocated := proposal
 	relocated.BaseRevision = current
-	impact, _, err := e.validateAndAnalyze(ctx, relocated)
+	checked, err := e.validateAndAnalyze(ctx, relocated)
 	if err != nil {
 		return model.Proposal{}, false, err
 	}
-	payload, err := json.Marshal(impact)
-	if err != nil {
-		return model.Proposal{}, false, fmt.Errorf("marshal structural impact: %w", err)
-	}
-	relocated.Impact.Structural = payload
-	return relocated, true, nil
+	relocated, err = withImpact(relocated, checked.impact)
+	return relocated, err == nil, err
 }

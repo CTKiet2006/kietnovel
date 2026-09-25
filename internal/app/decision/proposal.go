@@ -60,16 +60,16 @@ func (s *Review) ResolveProposal(ctx context.Context, command ResolveProposalCom
 	if err != nil {
 		return ResolveProposalResult{}, err
 	}
-	strategy := change.ResolutionStrategy(command.Strategy)
+	strategy := model.ResolutionStrategy(command.Strategy)
 	report, option, err := semanticResolutionOption(proposal, strategy)
 	if err != nil {
 		return ResolveProposalResult{}, err
 	}
-	if report.Status == change.SemanticImpactConsistent {
+	if report.Status == model.SemanticImpactConsistent {
 		return ResolveProposalResult{}, fmt.Errorf("consistent proposal does not require a resolution strategy; approve it directly: %w", model.ErrInvalid)
 	}
 	result := ResolveProposalResult{Strategy: command.Strategy}
-	if strategy == change.ResolutionAbandon {
+	if strategy == model.ResolutionAbandon {
 		rejected, err := s.Reject(ctx, proposal.ID, command.UserID, command.Reason, command.CreatedAt)
 		if err != nil {
 			return ResolveProposalResult{}, err
@@ -77,13 +77,13 @@ func (s *Review) ResolveProposal(ctx context.Context, command ResolveProposalCom
 		result.Proposal = &rejected
 		return result, nil
 	}
-	if strategy == change.ResolutionRewriteAffected && !s.tasks.HasLLM() {
+	if strategy == model.ResolutionRewriteAffected && !s.tasks.HasLLM() {
 		return ResolveProposalResult{}, fmt.Errorf("affected rewrite requires a configured model: %w", model.ErrInvalid)
 	}
-	if strategy == change.ResolutionRewriteAffected && strings.TrimSpace(command.RunID) == "" {
+	if strategy == model.ResolutionRewriteAffected && strings.TrimSpace(command.RunID) == "" {
 		return ResolveProposalResult{}, fmt.Errorf("affected rewrite requires a creation run: %w", model.ErrInvalid)
 	}
-	if strategy == change.ResolutionRewriteAffected {
+	if strategy == model.ResolutionRewriteAffected {
 		for _, ref := range command.Packs {
 			if _, err := resource.LoadPack(ctx, s.store, ref); err != nil {
 				return ResolveProposalResult{}, err
@@ -100,7 +100,7 @@ func (s *Review) ResolveProposal(ctx context.Context, command ResolveProposalCom
 		return ResolveProposalResult{}, err
 	}
 	result.ChangeSet = &committed
-	if strategy == change.ResolutionReinterpretFuture {
+	if strategy == model.ResolutionReinterpretFuture {
 		return result, nil
 	}
 	operationID := proposal.ID + ":rewrite-affected"
@@ -162,31 +162,31 @@ func validateResolutionOperation(
 
 func semanticResolutionOption(
 	proposal model.Proposal,
-	strategy change.ResolutionStrategy,
-) (change.SemanticImpactReport, change.ResolutionOption, error) {
-	if strategy != change.ResolutionRewriteAffected && strategy != change.ResolutionReinterpretFuture && strategy != change.ResolutionAbandon {
-		return change.SemanticImpactReport{}, change.ResolutionOption{}, fmt.Errorf("unknown resolution strategy %q: %w", strategy, model.ErrInvalid)
+	strategy model.ResolutionStrategy,
+) (model.SemanticImpactReport, model.ResolutionOption, error) {
+	if strategy != model.ResolutionRewriteAffected && strategy != model.ResolutionReinterpretFuture && strategy != model.ResolutionAbandon {
+		return model.SemanticImpactReport{}, model.ResolutionOption{}, fmt.Errorf("unknown resolution strategy %q: %w", strategy, model.ErrInvalid)
 	}
 	if len(proposal.Impact.Semantic) == 0 {
-		return change.SemanticImpactReport{}, change.ResolutionOption{}, fmt.Errorf("proposal %q has no semantic impact report: %w", proposal.ID, model.ErrInvalid)
+		return model.SemanticImpactReport{}, model.ResolutionOption{}, fmt.Errorf("proposal %q has no semantic impact report: %w", proposal.ID, model.ErrInvalid)
 	}
-	var report change.SemanticImpactReport
+	var report model.SemanticImpactReport
 	if err := model.DecodeStrict(proposal.Impact.Semantic, &report); err != nil {
-		return change.SemanticImpactReport{}, change.ResolutionOption{}, fmt.Errorf("decode semantic impact report: %w", err)
+		return model.SemanticImpactReport{}, model.ResolutionOption{}, fmt.Errorf("decode semantic impact report: %w", err)
 	}
 	if err := report.Validate(); err != nil {
-		return change.SemanticImpactReport{}, change.ResolutionOption{}, err
+		return model.SemanticImpactReport{}, model.ResolutionOption{}, err
 	}
 	// 一致的报告没有候选策略，先返回让调用方给出“直接批准即可”，不要误报成策略不存在。
-	if report.Status == change.SemanticImpactConsistent {
-		return report, change.ResolutionOption{}, nil
+	if report.Status == model.SemanticImpactConsistent {
+		return report, model.ResolutionOption{}, nil
 	}
 	for _, option := range report.Options {
 		if option.Strategy == strategy {
 			return report, option, nil
 		}
 	}
-	return change.SemanticImpactReport{}, change.ResolutionOption{}, fmt.Errorf("semantic impact does not offer strategy %q: %w", strategy, model.ErrInvalid)
+	return model.SemanticImpactReport{}, model.ResolutionOption{}, fmt.Errorf("semantic impact does not offer strategy %q: %w", strategy, model.ErrInvalid)
 }
 
 func (s *Review) Approve(ctx context.Context, proposalID, userID string, at time.Time) (model.ChangeSet, error) {
@@ -194,38 +194,32 @@ func (s *Review) Approve(ctx context.Context, proposalID, userID string, at time
 	if err != nil {
 		return model.ChangeSet{}, err
 	}
-	var committed model.ChangeSet
 	switch proposal.ApprovalState {
 	case model.ApprovalApproved:
-		committed, err = s.store.GetChangeSet(ctx, proposal.ID)
+		return s.store.GetChangeSet(ctx, proposal.ID)
 	case model.ApprovalRejected:
 		return model.ChangeSet{}, fmt.Errorf("proposal %q was rejected: %w", proposal.ID, model.ErrStateConflict)
-	case model.ApprovalPending:
-		committed, err = s.commitPending(ctx, proposal, userID, at)
+	default:
+		return s.commitPending(ctx, proposal, userID, at)
 	}
-	if err != nil {
-		return model.ChangeSet{}, err
-	}
-	if proposal.OperationID != "" {
-		if err := s.finishApprovedOperation(ctx, proposal.OperationID, at); err != nil {
-			return model.ChangeSet{}, err
-		}
-	}
-	return committed, nil
 }
 
-// commitPending 由用户批准并提交待裁决提案：任务提案先按 D51 重定位到当前 Revision，
-// 不能重定位的原样返回 ErrRevisionConflict，由用户按工作台指引重写。
+// commitPending 由用户批准并提交待裁决提案：任务提案只在任务仍等待审批时可批准（存储在
+// 提交事务内再断言一次），先按 D51 重定位到当前 Revision，不能重定位的原样返回
+// ErrRevisionConflict，由用户按工作台指引重写。
 func (s *Review) commitPending(ctx context.Context, proposal model.Proposal, userID string, at time.Time) (model.ChangeSet, error) {
-	relocated, moved, err := s.RelocateProposal(ctx, proposal)
-	if err != nil {
-		return model.ChangeSet{}, err
-	}
-	if moved {
-		if err := s.store.RelocateProposal(ctx, relocated, 0, at); err != nil {
+	if proposal.OperationID != "" {
+		operation, err := s.store.GetOperation(ctx, proposal.OperationID)
+		if err != nil {
 			return model.ChangeSet{}, err
 		}
-		proposal = relocated
+		if operation.State != model.OperationAwaitingApproval {
+			return model.ChangeSet{}, fmt.Errorf("operation %q is %s and no longer awaits approval: %w", operation.ID, operation.State, model.ErrStateConflict)
+		}
+	}
+	proposal, err := s.changes.RelocatePending(ctx, proposal, 0, at)
+	if err != nil {
+		return model.ChangeSet{}, err
 	}
 	approved, err := change.Decide(proposal, model.ApprovalApproved, model.Author{Kind: model.AuthorUser, ID: userID}, at)
 	if err != nil {
@@ -234,33 +228,32 @@ func (s *Review) commitPending(ctx context.Context, proposal model.Proposal, use
 	return s.changes.Commit(ctx, approved)
 }
 
-// RelocateProposal 按所属任务的基线重定位提案（D51），不落库；用户直接发起的提案
-// 没有任务基线，基线落后即冲突。
-func (s *Review) RelocateProposal(ctx context.Context, proposal model.Proposal) (model.Proposal, bool, error) {
-	var basis model.EvidenceBasis
-	if proposal.OperationID != "" {
-		operation, err := s.store.GetOperation(ctx, proposal.OperationID)
-		if err != nil {
-			return model.Proposal{}, false, err
-		}
-		if basis, err = model.OperationBasis(operation); err != nil {
-			return model.Proposal{}, false, err
-		}
-	} else {
-		return proposal, false, nil
-	}
-	return s.changes.Relocate(ctx, proposal, basis)
+// Relocate 按所属任务的基线重定位待裁决提案（D51），不落库：工作台据此判断候选是否
+// 仍是当前稿件。
+func (s *Review) Relocate(ctx context.Context, proposal model.Proposal) (model.Proposal, bool, error) {
+	return s.changes.Relocate(ctx, proposal)
 }
 
+// Reject 否决提案并把理由入账为要求。等待审批的任务随之失败；已被取代（stale）或取消的
+// 任务只否决旧稿、不再转移状态。
 func (s *Review) Reject(ctx context.Context, proposalID, userID, reason string, at time.Time) (model.Proposal, error) {
 	proposal, err := s.store.GetProposal(ctx, proposalID)
 	if err != nil {
 		return model.Proposal{}, err
 	}
-	var rejected model.Proposal
+	var operation model.Operation
+	if proposal.OperationID != "" {
+		if operation, err = s.store.GetOperation(ctx, proposal.OperationID); err != nil {
+			return model.Proposal{}, err
+		}
+		switch operation.State {
+		case model.OperationAwaitingApproval, model.OperationFailed, model.OperationStale, model.OperationCancelled:
+		default:
+			return model.Proposal{}, fmt.Errorf("operation %q is %s: %w", operation.ID, operation.State, model.ErrStateConflict)
+		}
+	}
+	rejected := proposal
 	switch proposal.ApprovalState {
-	case model.ApprovalRejected:
-		rejected = proposal
 	case model.ApprovalApproved:
 		return model.Proposal{}, fmt.Errorf("proposal %q was approved: %w", proposal.ID, model.ErrStateConflict)
 	case model.ApprovalPending:
@@ -269,28 +262,22 @@ func (s *Review) Reject(ctx context.Context, proposalID, userID, reason string, 
 			rejected.DecisionReason = strings.TrimSpace(reason)
 			rejected, err = s.changes.Reject(ctx, rejected)
 		}
-	}
-	if err != nil {
-		return model.Proposal{}, err
-	}
-	if proposal.OperationID != "" {
-		operation, err := s.store.GetOperation(ctx, proposal.OperationID)
 		if err != nil {
 			return model.Proposal{}, err
 		}
-		if operation.State == model.OperationAwaitingApproval {
-			if _, err := s.store.TransitionOperation(
-				ctx, operation.ID, operation.State, model.OperationFailed,
-				"proposal rejected by user", at,
-			); err != nil {
-				return model.Proposal{}, err
-			}
-		} else if operation.State != model.OperationFailed {
-			return model.Proposal{}, fmt.Errorf("operation %q is %s: %w", operation.ID, operation.State, model.ErrStateConflict)
-		}
-		if err := s.rejectionDirective(ctx, rejected, operation, userID, at); err != nil {
+	}
+	if proposal.OperationID == "" {
+		return rejected, nil
+	}
+	// 否决后任务只可能被同时取代或取消，冲突即以现状为准。
+	if operation.State == model.OperationAwaitingApproval {
+		if _, err := s.store.TransitionOperation(ctx, operation.ID, operation.State, model.OperationFailed,
+			"proposal rejected by user", at); err != nil && !errors.Is(err, model.ErrStateConflict) {
 			return model.Proposal{}, err
 		}
+	}
+	if err := s.rejectionDirective(ctx, rejected, operation, userID, at); err != nil {
+		return model.Proposal{}, err
 	}
 	return rejected, nil
 }
@@ -333,22 +320,6 @@ func chapterPlanIDOf(operation model.Operation) string {
 		return input.ChapterPlanID
 	default:
 		return ""
-	}
-}
-
-func (s *Review) finishApprovedOperation(ctx context.Context, operationID string, at time.Time) error {
-	operation, err := s.store.GetOperation(ctx, operationID)
-	if err != nil {
-		return err
-	}
-	switch operation.State {
-	case model.OperationSucceeded:
-		return nil
-	case model.OperationAwaitingApproval:
-		_, err = s.store.TransitionOperation(ctx, operation.ID, operation.State, model.OperationSucceeded, "", at)
-		return err
-	default:
-		return fmt.Errorf("operation %q is %s: %w", operation.ID, operation.State, model.ErrStateConflict)
 	}
 }
 

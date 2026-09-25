@@ -49,7 +49,7 @@ func restartManager(t *testing.T) (*Manager, *recordingProfiles, StartOperationC
 	}
 	t.Cleanup(func() { s.Close() })
 	now := time.Date(2026, 9, 10, 0, 0, 0, 0, time.UTC)
-	_, err = change.New(s).CommitUser(ctx, model.Proposal{ID: "create", Target: model.AuthorityTarget{Kind: model.AuthorityProject, ID: "book"}, Author: model.Author{Kind: model.AuthorUser, ID: "user"}, Reason: "create", ApprovalState: model.ApprovalPending, CreatedAt: now, Patches: []model.Patch{{Document: model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, Operation: model.PatchPut, Content: json.RawMessage(`{"premise":"test","target_chapters":1}`)}}}, now)
+	_, err = change.New(s).CommitUser(ctx, model.Proposal{ID: "create", Target: model.AuthorityTarget{Kind: model.AuthorityProject, ID: "book"}, Author: model.Author{Kind: model.AuthorUser, ID: "user"}, Reason: "create", ApprovalState: model.ApprovalPending, CreatedAt: now, Patches: []model.Patch{{Document: model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, Operation: model.PatchPut, Content: json.RawMessage(`{"premise":"test"}`)}}}, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestRestartSameIDRejectsDifferentResources(t *testing.T) {
 				ID: "later-edit", Target: model.AuthorityTarget{Kind: model.AuthorityProject, ID: "book"}, BaseRevision: 1,
 				Author: model.Author{Kind: model.AuthorUser, ID: "user"}, Reason: "edit after restart",
 				ApprovalState: model.ApprovalPending, CreatedAt: base.CreatedAt.Add(2 * time.Second),
-				Patches: []model.Patch{{Document: model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, Operation: model.PatchPut, Content: json.RawMessage(`{"premise":"edited","target_chapters":1}`)}},
+				Patches: []model.Patch{{Document: model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, Operation: model.PatchPut, Content: json.RawMessage(`{"premise":"edited"}`)}},
 			}, base.CreatedAt.Add(2*time.Second))
 			if err != nil {
 				t.Fatal(err)

@@ -79,6 +79,13 @@ func TestHomeSearchAndMousePreserveInputAndSelectCorrectBook(t *testing.T) {
 	if m.home.chapters != 1000 || m.page != pageHome {
 		t.Fatal("chapter editing started creation")
 	}
+	// 留空即交给 AI（D63）。
+	m, _ = press(t, m, tea.KeyEnter)
+	m.home.chapterInput.SetValue("")
+	m, _ = press(t, m, tea.KeyEnter)
+	if m.home.chapters != 0 || m.home.editingChapters || !strings.Contains(ansi.Strip(m.homeFrame().text), "篇幅 AI 决定") {
+		t.Fatalf("blank chapters must hand the length to AI: chapters=%d", m.home.chapters)
+	}
 	m, _ = clickHome(t, m, focusSearch)
 	m = typeText(t, m, "099")
 	if len(m.libraryIndices()) != 1 || m.home.cursor != 99 {

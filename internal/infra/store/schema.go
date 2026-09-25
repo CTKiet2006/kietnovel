@@ -7,7 +7,7 @@ import (
 
 // schemaVersion 是当前唯一支持的库结构版本。v1 没有历史数据，结构演进直接改
 // schema 并升版本号；不保留迁移阶梯，版本不符即拒绝打开。
-const schemaVersion = 3
+const schemaVersion = 5
 
 func (s *Store) ensureSchema(ctx context.Context) error {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -226,8 +226,6 @@ var schema = []string{
 		created_at_unix_ms INTEGER NOT NULL,
 		PRIMARY KEY (project_id, revision, kind, cache_key)
 	) STRICT`,
-	`CREATE INDEX derived_documents_by_project
-		ON derived_documents (project_id, revision, kind, cache_key)`,
 	// 证据类派生文档跨 Revision 检索（D48）：有效性按基线判定，不按 Revision 键。
 	`CREATE INDEX derived_documents_by_kind
 		ON derived_documents (project_id, kind, created_at_unix_ms)`,
@@ -242,6 +240,9 @@ var schema = []string{
 		state TEXT NOT NULL CHECK (state IN ('running', 'waiting_user', 'paused', 'completed', 'failed', 'cancelled')),
 		state_reason TEXT NOT NULL DEFAULT '',
 		completed_revision INTEGER NOT NULL DEFAULT 0 CHECK (completed_revision >= 0),
+		-- 运行停下等待其审批的任务（D64），只在等待与暂停时存在。
+		waiting_operation_id TEXT NOT NULL DEFAULT ''
+			CHECK (waiting_operation_id = '' OR state IN ('waiting_user', 'paused')),
 		created_at_unix_ms INTEGER NOT NULL,
 		updated_at_unix_ms INTEGER NOT NULL
 	) STRICT`,

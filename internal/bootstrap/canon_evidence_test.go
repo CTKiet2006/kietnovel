@@ -42,7 +42,9 @@ func canonEvidencePatch(t *testing.T, fact model.CanonFact) model.Patch {
 	return model.Patch{Document: model.DocumentRef{Kind: model.DocumentCanon, ID: fact.ID}, Operation: model.PatchPut, Content: raw}
 }
 
-func TestCanonChangesInvalidateReviewButFutureFactsDoNot(t *testing.T) {
+// D62：窗口审阅的证据只钉正文、结构依赖与要求作用域。事实只进审阅上下文：状态原地
+// 更新到后续章节、用户修订事实都不废掉旧窗口；窗口正文或衔接章正文变化才失效。
+func TestWindowReviewEvidencePinsManuscriptsNotCanon(t *testing.T) {
 	ctx := context.Background()
 	executor := &scriptedQuickExecutor{now: testTime()}
 	api := newQuickTestApp(t, executor)
@@ -54,29 +56,29 @@ func TestCanonChangesInvalidateReviewButFutureFactsDoNot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids := []string{"chapter-chapter-plan-1"}
-	basis, err := novelapp.ReviewBasis(project, ids)
+	firstWindow, laterWindow := []string{"chapter-chapter-plan-1"}, []string{"chapter-chapter-plan-2", "chapter-chapter-plan-3"}
+	firstBasis, err := novelapp.ReviewBasis(project, firstWindow)
 	if err != nil {
 		t.Fatal(err)
 	}
-	input, _ := json.Marshal(model.ReviewRangeInput{ChapterIDs: ids, Basis: basis})
-	story, err := derive.BuildStoryContext(derive.ProjectContent{ID: project.ID, Revision: project.Revision, Intent: project.Intent, Plan: project.Plan, Entities: project.Entities, Canon: project.Canon, Manuscript: project.Manuscript}, model.OperationReviewRange, input)
+	laterBasis, err := novelapp.ReviewBasis(project, laterWindow)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var contextFacts, basisFacts []string
-	for _, document := range story.Documents {
-		if document.Ref.Kind == model.DocumentCanon {
-			contextFacts = append(contextFacts, document.Ref.ID)
-		}
+	input, _ := json.Marshal(model.ReviewRangeInput{ChapterIDs: firstWindow, Basis: firstBasis})
+	story, err := derive.BuildStoryContext(derive.ProjectContent{ID: project.ID, Revision: project.Revision, Plan: project.Plan, Entities: project.Entities, Canon: project.Canon, Manuscript: project.Manuscript}, model.OperationReviewRange, input)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, document := range basis.Documents {
-		if document.Ref.Kind == model.DocumentCanon {
-			basisFacts = append(basisFacts, document.Ref.ID)
-		}
+	if !slices.ContainsFunc(story.Documents, func(document derive.ContextDocument) bool {
+		return document.Ref == model.DocumentRef{Kind: model.DocumentCanon, ID: "chapter-chapter-plan-1-outcome"}
+	}) {
+		t.Fatal("review context must still show the window's own facts")
 	}
-	if !slices.Equal(contextFacts, basisFacts) || len(contextFacts) != 1 {
-		t.Fatalf("context facts %v, evidence facts %v", contextFacts, basisFacts)
+	for _, document := range append(slices.Clone(firstBasis.Documents), laterBasis.Documents...) {
+		if document.Ref.Kind == model.DocumentCanon {
+			t.Fatalf("review basis pins canon %s", document.Ref.Key())
+		}
 	}
 	assertValid := func(project projectdoc.Snapshot, basis model.EvidenceBasis, valid bool) {
 		t.Helper()
@@ -86,36 +88,33 @@ func TestCanonChangesInvalidateReviewButFutureFactsDoNot(t *testing.T) {
 			t.Fatalf("valid = %v, err = %v, want valid %v", got, err, valid)
 		}
 		// The public reader translates the commit engine's mismatch into invalidity.
-		err = api.changes.VerifyBasis(ctx, model.AuthorityTarget{Kind: model.AuthorityProject, ID: project.ID}, basis, project.Revision)
+		err = api.changes.VerifyBasis(ctx, target, basis, project.Revision)
 		if valid && err != nil || !valid && !errors.Is(err, change.ErrBasisMismatch) {
 			t.Fatalf("VerifyBasis = %v, want valid %v", err, valid)
 		}
 	}
-	// 同一角色未来章节的事实不能使第一章的窗口失效。
-	future := project.Canon[2]
-	future.PreviousValue, future.Value = future.Value, json.RawMessage(`"第三章的新事实"`)
-	project = editCanonEvidence(t, api, project, "future-fact", canonEvidencePatch(t, future))
-	assertValid(project, basis, true)
+	// 用户修订第一章的事实，以及状态从第一章原地更新到第三章（D61），都不废掉窗口裁定。
 	first := project.Canon[0]
 	first.PreviousValue, first.Value = first.Value, json.RawMessage(`"第一章事实已改变"`)
 	project = editCanonEvidence(t, api, project, "changed-fact", canonEvidencePatch(t, first))
-	assertValid(project, basis, false)
-	basis, err = novelapp.ReviewBasis(project, ids)
-	if err != nil {
-		t.Fatal(err)
-	}
-	added := model.CanonFact{ID: "new-fact", Kind: model.CanonState, SubjectID: "hero", Predicate: "state.mood", Value: json.RawMessage(`"疑惑"`), SourceChapterID: ids[0]}
-	project = editCanonEvidence(t, api, project, "added-fact", canonEvidencePatch(t, added))
-	assertValid(project, basis, false)
-	basis, err = novelapp.ReviewBasis(project, ids)
-	if err != nil {
-		t.Fatal(err)
-	}
-	project = editCanonEvidence(t, api, project, "deleted-fact", model.Patch{Document: model.DocumentRef{Kind: model.DocumentCanon, ID: added.ID}, Operation: model.PatchDelete})
-	assertValid(project, basis, false)
+	state := model.CanonFact{ID: "hero-state", Kind: model.CanonState, SubjectID: "hero", Predicate: "state.location", Value: json.RawMessage(`"第一站"`), SourceChapterID: firstWindow[0]}
+	project = editCanonEvidence(t, api, project, "state-first", canonEvidencePatch(t, state))
+	state.PreviousValue, state.Value, state.SourceChapterID = state.Value, json.RawMessage(`"第三站"`), laterWindow[1]
+	project = editCanonEvidence(t, api, project, "state-moved", canonEvidencePatch(t, state))
+	assertValid(project, firstBasis, true)
+	assertValid(project, laterBasis, true)
+	// 改第一章正文：第一章的窗口失效，以它为衔接章的后一窗口也失效。
+	chapter := project.Manuscript[0]
+	chapter.Blocks[0].Text = "用户修订了第一章"
+	raw, _ := json.Marshal(chapter)
+	project = editCanonEvidence(t, api, project, "edit-first", model.Patch{Document: model.DocumentRef{Kind: model.DocumentManuscript, ID: chapter.ID}, Operation: model.PatchPut, Content: raw})
+	assertValid(project, firstBasis, false)
+	assertValid(project, laterBasis, false)
 }
 
-func TestQuickWriteReviewsAgainAfterCanonOnlyChange(t *testing.T) {
+// 只改事实不触发重审（D62 已知边界）：账本与正文的一致性归事实核验（D41），
+// 完成的书续跑直接确认完成，不再调用模型。
+func TestQuickWriteKeepsReviewAfterCanonOnlyChange(t *testing.T) {
 	ctx := context.Background()
 	executor := &scriptedQuickExecutor{now: testTime()}
 	api := newQuickTestApp(t, executor)
@@ -131,12 +130,12 @@ func TestQuickWriteReviewsAgainAfterCanonOnlyChange(t *testing.T) {
 	fact.PreviousValue, fact.Value = fact.Value, json.RawMessage(`"主角其实已经死亡"`)
 	project = editCanonEvidence(t, api, project, "correct-fact", canonEvidencePatch(t, fact))
 	verdicts, err := api.Reviews.ListVerdicts(ctx, project)
-	if err != nil || len(verdicts) != 0 {
-		t.Fatalf("old verdicts still valid: %v, %v", verdicts, err)
+	if err != nil || len(verdicts) != 1 {
+		t.Fatalf("window verdict must stay valid: %v, %v", verdicts, err)
 	}
 	before := executor.calls
 	result, err := api.Novels.QuickWrite(ctx, command)
-	if err != nil || result.RunState != model.RunCompleted || executor.calls != before+1 {
+	if err != nil || result.RunState != model.RunCompleted || executor.calls != before {
 		t.Fatalf("result = %+v, calls %d -> %d, err %v", result, before, executor.calls, err)
 	}
 }

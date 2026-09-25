@@ -49,17 +49,21 @@ func TestRecoveryRechecksComplianceAfterConstraintChange(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			proposal := *outcome.Proposal
-			engine := NewEngine(s, change.New(s))
-			constraints, err := change.New(s).SemanticConstraints(ctx, op.Snapshot.BaseRevision, proposal)
+			// 崩溃前：提案已保存、合规证据已写回，任务还没收尾。
+			engine, changes := NewEngine(s, change.New(s)), change.New(s)
+			prepared, err := changes.PrepareExecution(ctx, *outcome.Proposal, op.Attempt)
 			if err != nil {
 				t.Fatal(err)
 			}
-			proposal.Impact.Compliance, err = engine.analyzeCompliance(ctx, passingManuscriptExecutor{}, "before-crash", time.Minute, op, proposal, constraints)
+			admission, err := changes.Admit(ctx, prepared)
+			if err != nil || !admission.Analyze {
+				t.Fatalf("constrained manuscript admission = %+v, %v", admission, err)
+			}
+			report, err := engine.analyzeCompliance(ctx, passingManuscriptExecutor{}, "before-crash", time.Minute, op, prepared, admission)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err = change.New(s).PrepareExecution(ctx, proposal, op.Attempt); err != nil {
+			if _, err = changes.RecordCompliance(ctx, prepared, report, op.Attempt, now); err != nil {
 				t.Fatal(err)
 			}
 			if changed {
@@ -70,7 +74,7 @@ func TestRecoveryRechecksComplianceAfterConstraintChange(t *testing.T) {
 				t.Fatal(err)
 			}
 			executor := &recoveryAnalyzer{}
-			result, err := engine.RunNext(ctx, executor, "recovery", time.Minute, now.Add(3*time.Minute))
+			result, err := engine.RunNextWithExecutors(ctx, []Executor{executor}, "recovery", time.Minute, now.Add(3*time.Minute))
 			if err != nil {
 				t.Fatal(err)
 			}

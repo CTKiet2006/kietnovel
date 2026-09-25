@@ -285,7 +285,7 @@ func TestClaimNextOperationFiltersByExecutorIdentity(t *testing.T) {
 	if _, err := s.CreateOperation(ctx, other); err != nil {
 		t.Fatalf("create other operation: %v", err)
 	}
-	claimed, err := s.ClaimNextOperationForExecutor(ctx, "worker-1", testExecutor, time.Minute, now.Add(time.Second))
+	claimed, err := s.ClaimNextOperationForExecutors(ctx, "worker-1", []string{testExecutor}, time.Minute, now.Add(time.Second))
 	if err != nil {
 		t.Fatalf("claim matching operation: %v", err)
 	}
@@ -490,7 +490,7 @@ func TestSupersededAttemptCannotWriteOrConclude(t *testing.T) {
 	if _, err := s.PutWorkspaceArtifact(ctx, late, nil, first.Attempt); !errors.Is(err, model.ErrStateConflict) {
 		t.Fatalf("stale workspace write error = %v, want model.ErrStateConflict", err)
 	}
-	if err := s.AssertActiveAttempt(ctx, "op", first.Attempt); !errors.Is(err, model.ErrStateConflict) {
+	if err := assertActiveAttempt(ctx, s.db, "op", first.Attempt); !errors.Is(err, model.ErrStateConflict) {
 		t.Fatalf("stale attempt assertion error = %v, want model.ErrStateConflict", err)
 	}
 	if err := s.SaveExecutionArtifacts(ctx, []model.Artifact{{
@@ -505,7 +505,7 @@ func TestSupersededAttemptCannotWriteOrConclude(t *testing.T) {
 	if _, err := s.FailOperation(ctx, "op", first.Attempt, model.FailureResultUnknown, "stale worker", start.Add(4*time.Minute)); !errors.Is(err, model.ErrStateConflict) {
 		t.Fatalf("stale coded failure error = %v, want model.ErrStateConflict", err)
 	}
-	if err := s.AssertActiveAttempt(ctx, "op", second.Attempt); err != nil {
+	if err := assertActiveAttempt(ctx, s.db, "op", second.Attempt); err != nil {
 		t.Fatalf("active attempt must pass: %v", err)
 	}
 	if _, err := s.PutWorkspaceArtifact(ctx, late, nil, second.Attempt); err != nil {

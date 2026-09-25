@@ -31,7 +31,7 @@ func TestWorkbenchStaleCandidateFollowsRelocationRule(t *testing.T) {
 		if err != nil {
 			t.Fatalf("quick write to plan wait: %v", err)
 		}
-		if _, err := api.Decisions.Approve(ctx, runQuickID(result.RunID, "plan")+"-proposal", "user-1", testTime().Add(time.Hour)); err != nil {
+		if _, err := api.Decisions.Approve(ctx, planID(result.RunID, command.Chapters)+"-proposal", "user-1", testTime().Add(time.Hour)); err != nil {
 			t.Fatalf("approve plan: %v", err)
 		}
 		command.CreatedAt = testTime().Add(time.Hour + time.Minute)
@@ -113,7 +113,7 @@ func TestWorkbenchSnapshotAcrossLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("snapshot before run: %v", err)
 	}
-	if snapshot.Run != nil || snapshot.Decision != nil || snapshot.TargetChapters != 1 {
+	if snapshot.Run != nil || snapshot.Decision != nil || snapshot.Length.Final != 0 {
 		t.Fatalf("fresh snapshot = %#v", snapshot)
 	}
 
@@ -127,7 +127,7 @@ func TestWorkbenchSnapshotAcrossLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("quick write: %v", err)
 	}
-	if _, err := api.Decisions.Approve(ctx, runQuickID(result.RunID, "plan")+"-proposal", "user-1", testTime().Add(time.Hour)); err != nil {
+	if _, err := api.Decisions.Approve(ctx, planID(result.RunID, command.Chapters)+"-proposal", "user-1", testTime().Add(time.Hour)); err != nil {
 		t.Fatalf("approve plan: %v", err)
 	}
 	command.CreatedAt = testTime().Add(time.Hour + time.Minute)
@@ -190,7 +190,7 @@ func TestWorkbenchSnapshotAcrossLifecycle(t *testing.T) {
 	if confirmedCount != 2 || snapshot.Decision != nil || snapshot.CurrentPhase != "" {
 		t.Fatalf("completed snapshot: confirmed=%d decision=%v phase=%q", confirmedCount, snapshot.Decision, snapshot.CurrentPhase)
 	}
-	if snapshot.Run == nil || snapshot.Run.State != model.RunCompleted || snapshot.TargetChapters != 2 {
-		t.Fatalf("completed run projection = %#v target=%d", snapshot.Run, snapshot.TargetChapters)
+	if snapshot.Run == nil || snapshot.Run.State != model.RunCompleted || snapshot.Length.Final != 2 {
+		t.Fatalf("completed run projection = %#v length=%+v", snapshot.Run, snapshot.Length)
 	}
 }

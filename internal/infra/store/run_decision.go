@@ -12,6 +12,7 @@ import (
 
 // SettleCreationRun commits a decision only while its complete observation is
 // current. User transitions use TransitionCreationRun and need no observation.
+// 推导出的等待、完成与失败都不等待任务审批，清空等待任务。
 func (s *Store) SettleCreationRun(ctx context.Context, observed model.CreationRun, revision model.Revision, to model.CreationRunState, reason string, at time.Time) (model.CreationRun, error) {
 	if observed.State != model.RunRunning || revision <= model.InitialRevision ||
 		(to != model.RunCompleted && to != model.RunWaitingUser && to != model.RunFailed) {
@@ -30,7 +31,8 @@ func (s *Store) SettleCreationRun(ctx context.Context, observed model.CreationRu
 		completedRevision = revision
 	}
 	settled, err := scanCreationRun(s.db.QueryRowContext(ctx, `
-		UPDATE creation_runs SET state = ?, state_reason = ?, completed_revision = ?, updated_at_unix_ms = ?
+		UPDATE creation_runs SET state = ?, state_reason = ?, completed_revision = ?,
+			waiting_operation_id = '', updated_at_unix_ms = ?
 		WHERE id = ? AND project_id = ? AND state = ? AND goal = ? AND strategy = ?
 		AND EXISTS (
 			SELECT 1 FROM authority_streams

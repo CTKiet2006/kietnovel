@@ -45,7 +45,7 @@ func TestCancelledExecutionReleasesOperationForResume(t *testing.T) {
 	if _, err := authorityStore.CreateOperation(background, operation); err != nil {
 		t.Fatalf("create operation: %v", err)
 	}
-	claimed, err := authorityStore.ClaimNextOperationForExecutor(background, "worker-1", testExecutor, time.Minute, now)
+	claimed, err := authorityStore.ClaimNextOperationForExecutors(background, "worker-1", []string{testExecutor}, time.Minute, now)
 	if err != nil {
 		t.Fatalf("claim operation: %v", err)
 	}
@@ -62,7 +62,7 @@ func TestCancelledExecutionReleasesOperationForResume(t *testing.T) {
 	if stored.State != model.OperationQueued || stored.Attempt != 1 || stored.LeaseOwner != "" || stored.LeaseUntil != nil || stored.Error != releasedMessage {
 		t.Fatalf("operation was not released: %+v", stored)
 	}
-	again, err := authorityStore.ClaimNextOperationForExecutor(background, "worker-1", testExecutor, time.Minute, now.Add(time.Second))
+	again, err := authorityStore.ClaimNextOperationForExecutors(background, "worker-1", []string{testExecutor}, time.Minute, now.Add(time.Second))
 	if err != nil || again.Attempt != 2 {
 		t.Fatalf("re-claim after release: %+v err=%v", again, err)
 	}

@@ -68,7 +68,9 @@ func New(s *store.Store, options Options) *App {
 	if analyzer, ok := options.Executors.LLM.(change.SemanticAnalyzer); ok {
 		changes = change.NewWithSemanticAnalyzer(s, analyzer)
 	}
-	engine := operation.NewEngine(s, changes, options.Contracts...)
+	// 审阅是小说领域的证据契约，与扩展注入的契约一样静态装配（D64）。
+	contracts := append([]operation.VerdictContract{{Kind: model.OperationReviewRange, Validate: novel.ReviewEvidence(s)}}, options.Contracts...)
+	engine := operation.NewEngine(s, changes, contracts...)
 	projects := project.New(s, changes)
 	analyzer, _ := options.Executors.LLM.(resource.PreferenceAnalyzer)
 	resources := resource.New(s, changes, projects, analyzer)

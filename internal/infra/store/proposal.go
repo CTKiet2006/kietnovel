@@ -81,14 +81,15 @@ func (s *Store) saveProposal(ctx context.Context, query execQuerier, proposal mo
 	return stored, nil
 }
 
-// RelocateProposal 把待裁决提案的基线搬到新 Revision（D51）：只改 pending 行的载荷、
-// 摘要与基线；attempt 为正时在同一事务内确认它仍是当前执行（D42）。
-func (s *Store) RelocateProposal(ctx context.Context, proposal model.Proposal, attempt int, now time.Time) error {
+// UpdatePendingProposal 改写待裁决提案的基线与影响（D51 重定位、合规证据回写）：同一份
+// 提交（model.SameSubmission）、仍为 pending、基线不回退；attempt 为正时在同一事务内确认
+// 它仍是当前执行（D42）。
+func (s *Store) UpdatePendingProposal(ctx context.Context, proposal model.Proposal, attempt int, now time.Time) error {
 	if err := proposal.Validate(); err != nil {
 		return err
 	}
 	if proposal.ApprovalState != model.ApprovalPending || now.IsZero() {
-		return fmt.Errorf("relocation requires a pending proposal and a time: %w", model.ErrInvalid)
+		return fmt.Errorf("proposal update requires a pending proposal and a time: %w", model.ErrInvalid)
 	}
 	payload, digest, err := encodeProposal(proposal)
 	if err != nil {
@@ -96,7 +97,7 @@ func (s *Store) RelocateProposal(ctx context.Context, proposal model.Proposal, a
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("begin proposal relocation: %w", err)
+		return fmt.Errorf("begin proposal update: %w", err)
 	}
 	defer tx.Rollback()
 	stored, _, err := s.getProposal(ctx, tx, proposal.ID)
@@ -106,24 +107,23 @@ func (s *Store) RelocateProposal(ctx context.Context, proposal model.Proposal, a
 	if stored.ApprovalState != model.ApprovalPending {
 		return fmt.Errorf("proposal %q is %s: %w", proposal.ID, stored.ApprovalState, model.ErrStateConflict)
 	}
+	if !model.SameSubmission(stored, proposal) || proposal.BaseRevision < stored.BaseRevision {
+		return fmt.Errorf("proposal %q update may only move its base forward and refresh its impact: %w", proposal.ID, model.ErrIdempotencyConflict)
+	}
 	if attempt > 0 {
 		if err := assertActiveAttempt(ctx, tx, proposal.OperationID, attempt); err != nil {
 			return err
 		}
 	}
-	result, err := tx.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		UPDATE proposals
 		SET payload = ?, content_digest = ?, base_revision = ?, updated_at_unix_ms = ?
 		WHERE id = ? AND state = ?`,
-		payload, digest, proposal.BaseRevision, now.UnixMilli(), proposal.ID, model.ApprovalPending)
-	if err != nil {
-		return fmt.Errorf("relocate proposal: %w", err)
-	}
-	if rows, err := result.RowsAffected(); err != nil || rows != 1 {
-		return fmt.Errorf("proposal %q relocation raced: %w", proposal.ID, model.ErrStateConflict)
+		payload, digest, proposal.BaseRevision, now.UnixMilli(), proposal.ID, model.ApprovalPending); err != nil {
+		return fmt.Errorf("update pending proposal: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit proposal relocation: %w", err)
+		return fmt.Errorf("commit proposal update: %w", err)
 	}
 	return nil
 }
@@ -145,8 +145,9 @@ func (s *Store) GetProposalByOperation(ctx context.Context, operationID string) 
 	return s.GetProposal(ctx, id)
 }
 
-// CommitProposal 是用户裁决路径：审批决定与新 Revision 同事务落库，提案已由用户批准，
-// 不受执行归属限制。
+// CommitProposal 是用户裁决路径：审批决定与新 Revision 同事务落库，不受执行归属限制。
+// 任务提案只在任务仍等待审批时可批准，任务同一事务内转为 succeeded——已取消或被新推导
+// 取代的任务，其旧稿不能入账（D64）。
 func (s *Store) CommitProposal(ctx context.Context, proposal model.Proposal) (model.ChangeSet, error) {
 	return s.commitProposal(ctx, proposal, 0)
 }
@@ -205,8 +206,16 @@ func (s *Store) commitProposal(ctx context.Context, proposal model.Proposal, att
 		return model.ChangeSet{}, fmt.Errorf("proposal %q has invalid state %q: %w", proposal.ID, stored.ApprovalState, model.ErrStateConflict)
 	}
 
-	if attempt > 0 {
+	switch {
+	case attempt > 0:
 		if err := assertActiveAttempt(ctx, tx, proposal.OperationID, attempt); err != nil {
+			return model.ChangeSet{}, err
+		}
+	case proposal.OperationID != "" && stored.ApprovalState == model.ApprovalPending:
+		if _, err := transitionOperationTx(ctx, tx, proposal.OperationID,
+			model.OperationAwaitingApproval, model.OperationSucceeded, "", "", *proposal.DecidedAt, 0); errors.Is(err, model.ErrStateConflict) {
+			return model.ChangeSet{}, fmt.Errorf("operation %q no longer awaits approval: %w", proposal.OperationID, model.ErrStateConflict)
+		} else if err != nil {
 			return model.ChangeSet{}, err
 		}
 	}

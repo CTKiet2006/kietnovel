@@ -15,7 +15,7 @@ import (
 func novelFixture(t *testing.T, plans, written int) projectdoc.Snapshot {
 	t.Helper()
 	project := projectdoc.Snapshot{
-		ID: "book", Revision: 2, Intent: model.Intent{Premise: "故事", TargetChapters: 5}, Index: projectdoc.DocumentIndex{},
+		ID: "book", Revision: 2, Intent: model.Intent{Premise: "故事"}, Index: projectdoc.DocumentIndex{},
 		Plan: []model.PlanNode{
 			{ID: "volume-1", Kind: model.PlanVolume, Order: 1, Title: "卷一", Summary: "开端"},
 			{ID: "arc-1", Kind: model.PlanArc, ParentID: "volume-1", Order: 1, Title: "弧一", Summary: "启程"},
@@ -100,18 +100,16 @@ func TestCanonGapsFollowRevisions(t *testing.T) {
 	}
 }
 
-func storedTestVerdict(status string, chapters []string, findings []model.ReviewFinding, intent bool) StoredVerdict {
+// storedTestVerdict 构造一份有效裁定：key 区分不同审阅，at 决定新旧（越大越新）。
+func storedTestVerdict(key string, at int, status string, chapters []string, findings []model.ReviewFinding, checks ...model.RequirementCheck) StoredVerdict {
 	verdict := model.ReviewVerdict{
-		Status: status, Revision: 2, ChapterIDs: chapters, ReviewKey: "review", Findings: findings,
+		Status: status, Revision: 2, ChapterIDs: chapters, ReviewKey: "review", Findings: findings, Checks: checks,
 		Basis: model.EvidenceBasis{Documents: []model.DocumentBasis{{Ref: model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, Revision: 1}}},
 	}
 	if findings == nil {
 		verdict.Findings = []model.ReviewFinding{}
 	}
-	if intent {
-		verdict.Intent = &model.IntentVerification{RequiredPresent: true, ForbiddenAbsent: true, EndingConsistent: true}
-	}
-	return StoredVerdict{Verdict: verdict, Key: "review", CreatedAt: time.Date(2026, 9, 8, 0, 0, 0, 0, time.UTC)}
+	return StoredVerdict{Verdict: verdict, Key: key, CreatedAt: time.Date(2026, 9, 8, at, 0, 0, 0, time.UTC)}
 }
 
 // acceptedVerdict 给裁定附上用户裁决（D43）：推导器只看生效裁定。
@@ -123,16 +121,22 @@ func acceptedVerdict(verdict StoredVerdict, findings ...string) StoredVerdict {
 	return verdict
 }
 
-func TestNovelDeriverNextFollowsNovelRules(t *testing.T) {
-	run := model.CreationRun{
+func testRun(target, budget int) model.CreationRun {
+	return model.CreationRun{
 		ID: "run:book:1", ProjectID: "book",
-		Goal:     model.NovelGoal{Premise: "故事", TargetChapters: 5}.Goal(),
-		Strategy: model.CreationRunStrategy{PlanWindowChapters: 3, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 1},
+		Goal:     model.NovelGoal{Premise: "故事", TargetChapters: target}.Goal(),
+		Strategy: model.CreationRunStrategy{PlanWindowChapters: 3, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: budget},
 	}
-	window := []string{"chapter-i", "chapter-ii", "chapter-iii"}
-	whole := []string{"chapter-i", "chapter-ii", "chapter-iii", "chapter-iiii", "chapter-iiiii"}
+}
+
+func TestNovelDeriverNextFollowsNovelRules(t *testing.T) {
+	run := testRun(5, 1)
+	first := []string{"chapter-i", "chapter-ii", "chapter-iii"}
+	last := []string{"chapter-iiii", "chapter-iiiii"}
 	blocking := []model.ReviewFinding{{ChapterID: "chapter-ii", Severity: model.FindingBlocking, Note: "第二章崩了"}}
+	lastBlocking := []model.ReviewFinding{{ChapterID: "chapter-iiii", Severity: model.FindingBlocking, Note: "第四章崩了"}}
 	note := []model.ReviewFinding{{ChapterID: "chapter-iii", Severity: model.FindingNote, Note: "动机要更明确"}}
+	firstPass := storedTestVerdict("review-a", 1, model.ReviewPass, first, nil)
 	cases := []struct {
 		name     string
 		plans    int
@@ -146,20 +150,26 @@ func TestNovelDeriverNextFollowsNovelRules(t *testing.T) {
 		wantFail string
 		check    func(t *testing.T, work creation.WorkItem)
 	}{
-		{name: "empty plan develops", wantKind: model.OperationDevelopPlan, wantID: "run:book:1:plan"},
+		{name: "empty plan develops", wantKind: model.OperationDevelopPlan, wantID: "run:book:1:plan:r3:f5"},
 		{name: "unwritten window writes next chapter", plans: 3, written: 1,
 			wantKind: model.OperationWriteChapter, wantID: "run:book:1:chapter:chapter-plan-ii"},
 		{name: "written window reviews before extending", plans: 3, written: 3,
-			wantKind: model.OperationReviewRange, wantID: "run:book:1:review:r2",
+			wantKind: model.OperationReviewRange, wantID: reviewOperationID(run.ID, first, 2, nil),
 			check: func(t *testing.T, work creation.WorkItem) {
 				input := work.Input.(model.ReviewRangeInput)
-				if input.VerifyIntent || len(input.ChapterIDs) != 3 || len(input.Basis.Documents) == 0 {
+				if len(input.ChapterIDs) != 3 || len(input.Requirements) != 0 || len(input.Basis.Documents) == 0 {
 					t.Fatalf("window review input = %#v", input)
 				}
 			}},
+		// 蓝图一次铺满也按窗口节奏审（D62）：写第 4 章前先审完前 3 章。
+		{name: "full blueprint reviews each window before writing on", plans: 5, written: 3,
+			wantKind: model.OperationReviewRange, wantID: reviewOperationID(run.ID, first, 2, nil)},
+		{name: "reviewed window writes on", plans: 5, written: 3,
+			evidence: Evidence{Verdicts: []StoredVerdict{firstPass}},
+			wantKind: model.OperationWriteChapter, wantID: "run:book:1:chapter:chapter-plan-iiii"},
 		{name: "reviewed window extends with notes", plans: 3, written: 3,
-			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict(model.ReviewPass, window, note, false)}},
-			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3",
+			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict("review-a", 1, model.ReviewPass, first, note)}},
+			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3:r5:f5",
 			check: func(t *testing.T, work creation.WorkItem) {
 				input := work.Input.(model.RevisePlanInput)
 				if input.ExistingChapters != 3 || input.RequestedChapters != 5 || len(input.ReviewNotes) != 1 {
@@ -167,32 +177,44 @@ func TestNovelDeriverNextFollowsNovelRules(t *testing.T) {
 				}
 			}},
 		{name: "blocked window rewrites within budget", plans: 3, written: 3,
-			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict(model.ReviewBlocked, window, blocking, false)}},
+			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict("review-a", 1, model.ReviewBlocked, first, blocking)}},
 			wantKind: model.OperationRewriteChapter, wantID: "run:book:1:rewrite:chapter-ii:r2"},
 		{name: "exhausted budget waits", plans: 3, written: 3,
-			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict(model.ReviewBlocked, window, blocking, false)}, RepairsUsed: 1},
-			wantWait: "自动修订预算 1 次已用尽"},
-		{name: "complete manuscript needs final review", plans: 5, written: 5,
-			wantKind: model.OperationReviewRange, wantID: "run:book:1:review:r2",
+			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict("review-a", 1, model.ReviewBlocked, first, blocking)}, Repairs: map[string]int{"chapter-ii": 1}},
+			wantWait: "第 2 章《第一一章》的自动修订预算（每章 1 次）已用尽"},
+		// 预算按章计（D63）：别的章用过的重写次数不挤占本章。
+		{name: "budget is per chapter", plans: 5, written: 5,
+			evidence: Evidence{Verdicts: []StoredVerdict{firstPass, storedTestVerdict("review-b", 2, model.ReviewBlocked, last, lastBlocking)}, Repairs: map[string]int{"chapter-ii": 1}},
+			wantKind: model.OperationRewriteChapter, wantID: "run:book:1:rewrite:chapter-iiii:r2"},
+		// 完成时只审尚未覆盖的窗口，不再累计重审全书。
+		{name: "complete manuscript reviews the uncovered window", plans: 5, written: 5,
+			evidence: Evidence{Verdicts: []StoredVerdict{firstPass}},
+			wantKind: model.OperationReviewRange, wantID: reviewOperationID(run.ID, last, 2, nil),
 			check: func(t *testing.T, work creation.WorkItem) {
-				if input := work.Input.(model.ReviewRangeInput); !input.VerifyIntent || len(input.ChapterIDs) != 5 {
-					t.Fatalf("final review input = %#v", input)
+				if input := work.Input.(model.ReviewRangeInput); len(input.ChapterIDs) != 2 || input.ChapterIDs[0] != "chapter-iiii" {
+					t.Fatalf("final window input = %#v", input)
 				}
 			}},
-		{name: "verified final pass completes", plans: 5, written: 5,
-			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict(model.ReviewPass, whole, nil, true)}},
+		{name: "every chapter covered completes", plans: 5, written: 5,
+			evidence: Evidence{Verdicts: []StoredVerdict{firstPass, storedTestVerdict("review-b", 2, model.ReviewPass, last, nil)}},
 			wantDone: "全书 5 章完成并通过审阅"},
-		{name: "unverified final pass fails", plans: 5, written: 5,
-			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict(model.ReviewPass, whole, nil, false)}},
-			wantFail: "审阅通过但未逐项核验意图或用户要求，需要人工检查"},
+		{name: "later blocked window rewrites its chapter", plans: 5, written: 5,
+			evidence: Evidence{Verdicts: []StoredVerdict{firstPass, storedTestVerdict("review-b", 2, model.ReviewBlocked, last, lastBlocking)}},
+			wantKind: model.OperationRewriteChapter, wantID: "run:book:1:rewrite:chapter-iiii:r2"},
+		// 同一窗口审过多次时以最新的有效裁定为准。
+		{name: "newest verdict of a window wins", plans: 3, written: 3,
+			evidence: Evidence{Verdicts: []StoredVerdict{
+				storedTestVerdict("review-a", 1, model.ReviewBlocked, first, blocking), storedTestVerdict("review-b", 2, model.ReviewPass, first, nil),
+			}},
+			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3:r5:f5"},
 		{name: "accepted blocking finding passes the window", plans: 3, written: 3,
-			evidence: Evidence{Verdicts: []StoredVerdict{acceptedVerdict(storedTestVerdict(model.ReviewBlocked, window, blocking, false), "review/0")}},
-			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3"},
+			evidence: Evidence{Verdicts: []StoredVerdict{acceptedVerdict(storedTestVerdict("review-a", 1, model.ReviewBlocked, first, blocking), "review-a/0")}},
+			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3:r5:f5"},
 		{name: "accepted final finding completes", plans: 5, written: 5,
-			evidence: Evidence{Verdicts: []StoredVerdict{acceptedVerdict(storedTestVerdict(model.ReviewBlocked, whole, blocking, true), "review/0")}},
+			evidence: Evidence{Verdicts: []StoredVerdict{firstPass, acceptedVerdict(storedTestVerdict("review-b", 2, model.ReviewBlocked, last, lastBlocking), "review-b/0")}},
 			wantDone: "全书 5 章完成并通过审阅"},
 		{name: "edited chapter verifies its facts before anything else", plans: 3, written: 3,
-			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict(model.ReviewBlocked, window, blocking, false)}},
+			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict("review-a", 1, model.ReviewBlocked, first, blocking)}},
 			edit:     func(project *projectdoc.Snapshot) { editChapter(project, "chapter-ii", 3) },
 			wantKind: model.OperationReviseCanon, wantID: "run:book:1:canon:chapter-ii:r3",
 			check: func(t *testing.T, work creation.WorkItem) {
@@ -217,34 +239,46 @@ func TestNovelDeriverNextFollowsNovelRules(t *testing.T) {
 			if tc.edit != nil {
 				tc.edit(&project)
 			}
-			next, err := Policy{}.Next(project, run, tc.evidence)
-			if err != nil {
-				t.Fatalf("next: %v", err)
-			}
-			switch {
-			case tc.wantWait != "":
-				if next.Work != nil || !strings.Contains(next.Wait, tc.wantWait) {
-					t.Fatalf("step = %#v, want wait %q", next, tc.wantWait)
-				}
-			case tc.wantDone != "":
-				if next.Work != nil || next.Done != tc.wantDone {
-					t.Fatalf("step = %#v, want done %q", next, tc.wantDone)
-				}
-			case tc.wantFail != "":
-				if next.Work != nil || next.Fail != tc.wantFail {
-					t.Fatalf("step = %#v, want fail %q", next, tc.wantFail)
-				}
-			default:
-				if next.Work == nil || next.Work.Kind != tc.wantKind || next.Work.ID != tc.wantID {
-					t.Fatalf("step = %#v, want %s %s", next, tc.wantKind, tc.wantID)
-				}
-				if err := next.Work.Input.Validate(); err != nil {
-					t.Fatalf("work input: %v", err)
-				}
-				if tc.check != nil {
-					tc.check(t, *next.Work)
-				}
-			}
+			assertStep(t, project, run, tc.evidence, stepWant{kind: tc.wantKind, id: tc.wantID, wait: tc.wantWait, done: tc.wantDone, fail: tc.wantFail, check: tc.check})
 		})
+	}
+}
+
+type stepWant struct {
+	kind             model.OperationKind
+	id               string
+	wait, done, fail string
+	check            func(t *testing.T, work creation.WorkItem)
+}
+
+func assertStep(t *testing.T, project projectdoc.Snapshot, run model.CreationRun, evidence Evidence, want stepWant) {
+	t.Helper()
+	next, err := Policy{}.Next(project, run, evidence)
+	if err != nil {
+		t.Fatalf("next: %v", err)
+	}
+	switch {
+	case want.wait != "":
+		if next.Work != nil || !strings.Contains(next.Wait, want.wait) {
+			t.Fatalf("step = %#v, want wait %q", next, want.wait)
+		}
+	case want.done != "":
+		if next.Work != nil || next.Done != want.done {
+			t.Fatalf("step = %#v, want done %q", next, want.done)
+		}
+	case want.fail != "":
+		if next.Work != nil || next.Fail != want.fail {
+			t.Fatalf("step = %#v, want fail %q", next, want.fail)
+		}
+	default:
+		if next.Work == nil || next.Work.Kind != want.kind || next.Work.ID != want.id {
+			t.Fatalf("step = %#v, want %s %s", next, want.kind, want.id)
+		}
+		if err := next.Work.Input.Validate(); err != nil {
+			t.Fatalf("work input: %v", err)
+		}
+		if want.check != nil {
+			want.check(t, *next.Work)
+		}
 	}
 }
