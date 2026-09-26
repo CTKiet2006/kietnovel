@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/voocel/agentcore"
 	"github.com/voocel/ainovel-cli/internal/domain/change"
 	domainmodel "github.com/voocel/ainovel-cli/internal/domain/model"
+	"github.com/voocel/ainovel-cli/internal/domain/narrative"
 	"github.com/voocel/ainovel-cli/internal/infra/activity"
 	"github.com/voocel/ainovel-cli/internal/infra/capability/prompt"
 	"github.com/voocel/ainovel-cli/internal/infra/llm/models"
@@ -49,142 +51,131 @@ func TestRuntimeToolsRespectAuthoritySnapshotAndWorkspaceBoundary(t *testing.T) 
 	runtime := NewRuntime(authorityStore)
 	runtime.now = func() time.Time { return now.Add(2 * time.Second) }
 
-	read, err := runtime.toolExecutor(operation, "writer.compose@1", "authority_read", nil, nil)
-	if err != nil {
-		t.Fatalf("build read tool: %v", err)
+	read := testTool(t, runtime, operation, "writer.compose@1", prompt.ToolAuthorityRead, nil)
+	// 回查按故事语言定位（D66）：章号、名称，结果里没有文档 ID 与存储信封。
+	chapterView, err := read(ctx, json.RawMessage(`{"chapter":1}`))
+	if err != nil || !strings.Contains(string(chapterView), `"chapter":1`) || strings.Contains(string(chapterView), "chapter-plan-1") {
+		t.Fatalf("chapter read = %s, %v", chapterView, err)
 	}
-	if _, err := read(ctx, json.RawMessage(`{"kind":"intent","id":"root","revision":2}`)); !errors.Is(err, domainmodel.ErrInvalid) {
-		t.Fatalf("future revision read error = %v, want domainmodel.ErrInvalid", err)
+	entityView, err := read(ctx, json.RawMessage(`{"entity":"主角"}`))
+	if err != nil || !strings.Contains(string(entityView), `"predicate":"state.origin"`) || strings.Contains(string(entityView), `"hero"`) {
+		t.Fatalf("entity read = %s, %v", entityView, err)
 	}
-	if _, err := read(ctx, json.RawMessage(`{"kind":"intent","id":"root","revision":1}`)); err != nil {
-		t.Fatalf("read frozen revision: %v", err)
+	if _, err := read(ctx, json.RawMessage(`{"chapter":2}`)); !errors.Is(err, domainmodel.ErrNotFound) || !strings.Contains(err.Error(), "第 2 章") {
+		t.Fatalf("missing chapter err = %v", err)
+	}
+	for _, raw := range []string{`{"chapter":1,"entity":"主角"}`, `{"kind":"intent","id":"root","revision":1}`} {
+		if _, err := read(ctx, json.RawMessage(raw)); err == nil {
+			t.Fatalf("read %s accepted", raw)
+		}
 	}
 
-	putChapter, err := runtime.toolExecutor(operation, "writer.compose@1", "workspace_put_chapter", nil, nil)
+	// 章的身份由宿主按任务确定：模型只写标题与段落，回执只有键与版本。
+	putChapter := testTool(t, runtime, operation, "writer.compose@1", prompt.ToolWorkspacePutChapter, nil)
+	receipt, err := putChapter(ctx, json.RawMessage(`{"key":"draft","chapter":{"title":"山门","blocks":[{"id":"p-1","text":"他抵达山门……"}]}}`))
+	if err != nil || string(receipt) != `{"key":"draft","version":1}` {
+		t.Fatalf("put chapter = %s, %v", receipt, err)
+	}
+	stored, err := authorityStore.GetWorkspaceArtifact(ctx, operation.ID, "draft")
 	if err != nil {
-		t.Fatalf("build put chapter tool: %v", err)
+		t.Fatal(err)
 	}
-	chapter := domainmodel.ManuscriptChapter{
-		ID: "chapter-1", PlanNodeID: "chapter-plan-1", Number: 1, Title: "山门", Author: domainmodel.AuthorAI,
-		Blocks: []domainmodel.ManuscriptBlock{{ID: "p-1", Text: "他抵达山门……"}},
-	}
-	chapterArgs, _ := json.Marshal(map[string]any{
-		"key":     "chapter/chapter-1",
-		"chapter": chapter,
-	})
-	if _, err := putChapter(ctx, chapterArgs); err != nil {
-		t.Fatalf("write operation workspace: %v", err)
+	var chapter domainmodel.ManuscriptChapter
+	if err := json.Unmarshal(stored.Content, &chapter); err != nil || chapter.ID != "chapter-plan-1" || chapter.PlanNodeID != "chapter-plan-1" ||
+		chapter.Number != 1 || chapter.Author != domainmodel.AuthorAI {
+		t.Fatalf("host-filled chapter = %+v, %v", chapter, err)
 	}
 
 	var submitted domainmodel.Proposal
-	submitTool, err := runtime.toolExecutor(operation, "writer.compose@1", "proposal_submit", func(proposal domainmodel.Proposal) (domainmodel.Proposal, error) {
+	submitTool := testTool(t, runtime, operation, "writer.compose@1", prompt.ToolProposalSubmit, func(proposal domainmodel.Proposal) (domainmodel.Proposal, error) {
 		submitted = proposal
 		return proposal, nil
-	}, nil)
-	if err != nil {
-		t.Fatalf("build submit tool: %v", err)
+	})
+	submit := func(version int, facts ...map[string]any) (json.RawMessage, error) {
+		submitted = domainmodel.Proposal{}
+		raw, err := json.Marshal(map[string]any{"reason": "提交本章", "workspace_key": "draft", "workspace_version": version, "facts": facts})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return submitTool(ctx, raw)
 	}
-	chapterContent, _ := json.Marshal(chapter)
-	canonContent, _ := json.Marshal(domainmodel.CanonFact{
-		ID: "chapter-1-outcome", Kind: domainmodel.CanonEvent, SubjectID: "hero",
-		Predicate: "event.chapter_outcome", Value: json.RawMessage(`"抵达山门"`), SourceChapterID: chapter.ID,
-	})
-	manuscriptPatch := domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentManuscript, ID: "chapter-1"}, Operation: domainmodel.PatchPut, Content: chapterContent}
-	// 真实模型犯过的错：给已有事实另起新 id。同一主体+谓词就是同一事实（D61），
-	// 宿主按键并入已有节点并补 old_value，模型无需记住 ID。
-	renamedContent, _ := json.Marshal(domainmodel.CanonFact{
-		ID: "hero-origin-update", Kind: domainmodel.CanonState, SubjectID: "hero", Predicate: "state.origin",
-		Value: json.RawMessage(`"孤儿"`), SourceChapterID: chapter.ID,
-	})
-	renamedArgs, _ := json.Marshal(map[string]any{
-		"reason": "更新出身", "workspace_key": "chapter/chapter-1",
-		"patches": []domainmodel.Patch{manuscriptPatch,
-			{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: "hero-origin-update"}, Operation: domainmodel.PatchPut, Content: renamedContent},
-		},
-	})
-	if _, err := submitTool(ctx, renamedArgs); err != nil {
-		t.Fatalf("renamed fact must merge into the existing key: %v", err)
+	// 同一主体+谓词就是同一事实（D61）：宿主按自然键并入已有节点并从冻结基线补 old_value。
+	if _, err := submit(1, map[string]any{"subject": "主角", "predicate": "state.origin", "value": "孤儿"}); err != nil {
+		t.Fatalf("keyed fact must merge into the existing node: %v", err)
 	}
 	var merged domainmodel.CanonFact
 	if err := json.Unmarshal(submitted.Patches[1].Content, &merged); err != nil || submitted.Patches[1].Document.ID != "hero-origin" ||
-		merged.ID != "hero-origin" || string(merged.PreviousValue) != `"农家子"` {
+		string(merged.PreviousValue) != `"农家子"` || merged.SourceChapterID != "chapter-plan-1" {
 		t.Fatalf("merged patch = %+v (%v)", submitted.Patches[1], err)
 	}
-	proposalArgs, _ := json.Marshal(map[string]any{
-		"reason":        "提交章节候选",
-		"workspace_key": "chapter/chapter-1",
-		"patches": []domainmodel.Patch{manuscriptPatch,
-			{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: "chapter-1-outcome"}, Operation: domainmodel.PatchPut, Content: canonContent},
-		},
-	})
-	if _, err := submitTool(ctx, proposalArgs); err != nil {
-		t.Fatalf("submit proposal candidate: %v", err)
+	result, err := submit(1, map[string]any{"subject": "主角", "predicate": "event.chapter_outcome", "value": "抵达山门"})
+	if err != nil || string(result) != `{"status":"submitted"}` {
+		t.Fatalf("submit = %s, %v", result, err)
 	}
-	if submitted.OperationID != operation.ID || submitted.BaseRevision != 1 {
+	if submitted.OperationID != operation.ID || submitted.BaseRevision != 1 || len(submitted.Patches) != 2 {
 		t.Fatalf("submitted proposal = %#v", submitted)
+	}
+	// 故事依赖由宿主按事实变化写入（D40）。
+	var written domainmodel.ManuscriptChapter
+	if err := json.Unmarshal(submitted.Patches[0].Content, &written); err != nil || len(written.DependsOn) != 1 || written.DependsOn[0].ID != "hero" {
+		t.Fatalf("manuscript dependencies = %+v, %v", written.DependsOn, err)
 	}
 	if _, err := authorityStore.GetProposal(ctx, submitted.ID); !errors.Is(err, domainmodel.ErrNotFound) {
 		t.Fatalf("capability wrote authority proposal directly: %v", err)
 	}
-	workspaceRead, err := runtime.toolExecutor(operation, "writer.compose@1", prompt.ToolWorkspaceRead, nil, nil)
-	if err != nil {
-		t.Fatal(err)
+	for _, tc := range []struct {
+		name    string
+		version int
+		facts   []map[string]any
+		want    string
+	}{
+		{"stale version", 2, []map[string]any{{"subject": "主角", "predicate": "event.x", "value": "x"}}, "version mismatch"},
+		{"invalid version", 0, []map[string]any{{"subject": "主角", "predicate": "event.x", "value": "x"}}, "positive version"},
+		{"unknown subject", 1, []map[string]any{{"subject": "路人", "predicate": "event.x", "value": "x"}}, "实体「路人」不存在"},
+		{"canon still required", 1, nil, "Canon Delta"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := submit(tc.version, tc.facts...)
+			if err == nil || !strings.Contains(err.Error(), tc.want) || submitted.ID != "" {
+				t.Fatalf("error=%v submitted=%s", err, submitted.ID)
+			}
+			// 回给模型的错误只有故事标签。
+			if strings.Contains(err.Error(), `"chapter-plan-1"`) || strings.Contains(err.Error(), `"hero"`) {
+				t.Fatalf("internal id leaked: %v", err)
+			}
+		})
 	}
-	result, err := workspaceRead(ctx, json.RawMessage(`{"key":"chapter/chapter-1"}`))
+	legacy, _ := json.Marshal(map[string]any{"reason": "旧协议", "workspace_key": "draft", "workspace_version": 1, "patches": []any{}})
+	if _, err := submitTool(ctx, legacy); err == nil {
+		t.Fatal("document patches accepted from the model")
+	}
+
+	workspaceRead := testTool(t, runtime, operation, "writer.compose@1", prompt.ToolWorkspaceRead, nil)
+	readBack, err := workspaceRead(ctx, json.RawMessage(`{"key":"draft"}`))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var readable struct {
-		Content domainmodel.ManuscriptChapter `json:"content"`
-		Version int64                         `json:"version"`
+		Content narrative.ChapterDraft `json:"content"`
+		Version int64                  `json:"version"`
 	}
-	if err := json.Unmarshal(result, &readable); err != nil || len(readable.Content.Blocks) != 1 || readable.Content.Blocks[0].Text != chapter.Blocks[0].Text || readable.Version != 1 {
-		t.Fatalf("workspace must return structured chapter JSON: %s, %v", result, err)
+	if err := json.Unmarshal(readBack, &readable); err != nil || len(readable.Content.Blocks) != 1 || readable.Content.Title != "山门" ||
+		readable.Version != 1 || strings.Contains(string(readBack), "plan_node_id") {
+		t.Fatalf("workspace must read back the draft shape: %s, %v", readBack, err)
 	}
-	attachment := domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: "chapter-1-outcome"}, Operation: domainmodel.PatchPut, Content: canonContent}
-	for _, tc := range []struct {
-		name    string
-		version int
-		patches []domainmodel.Patch
-		want    string
-	}{
-		{"reference", 1, []domainmodel.Patch{attachment}, ""},
-		{"stale version", 2, []domainmodel.Patch{attachment}, "version mismatch"},
-		{"invalid version", 0, []domainmodel.Patch{attachment}, "positive version"},
-		{"ambiguous manuscript", 1, []domainmodel.Patch{manuscriptPatch, attachment}, "omit manuscript patches"},
-		{"canon still required", 1, nil, "Canon Delta"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			submitted = domainmodel.Proposal{}
-			raw, err := json.Marshal(map[string]any{"reason": "引用工作稿", "workspace_key": "chapter/chapter-1", "workspace_version": tc.version, "patches": tc.patches})
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, err = submitTool(ctx, raw)
-			if tc.want != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.want) || submitted.ID != "" {
-					t.Fatalf("error=%v submitted=%s", err, submitted.ID)
-				}
-				return
-			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			// 引用提交原样带上草稿，故事依赖由宿主按 Canon Delta 写入（D40）。
-			want, err := domainmodel.NormalizeSubmission([]domainmodel.Patch{attachment, {
-				Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentManuscript, ID: "chapter-1"}, Operation: domainmodel.PatchPut, Content: chapterContent,
-			}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(submitted.Patches) != 2 || string(submitted.Patches[1].Content) != string(want[1].Content) {
-				t.Fatalf("reference did not carry the draft: %+v", submitted.Patches)
-			}
-		})
+	if _, err := workspaceRead(ctx, json.RawMessage(`{"key":"ch-1"}`)); !errors.Is(err, domainmodel.ErrNotFound) || !strings.Contains(err.Error(), `"ch-1"`) {
+		t.Fatalf("missing workspace err = %v, want the key", err)
 	}
-	if _, err := submitTool(ctx, json.RawMessage(`{"reason":"重复键","workspace_key":"chapter/chapter-1","workspace_keys":["chapter/chapter-1"],"patches":[]}`)); err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
-		t.Fatalf("duplicate field diagnostic: %v", err)
+}
+
+// testTool 构造单个工具，故事按任务冻结基线加载。
+func testTool(t *testing.T, runtime *Runtime, operation domainmodel.Operation, worker, name string, submit func(domainmodel.Proposal) (domainmodel.Proposal, error)) toolFunc {
+	t.Helper()
+	execute, err := runtime.toolExecutor(operation, worker, name, runtime.storyLoader(operation), submit, nil)
+	if err != nil {
+		t.Fatalf("build %s: %v", name, err)
 	}
+	return execute
 }
 
 func TestBuiltinCapabilityToolsHaveRuntimeImplementations(t *testing.T) {
@@ -282,17 +273,9 @@ func TestRuntimeRestoresCommittedConversationAndWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim second attempt: %v", err)
 	}
-	chapterContent, _ := json.Marshal(chapter)
-	canonContent, _ := json.Marshal(domainmodel.CanonFact{
-		ID: "chapter-1-outcome", Kind: domainmodel.CanonEvent, SubjectID: "hero",
-		Predicate: "event.chapter_outcome", Value: json.RawMessage(`"完成已有工作稿"`), SourceChapterID: chapter.ID,
-	})
 	proposalArgs, _ := json.Marshal(map[string]any{
-		"reason": "继续并提交已有工作稿", "workspace_key": artifact.Key,
-		"patches": []domainmodel.Patch{
-			{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentManuscript, ID: chapter.ID}, Operation: domainmodel.PatchPut, Content: chapterContent},
-			{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: "chapter-1-outcome"}, Operation: domainmodel.PatchPut, Content: canonContent},
-		},
+		"reason": "继续并提交已有工作稿", "workspace_key": artifact.Key, "workspace_version": artifact.Version,
+		"facts": []map[string]any{{"subject": "主角", "predicate": "event.chapter_outcome", "value": "完成已有工作稿"}},
 	})
 	model := &recoveryRuntimeModel{proposalArgs: proposalArgs, now: now.Add(7 * time.Second)}
 	runtime := boundRuntime(authorityStore, model)
@@ -301,7 +284,7 @@ func TestRuntimeRestoresCommittedConversationAndWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resume runtime: %v", err)
 	}
-	if outcome.Proposal == nil || outcome.Proposal.Patches[0].Document.ID != chapter.ID {
+	if outcome.Proposal == nil || len(outcome.Proposal.Patches) != 2 || outcome.Proposal.Patches[0].Document.ID != chapter.ID {
 		t.Fatalf("outcome = %#v", outcome)
 	}
 	if len(model.requests) != 2 {
@@ -352,14 +335,16 @@ func TestRuntimeReviewSubmitsVerdictWithoutProposal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load review capability: %v", err)
 	}
-	task := json.RawMessage(`{"chapter_ids":["chapter-1","chapter-2"],"requirements":[{"id":"directive:hook","text":"每章结尾留钩子"},{"id":"intent:forbidden:0","text":"不写感情线","settle":true}],"basis":{"documents":[{"ref":{"kind":"manuscript","id":"chapter-1"},"revision":2}]}}`)
+	task := json.RawMessage(`{"chapter_ids":["chapter-1","chapter-2"],"requirements":[{"id":"directive:hook","text":"每章结尾留钩子"},{"id":"intent:forbidden:0","text":"不写感情线","settle":true}],"basis":{"documents":[{"ref":{"kind":"manuscript","id":"chapter-1"},"revision":1}]}}`)
+	target := domainmodel.AuthorityTarget{Kind: domainmodel.AuthorityProject, ID: "book-review"}
+	seedWrittenChapters(t, ctx, authorityStore, target, now, 2)
 	operation := domainmodel.Operation{
 		ID: "review-1", Kind: domainmodel.OperationReviewRange,
-		Target: domainmodel.AuthorityTarget{Kind: domainmodel.AuthorityProject, ID: "book-review"},
+		Target: target,
 		State:  domainmodel.OperationQueued,
 		RunID:  createRuntimeTestRun(t, ctx, authorityStore, "book-review", now),
-		Snapshot: runtimeSnapshot(task, 3, domainmodel.ApprovalAuto,
-			seedRuntimeProfile(t, ctx, authorityStore, "book-review", worker, task, 3)),
+		Snapshot: runtimeSnapshot(task, 1, domainmodel.ApprovalAuto,
+			seedRuntimeProfile(t, ctx, authorityStore, "book-review", worker, task, 1)),
 		Input: task, CreatedAt: now, UpdatedAt: now,
 	}
 	if _, err := authorityStore.CreateOperation(ctx, operation); err != nil {
@@ -372,7 +357,7 @@ func TestRuntimeReviewSubmitsVerdictWithoutProposal(t *testing.T) {
 	// 递进式纠错：漏掉要求核验被拒 → 必须下结论的项给 pending 被拒 → 完整裁定通过。
 	// 章节范围与发现由宿主从任务输入和审阅记录填入（D60），模型不再复述，
 	// "漏审范围""与记录不一致"这两类错误在结构上已不可能发生。
-	findings := []map[string]any{{"chapter_id": "chapter-2", "severity": "note", "note": "第二章节奏偏慢"}}
+	findings := []map[string]any{{"chapter": 2, "severity": "note", "note": "第二章节奏偏慢"}}
 	review, _ := json.Marshal(map[string]any{
 		"key": "review/findings", "findings": findings,
 	})
@@ -402,8 +387,8 @@ func TestRuntimeReviewSubmitsVerdictWithoutProposal(t *testing.T) {
 	if err := json.Unmarshal(outcome.Verdict, &verdict); err != nil {
 		t.Fatalf("decode verdict: %v", err)
 	}
-	if verdict.Status != domainmodel.ReviewPass || verdict.Revision != 3 ||
-		len(verdict.ChapterIDs) != 2 || len(verdict.Findings) != 1 ||
+	if verdict.Status != domainmodel.ReviewPass || verdict.Revision != 1 ||
+		len(verdict.ChapterIDs) != 2 || len(verdict.Findings) != 1 || verdict.Findings[0].ChapterID != "chapter-2" ||
 		verdict.ReviewKey != "review/findings" || len(verdict.Checks) != 2 ||
 		verdict.CheckStatus("intent:forbidden:0") != domainmodel.CheckSatisfied || verdict.CheckStatus("directive:hook") != domainmodel.CheckPending {
 		t.Fatalf("verdict = %#v", verdict)
@@ -905,49 +890,31 @@ func TestAffectedRewriteSubmissionCoversEveryWorkspaceChapter(t *testing.T) {
 		{ID: "chapter-1", PlanNodeID: "plan-1", Number: 1, Title: "第一章", Author: domainmodel.AuthorAI, Blocks: []domainmodel.ManuscriptBlock{{ID: "block-1", Text: "新正文一"}}},
 		{ID: "chapter-2", PlanNodeID: "plan-2", Number: 2, Title: "第二章", Author: domainmodel.AuthorAI, Blocks: []domainmodel.ManuscriptBlock{{ID: "block-2", Text: "新正文二"}}},
 	}
-	var patches []domainmodel.Patch
-	keys := make([]string, 0, len(chapters))
-	for index, chapter := range chapters {
+	versions := make(map[string]int64, len(chapters))
+	for _, chapter := range chapters {
 		content, err := json.Marshal(chapter)
 		if err != nil {
 			t.Fatal(err)
 		}
 		key := "chapter/" + chapter.ID
-		keys = append(keys, key)
+		versions[key] = 1
 		if _, err := authorityStore.PutWorkspaceArtifact(ctx, domainmodel.WorkspaceArtifact{
 			OperationID: operation.ID, Key: key, MediaType: workspace.ChapterMediaType,
 			Content: content, UpdatedAt: now,
 		}, nil, operation.Attempt); err != nil {
 			t.Fatalf("put workspace chapter: %v", err)
 		}
-		patches = append(patches,
-			domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentManuscript, ID: chapter.ID}, Operation: domainmodel.PatchPut, Content: content},
-			domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: fmt.Sprintf("fact-%d", index+1)}, Operation: domainmodel.PatchPut,
-				Content: json.RawMessage(fmt.Sprintf(`{"id":"fact-%d","kind":"event","subject_id":"hero","predicate":"event.rewrite_%d","new_value":true,"source_chapter_id":"%s"}`, index+1, index+1, chapter.ID))},
-		)
 	}
 	runtime := NewRuntime(authorityStore)
-	if err := runtime.validateSubmissionArtifact(ctx, operation, keys, "", patches); err != nil {
-		t.Fatalf("validate complete batch: %v", err)
-	}
-	if err := runtime.validateSubmissionArtifact(ctx, operation, keys[:1], "", patches); err == nil {
-		t.Fatal("incomplete affected rewrite submission was accepted")
-	}
-	attachments := []domainmodel.Patch{patches[1], patches[3]}
-	versions := map[string]int64{keys[0]: 1, keys[1]: 1}
-	assembled, err := runtime.materializeWorkspaceChapters(ctx, operation, keys, versions, attachments)
+	drafts, err := runtime.workspaceDrafts(ctx, operation, versions)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := runtime.validateSubmissionArtifact(ctx, operation, keys, "", assembled); err != nil {
-		t.Fatalf("versioned batch rejected: %v", err)
+	if len(drafts) != 2 || drafts[0].ID != "chapter-1" || drafts[1].Blocks[0].Text != "新正文二" {
+		t.Fatalf("batch did not preserve both manuscripts: %+v", drafts)
 	}
-	if len(assembled) != 4 || string(assembled[2].Content) != string(patches[0].Content) || string(assembled[3].Content) != string(patches[2].Content) {
-		t.Fatal("batch did not preserve both manuscripts")
-	}
-	delete(versions, keys[1])
-	if _, err := runtime.materializeWorkspaceChapters(ctx, operation, keys, versions, attachments); err == nil {
-		t.Fatal("missing chapter version accepted")
+	if _, err := runtime.workspaceDrafts(ctx, operation, nil); err == nil {
+		t.Fatal("affected rewrite without drafts accepted")
 	}
 	// 只引用部分章节在工作区层面是一致的；是否覆盖任务的全部章节由任务提交契约判定
 	// （model.ValidateChange，工具边界经 changes.Validate 执行）。
@@ -984,28 +951,21 @@ func TestRuntimePlanSubmissionEnforcesRequestedChapters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim operation: %v", err)
 	}
-	patchFor := func(node domainmodel.PlanNode) domainmodel.Patch {
-		content, err := json.Marshal(node)
-		if err != nil {
-			t.Fatalf("marshal plan node: %v", err)
-		}
-		return domainmodel.Patch{
-			Document:  domainmodel.DocumentRef{Kind: domainmodel.DocumentPlan, ID: node.ID},
-			Operation: domainmodel.PatchPut, Content: content,
-		}
+	// 规划按序号编辑卷弧章（D66），ID 与顺序由宿主给。
+	structure := map[string]any{
+		"volumes": []map[string]any{{"volume": 1, "title": "第一卷", "summary": "开端"}},
+		"arcs":    []map[string]any{{"arc": 1, "volume": 1, "title": "第一幕", "summary": "启程"}},
 	}
-	volume := domainmodel.PlanNode{ID: "volume-1", Kind: domainmodel.PlanVolume, Order: 1, Title: "第一卷", Summary: "开端"}
-	arc := domainmodel.PlanNode{ID: "arc-1", Kind: domainmodel.PlanArc, ParentID: "volume-1", Order: 1, Title: "第一幕", Summary: "启程"}
-	chapterOne := domainmodel.PlanNode{ID: "chapter-plan-1", Kind: domainmodel.PlanChapter, ParentID: "arc-1", Order: 1, Title: "第一章", Summary: "出发"}
-	chapterTwo := domainmodel.PlanNode{ID: "chapter-plan-2", Kind: domainmodel.PlanChapter, ParentID: "arc-1", Order: 2, Title: "第二章", Summary: "多余"}
-	overshoot, _ := json.Marshal(map[string]any{
-		"reason":  "多规划一章",
-		"patches": []domainmodel.Patch{patchFor(volume), patchFor(arc), patchFor(chapterOne), patchFor(chapterTwo)},
-	})
-	exact, _ := json.Marshal(map[string]any{
-		"reason":  "按请求规划一章",
-		"patches": []domainmodel.Patch{patchFor(volume), patchFor(arc), patchFor(chapterOne)},
-	})
+	submission := func(reason string, chapters ...map[string]any) json.RawMessage {
+		args := map[string]any{"reason": reason, "chapters": chapters}
+		maps.Copy(args, structure)
+		raw, _ := json.Marshal(args)
+		return raw
+	}
+	overshoot := submission("多规划一章",
+		map[string]any{"chapter": 1, "arc": 1, "title": "第一章", "summary": "出发"},
+		map[string]any{"chapter": 2, "arc": 1, "title": "第二章", "summary": "多余"})
+	exact := submission("按请求规划一章", map[string]any{"chapter": 1, "arc": 1, "title": "第一章", "summary": "出发"})
 	model := &planRuntimeModel{steps: []json.RawMessage{overshoot, exact}, now: now.Add(2 * time.Second)}
 	runtime := boundRuntime(authorityStore, model)
 	runtime.now = func() time.Time { return now.Add(3 * time.Second) }
@@ -1166,55 +1126,102 @@ func TestWriterSubmissionRequiresRedeclaringChapterFacts(t *testing.T) {
 		t.Fatalf("put workspace chapter: %v", err)
 	}
 	runtime := NewRuntime(authorityStore)
-	manuscript := domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentManuscript, ID: "chapter-1"}, Operation: domainmodel.PatchPut, Content: content}
-	canon := func(raw string) domainmodel.Patch {
-		var fact domainmodel.CanonFact
-		if err := json.Unmarshal([]byte(raw), &fact); err != nil {
-			t.Fatal(err)
-		}
-		return domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: fact.ID}, Operation: domainmodel.PatchPut, Content: json.RawMessage(raw)}
-	}
-	submitTool, err := runtime.toolExecutor(operation, "writer.compose@1", "proposal_submit", func(proposal domainmodel.Proposal) (domainmodel.Proposal, error) {
+	var last domainmodel.Proposal
+	submitTool := testTool(t, runtime, operation, "writer.revise@1", prompt.ToolProposalSubmit, func(proposal domainmodel.Proposal) (domainmodel.Proposal, error) {
+		last = proposal
 		return proposal, nil
-	}, nil)
-	if err != nil {
-		t.Fatalf("build submit tool: %v", err)
-	}
-	submit := func(patches ...domainmodel.Patch) error {
-		args, err := json.Marshal(map[string]any{
-			"reason": "重写提交", "workspace_key": "chapter/chapter-1",
-			"patches": append([]domainmodel.Patch{manuscript}, patches...),
-		})
+	})
+	submit := func(fields map[string]any) error {
+		args := map[string]any{"reason": "重写提交", "workspace_key": "chapter/chapter-1", "workspace_version": 1}
+		maps.Copy(args, fields)
+		raw, err := json.Marshal(args)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = submitTool(ctx, args)
+		_, err = submitTool(ctx, raw)
 		return err
 	}
-	fresh := `{"id":"fact-2","kind":"event","subject_id":"hero","predicate":"event.left","new_value":true,"source_chapter_id":"chapter-1"}`
-	if err := submit(canon(fresh)); !errors.Is(err, domainmodel.ErrStructuralConflict) || !strings.Contains(err.Error(), `redeclare canon "fact-1"`) {
+	fresh := []map[string]any{{"subject": "主角", "predicate": "event.left", "value": true}}
+	// 漏掉重申报：错误用故事标签指出是哪条事实，模型不需要知道它的 ID。
+	err = submit(map[string]any{"facts": fresh})
+	if !errors.Is(err, domainmodel.ErrStructuralConflict) || !strings.Contains(err.Error(), "must redeclare canon 「主角」event.done（第 1 章）") ||
+		strings.Contains(err.Error(), `"fact-1"`) {
 		t.Fatalf("missing redeclaration err = %v", err)
 	}
-	foreign := `{"id":"fact-3","kind":"event","subject_id":"hero","predicate":"event.elsewhere","new_value":true,"source_chapter_id":"chapter-9"}`
-	if err := submit(canon(fresh), canon(foreign)); !errors.Is(err, domainmodel.ErrStructuralConflict) || !strings.Contains(err.Error(), "chapter-9") {
+	foreign := []map[string]any{{"subject": "主角", "predicate": "event.elsewhere", "value": true, "chapter": 9}}
+	if err := submit(map[string]any{"facts": foreign}); !errors.Is(err, domainmodel.ErrInvalid) || !strings.Contains(err.Error(), "第 9 章") {
 		t.Fatalf("foreign source err = %v", err)
 	}
-	confirmed := `{"id":"fact-1","kind":"event","subject_id":"hero","predicate":"event.done","old_value":true,"new_value":true,"source_chapter_id":"chapter-1"}`
-	if err := submit(canon(confirmed), canon(fresh)); err != nil {
-		t.Fatalf("redeclared submission err = %v", err)
+	done := []map[string]any{{"subject": "主角", "predicate": "event.done"}}
+	for name, fields := range map[string]map[string]any{
+		"confirm and add": {"facts": fresh, "confirm_facts": done},
+		"confirm only":    {"confirm_facts": done},
+		"remove and add":  {"facts": fresh, "remove_facts": done},
+	} {
+		if err := submit(fields); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
 	}
-	// A rewrite can explicitly confirm every existing fact without retyping any
-	// value or duplicating the versioned workspace manuscript.
-	args, _ := json.Marshal(map[string]any{
-		"reason": "确认事实不变", "workspace_key": "chapter/chapter-1", "workspace_version": 1,
-		"patches": []domainmodel.Patch{}, "confirm_canon": []string{"fact-1"},
+	// 解析只看冻结基线：之后的用户修改不会成为确认的原值。
+	edited, _ := json.Marshal(domainmodel.CanonFact{ID: "fact-1", Kind: domainmodel.CanonEvent, SubjectID: "hero", Predicate: "event.done",
+		PreviousValue: json.RawMessage(`true`), Value: json.RawMessage(`false`), SourceChapterID: "chapter-1"})
+	userEdit := approvedRuntimeProposal("user-edit", target, 1, now, domainmodel.Patch{
+		Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: "fact-1"}, Operation: domainmodel.PatchPut, Content: edited})
+	pending := userEdit
+	pending.ApprovalState, pending.DecidedBy, pending.DecidedAt = domainmodel.ApprovalPending, nil, nil
+	if _, err := authorityStore.SaveProposal(ctx, pending); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := authorityStore.CommitProposal(ctx, userEdit); err != nil {
+		t.Fatal(err)
+	}
+	frozen := testTool(t, runtime, operation, "writer.revise@1", prompt.ToolProposalSubmit, func(proposal domainmodel.Proposal) (domainmodel.Proposal, error) {
+		last = proposal
+		return proposal, nil
 	})
-	if _, err := submitTool(ctx, args); err != nil {
-		t.Fatalf("reference draft with confirmed canon: %v", err)
+	raw, _ := json.Marshal(map[string]any{"reason": "确认", "workspace_key": "chapter/chapter-1", "workspace_version": 1, "confirm_facts": done})
+	if _, err := frozen(ctx, raw); err != nil {
+		t.Fatal(err)
 	}
-	deleted := domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentCanon, ID: "fact-1"}, Operation: domainmodel.PatchDelete}
-	if err := submit(deleted, canon(fresh)); err != nil {
-		t.Fatalf("deletion counts as redeclaration: %v", err)
+	var confirmed domainmodel.CanonFact
+	if err := json.Unmarshal(last.Patches[1].Content, &confirmed); err != nil || string(confirmed.Value) != "true" || string(confirmed.PreviousValue) != "true" {
+		t.Fatalf("confirmation must copy the frozen baseline: %s, %v", last.Patches[1].Content, err)
+	}
+}
+
+// seedWrittenChapters 提交一个写完 count 章的最小作品：正文 chapter-N 实现计划 plan-N。
+func seedWrittenChapters(t *testing.T, ctx context.Context, authorityStore *store.Store, target domainmodel.AuthorityTarget, now time.Time, count int) {
+	t.Helper()
+	document := func(ref domainmodel.DocumentRef, value any) domainmodel.Patch {
+		content, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return domainmodel.Patch{Document: ref, Operation: domainmodel.PatchPut, Content: content}
+	}
+	patches := []domainmodel.Patch{
+		document(domainmodel.DocumentRef{Kind: domainmodel.DocumentIntent, ID: "root"}, domainmodel.Intent{Premise: "凡人修仙"}),
+		document(domainmodel.DocumentRef{Kind: domainmodel.DocumentPlan, ID: "volume-1"}, domainmodel.PlanNode{ID: "volume-1", Kind: domainmodel.PlanVolume, Title: "卷一", Summary: "入道"}),
+		document(domainmodel.DocumentRef{Kind: domainmodel.DocumentPlan, ID: "arc-1"}, domainmodel.PlanNode{ID: "arc-1", Kind: domainmodel.PlanArc, ParentID: "volume-1", Title: "弧一", Summary: "山门"}),
+	}
+	for number := 1; number <= count; number++ {
+		plan, chapter := fmt.Sprintf("plan-%d", number), fmt.Sprintf("chapter-%d", number)
+		patches = append(patches,
+			document(domainmodel.DocumentRef{Kind: domainmodel.DocumentPlan, ID: plan}, domainmodel.PlanNode{
+				ID: plan, Kind: domainmodel.PlanChapter, ParentID: "arc-1", Order: number, Title: fmt.Sprintf("第%d章", number), Summary: "推进"}),
+			document(domainmodel.DocumentRef{Kind: domainmodel.DocumentManuscript, ID: chapter}, domainmodel.ManuscriptChapter{
+				ID: chapter, PlanNodeID: plan, Number: number, Title: fmt.Sprintf("第%d章", number), Author: domainmodel.AuthorAI,
+				Blocks: []domainmodel.ManuscriptBlock{{ID: "b1", Text: "正文"}}}),
+		)
+	}
+	seed := approvedRuntimeProposal("seed", target, 0, now, patches...)
+	pending := seed
+	pending.ApprovalState, pending.DecidedBy, pending.DecidedAt = domainmodel.ApprovalPending, nil, nil
+	if _, err := authorityStore.SaveProposal(ctx, pending); err != nil {
+		t.Fatalf("save seed: %v", err)
+	}
+	if _, err := authorityStore.CommitProposal(ctx, seed); err != nil {
+		t.Fatalf("commit seed: %v", err)
 	}
 }
 

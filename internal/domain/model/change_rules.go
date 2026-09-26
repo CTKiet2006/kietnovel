@@ -438,8 +438,8 @@ func checkWordCounts(directives []Directive, chapter ManuscriptChapter) error {
 			continue
 		}
 		if words < low || (high > 0 && words > high) {
-			return fmt.Errorf("chapter %q has %d characters, directive %q requires %d-%d: %w",
-				chapter.ID, words, directive.ID, low, high, ErrInvalid)
+			return fmt.Errorf("chapter %q has %d characters, the requirement 「%s」 needs %d-%d: %w",
+				chapter.ID, words, directive.Text, low, high, ErrInvalid)
 		}
 	}
 	return nil

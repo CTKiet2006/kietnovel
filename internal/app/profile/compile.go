@@ -29,53 +29,53 @@ type CompileCommand struct {
 func (s *Compiler) Compile(ctx context.Context, command CompileCommand) (prompt.Compiled, error) {
 	target := model.AuthorityTarget{Kind: model.AuthorityProject, ID: command.ProjectID}
 	revision := command.Revision
-	contextKey, err := derive.ContextKey(command.Kind, command.Input)
+	viewKey, err := derive.ViewKey(command.Kind, command.Input)
 	if err != nil {
 		return prompt.Compiled{}, err
 	}
 	var intent model.Intent
-	var ownership []model.OwnershipRule
-	var storyContext json.RawMessage
-	cachedContext, err := s.store.GetDerivedDocument(ctx, command.ProjectID, revision, derive.StoryContextKind, contextKey)
+	var view derive.ModelView
+	cached, err := s.store.GetDerivedDocument(ctx, command.ProjectID, revision, derive.ViewKind, viewKey)
 	switch {
 	case err == nil:
-		intentDocument, err := s.store.GetDocument(ctx, target, model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, revision)
+		intentDocument, err := s.store.GetDocument(ctx, target, model.DocumentRef{Kind: model.DocumentIntent, ID: model.SingletonDocumentID}, revision)
 		if err != nil {
 			return prompt.Compiled{}, err
 		}
 		if err := json.Unmarshal(intentDocument.Content, &intent); err != nil {
 			return prompt.Compiled{}, fmt.Errorf("decode project intent: %w", err)
 		}
-		ownership, err = projectdoc.LoadDocuments[model.OwnershipRule](ctx, s.store, target, model.DocumentOwnership, revision)
-		if err != nil {
-			return prompt.Compiled{}, err
+		if err := json.Unmarshal(cached.Content, &view); err != nil {
+			return prompt.Compiled{}, fmt.Errorf("decode cached model view: %w", err)
 		}
-		storyContext = append(json.RawMessage(nil), cachedContext.Content...)
 	case errors.Is(err, model.ErrNotFound):
 		project, err := s.projects.Project(ctx, command.ProjectID, revision)
 		if err != nil {
 			return prompt.Compiled{}, err
 		}
-		intent, ownership = project.Intent, project.Ownership
-		contextValue, err := derive.BuildStoryContext(derive.ProjectContent{
+		intent = project.Intent
+		view, err = derive.BuildModelView(derive.ProjectContent{
 			ID: project.ID, Revision: project.Revision, Compass: project.Compass, Plan: project.Plan, Entities: project.Entities, Canon: project.Canon,
 			Manuscript: project.Manuscript, Ownership: project.Ownership,
 		}, command.Kind, command.Input)
 		if err != nil {
 			return prompt.Compiled{}, err
 		}
-		storyContext, err = json.Marshal(contextValue)
+		content, err := json.Marshal(view)
 		if err != nil {
-			return prompt.Compiled{}, fmt.Errorf("encode project context: %w", err)
+			return prompt.Compiled{}, fmt.Errorf("encode model view: %w", err)
 		}
+		// 以落库的那份为准：并发编译同一任务时，所有人拿到同一份视图。
 		stored, err := s.store.SaveDerivedDocument(ctx, model.DerivedDocument{
-			ProjectID: command.ProjectID, Revision: revision, Kind: derive.StoryContextKind,
-			Key: contextKey, Content: storyContext, CreatedAt: command.CreatedAt,
+			ProjectID: command.ProjectID, Revision: revision, Kind: derive.ViewKind,
+			Key: viewKey, Content: content, CreatedAt: command.CreatedAt,
 		})
 		if err != nil {
 			return prompt.Compiled{}, err
 		}
-		storyContext = stored.Content
+		if err := json.Unmarshal(stored.Content, &view); err != nil {
+			return prompt.Compiled{}, fmt.Errorf("decode model view: %w", err)
+		}
 	default:
 		return prompt.Compiled{}, err
 	}
@@ -139,24 +139,19 @@ func (s *Compiler) Compile(ctx context.Context, command CompileCommand) (prompt.
 		}
 		creatorProfiles[i] = profile
 	}
-	task, err := promptTask(command.Input)
+	ownership, err := json.Marshal(view.Ownership)
 	if err != nil {
-		return prompt.Compiled{}, err
+		return prompt.Compiled{}, fmt.Errorf("encode ownership view: %w", err)
+	}
+	storyContext, err := json.Marshal(view.Context)
+	if err != nil {
+		return prompt.Compiled{}, fmt.Errorf("encode story context: %w", err)
 	}
 	return s.prompts.Reload(ctx, prompt.CompileRequest{
 		ProjectID: command.ProjectID, CoreProtocolVersion: command.CoreProtocolVersion,
 		Worker: worker, Packs: packs, CreatorProfiles: creatorProfiles,
 		Intent: intent, Ownership: ownership, OverlayRules: overlayRules,
-		StoryContext: storyContext, Task: task,
+		StoryContext: storyContext, Task: view.Task,
 		BaseRevision: revision, ProjectOverlayRevision: revision,
 	}, command.CreatedAt)
-}
-
-func promptTask(input json.RawMessage) (json.RawMessage, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(input, &fields); err != nil {
-		return nil, fmt.Errorf("decode task input: %w", err)
-	}
-	delete(fields, model.BasisField)
-	return json.Marshal(fields)
 }

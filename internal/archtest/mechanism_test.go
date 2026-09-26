@@ -164,7 +164,7 @@ func TestNovelDeriverStaysPure(t *testing.T) {
 			continue
 		}
 		switch dependency {
-		case "domain/model", "app/project", "domain/creation":
+		case "domain/model", "domain/narrative", "app/project", "domain/creation": // narrative 只由快照渲染故事语言，同样是纯函数
 		default:
 			t.Errorf("%s 依赖了 %s：纯规则只读快照并返回步骤，不能加载状态或执行任务（D49）", path, imported)
 		}

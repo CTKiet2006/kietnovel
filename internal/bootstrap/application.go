@@ -15,6 +15,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/app/resource"
 	"github.com/voocel/ainovel-cli/internal/app/task"
 	"github.com/voocel/ainovel-cli/internal/app/workbench"
+	"github.com/voocel/ainovel-cli/internal/assets"
 	"github.com/voocel/ainovel-cli/internal/domain/change"
 	"github.com/voocel/ainovel-cli/internal/domain/creation"
 	"github.com/voocel/ainovel-cli/internal/domain/model"
@@ -71,9 +72,10 @@ func New(s *store.Store, options Options) *App {
 	// 审阅是小说领域的证据契约，与扩展注入的契约一样静态装配（D64）。
 	contracts := append([]operation.VerdictContract{{Kind: model.OperationReviewRange, Validate: novel.ReviewEvidence(s)}}, options.Contracts...)
 	engine := operation.NewEngine(s, changes, contracts...)
-	projects := project.New(s, changes)
+	official := resource.NewOfficial(s, changes, assets.OfficialPack())
+	projects := project.New(s, changes, official)
 	analyzer, _ := options.Executors.LLM.(resource.PreferenceAnalyzer)
-	resources := resource.New(s, changes, projects, analyzer)
+	resources := resource.New(s, changes, projects, official, analyzer)
 	prompts := profile.New(s, projects)
 	tasks := task.New(s, engine, options.Executors, prompts)
 	reviews := novel.NewReviews(s, changes, projects)

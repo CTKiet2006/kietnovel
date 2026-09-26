@@ -9,7 +9,15 @@ import (
 // schema 并升版本号；不保留迁移阶梯，版本不符即拒绝打开。
 const schemaVersion = 5
 
-func (s *Store) ensureSchema(ctx context.Context) error {
+// unsupportedSchema 说明库结构版本不符以及怎样重新开始：v1 不迁移旧库（D38），旧库改名
+// 保留备查，程序在原位置新建空库。
+func unsupportedSchema(path string, version int) error {
+	return fmt.Errorf("作品库 %s 的结构版本是 %d，当前程序需要 %d，v1 不迁移旧库。"+
+		"把它连同同名的 -wal、-shm 文件与 .artifacts 目录（如有）改名备份，再重新启动即可新建空库",
+		path, version, schemaVersion)
+}
+
+func (s *Store) ensureSchema(ctx context.Context, path string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin schema setup: %w", err)
@@ -34,7 +42,7 @@ func (s *Store) ensureSchema(ctx context.Context) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("database schema version %d is not supported (expected %d)", current, schemaVersion)
+		return unsupportedSchema(path, current)
 	}
 }
 

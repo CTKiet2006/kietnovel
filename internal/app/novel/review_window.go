@@ -17,7 +17,7 @@ import (
 // requirement 是一项要核验的要求：用户要求、意图条目或收官要求。
 type requirement struct {
 	model.Requirement
-	scope     string // 用户要求的作用域原文，扩窗时随原文交给规划安排落点
+	scope     string // 用户要求的作用域（故事语言，全书为空），扩窗时随原文交给规划安排落点
 	covers    func(number int) bool
 	end       int  // 作用域末章；0 表示尚未确定
 	universal bool // 禁止项：每个窗口都必须给出结论
@@ -29,6 +29,7 @@ type requirement struct {
 // dropped 是作用域在全书之内没有章节的用户要求：它们无从兑现，由调用方决定如何处理。
 func requirements(project projectdoc.Snapshot, final int) (list []requirement, dropped []model.Directive) {
 	plans := model.ChapterPlansInOrder(project.Plan)
+	story := storyOf(project)
 	whole := func(int) bool { return true }
 	add := func(r requirement) {
 		if strings.TrimSpace(r.Text) != "" {
@@ -69,7 +70,11 @@ func requirements(project projectdoc.Snapshot, final int) (list []requirement, d
 			dropped = append(dropped, directive)
 			continue
 		}
-		add(requirement{Requirement: model.Requirement{ID: "directive:" + directive.ID, Text: directive.Text}, scope: directive.Scope, covers: covers, end: end})
+		var scopeLabel string
+		if directive.Scope != model.DirectiveScopeProject {
+			scopeLabel = story.DescribeScope(directive)
+		}
+		add(requirement{Requirement: model.Requirement{ID: "directive:" + directive.ID, Text: directive.Text}, scope: scopeLabel, covers: covers, end: end})
 	}
 	return list, dropped
 }
@@ -91,9 +96,10 @@ func finaleRequirement(project projectdoc.Snapshot, final int) requirement {
 	}
 	fmt.Fprintf(&identity, "%s\x00", ending)
 	var threads []string
+	story := storyOf(project)
 	for _, fact := range project.Canon {
 		if fact.Kind == model.CanonForeshadow && !fact.Resolved {
-			threads = append(threads, fmt.Sprintf("%s（%s）", fact.ID, fact.Predicate))
+			threads = append(threads, story.FactSummary(fact))
 			fmt.Fprintf(&identity, "%s\x00", fact.ID)
 		}
 	}
@@ -259,8 +265,8 @@ func (l reviewLedger) pending(covered int) []string {
 		if r.universal || r.finale || (r.end != 0 && r.end <= covered) || l.satisfied(r) {
 			continue
 		}
-		if r.scope != "" && r.scope != model.DirectiveScopeProject {
-			texts = append(texts, fmt.Sprintf("%s（作用域 %s）", r.Text, r.scope))
+		if r.scope != "" {
+			texts = append(texts, fmt.Sprintf("%s（作用域：%s）", r.Text, r.scope))
 			continue
 		}
 		texts = append(texts, r.Text)

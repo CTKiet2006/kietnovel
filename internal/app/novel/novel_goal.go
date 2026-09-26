@@ -9,6 +9,7 @@ import (
 	projectdoc "github.com/voocel/ainovel-cli/internal/app/project"
 	"github.com/voocel/ainovel-cli/internal/domain/creation"
 	"github.com/voocel/ainovel-cli/internal/domain/model"
+	"github.com/voocel/ainovel-cli/internal/domain/narrative"
 )
 
 // 小说目标的推导规则（应用编排层，D49）：什么算完成、下一步写什么、审阅何时发生、
@@ -97,8 +98,8 @@ func (Policy) Next(project projectdoc.Snapshot, run model.CreationRun, evidence 
 		if length.Fixed == 0 && len(ledger.dropped) > 0 {
 			directive := ledger.dropped[0]
 			return creation.Step{Wait: fmt.Sprintf(
-				"AI 承诺全书 %d 章收官，要求「%s」（作用域 %s）因此落空；请退役或调整这条要求，或固定更长的篇幅",
-				length.Final, directive.Text, directive.Scope,
+				"AI 承诺全书 %d 章收官，要求「%s」（作用域：%s）因此落空；请退役或调整这条要求，或固定更长的篇幅",
+				length.Final, directive.Text, storyOf(project).DescribeScope(directive),
 			)}, nil
 		}
 		review, blocked := ledger.gate(through, run.Strategy.PlanWindowChapters)
@@ -274,6 +275,11 @@ func verdictNotes(verdict model.ReviewVerdict) []string {
 	return notes
 }
 
+// storyOf 是作品的故事索引：交给模型或用户的文字用章号、名称指称，不露文档 ID（D66）。
+func storyOf(project projectdoc.Snapshot) *narrative.Story {
+	return narrative.New(narrative.Content{Plan: project.Plan, Entities: project.Entities, Canon: project.Canon, Manuscript: project.Manuscript})
+}
+
 func manuscriptsByID(manuscript []model.ManuscriptChapter) map[string]model.ManuscriptChapter {
 	byID := make(map[string]model.ManuscriptChapter, len(manuscript))
 	for _, chapter := range manuscript {
@@ -315,11 +321,11 @@ func (item novelItem) work(run model.CreationRun, premise string, length Length)
 		work.ID, work.Kind = runQuickID(run.ID, "plan", planInputID(requested, length.Fixed)), model.OperationDevelopPlan
 		work.Input = model.DevelopPlanInput{
 			Intent: premise, FixedChapters: length.Fixed, RequestedChapters: requested,
-			Goal: "设计可直接用于连续创作的卷、故事弧与章节节点；先展开请求数量的 chapter 节点（滚动规划的首个窗口），保持稳定 ID 和合法父子关系；" + length.planningGoal(),
+			Goal: "设计可直接用于连续创作的卷、故事弧与章节大纲；先展开请求数量的章节（滚动规划的首个窗口），每章挂在所属故事弧下；" + length.planningGoal(),
 		}
 	case workExtendPlan:
 		requested := length.extendTo(item.covered, window)
-		goal := "增量扩展章节计划到请求数量：保持已有节点与 ID 稳定，只补充后续 chapter 节点并挂在合法父节点下；结合上一窗口的审阅意见调整后续走向，为 pending_requirements 中尚未兑现的要求安排落点；" + length.planningGoal()
+		goal := "增量扩展章节大纲到请求数量：已有章节保持不变，只在末尾追加后续章节并挂在所属故事弧下；结合上一窗口的审阅意见调整后续走向，为 pending_requirements 中尚未兑现的要求安排落点；" + length.planningGoal()
 		if item.concluded {
 			goal += fmt.Sprintf("；第 %d 章已作为全书结局写成，这是续写：在这个结局之后开启新的篇章、接住已完成的故事，不重复收尾", item.covered)
 			if length.Fixed == 0 {
@@ -341,7 +347,7 @@ func (item novelItem) work(run model.CreationRun, premise string, length Length)
 		work.ID, work.Kind = runQuickID(run.ID, "chapter", item.plan.ID), model.OperationWriteChapter
 		work.Input = model.WriteChapterInput{
 			ChapterPlanID: item.plan.ID, ChapterNumber: item.number, Directives: item.directives, Basis: item.basis,
-			Goal: "完成本章工作稿并提交带稳定章节 ID、稳定 block_id 与大纲依赖的正式候选；严格满足 directives 列出的每条创作要求（用户原话），字数约束按 constraints 执行",
+			Goal: "完成本章工作稿，连同本章的事实变化提交候选；严格满足 directives 列出的每条创作要求（用户原话），字数约束按 constraints 执行",
 		}
 	case workReview:
 		goal := "审阅本窗口正文：检查与上一章的衔接、窗口内的连续性与 Intent 方向，产出结构化裁定与发现；上一章正文只用于衔接检查，不在审阅范围"
@@ -359,7 +365,7 @@ func (item novelItem) work(run model.CreationRun, premise string, length Length)
 		work.Kind = model.OperationReviseCanon
 		work.Input = model.ReviseCanonInput{
 			ChapterID: item.chapterID, FactIDs: item.facts, Reason: reason,
-			Goal: "对照本章正文逐条核验 fact_ids 列出的事实：原样确认（带 old_value 重申报）、更新或删除，并补记正文里新出现的关键事实；只提交 canon 补丁，来源章固定为本章",
+			Goal: "对照本章正文逐条核验 pending_facts 列出的事实：原样确认、更新或删除，并补记正文里新出现的关键事实；只提交事实（facts、confirm_facts、remove_facts），来源章就是本章",
 		}
 	case workRewrite:
 		work.ID = runQuickID(run.ID, "rewrite", item.chapterID, "r"+strconv.FormatInt(int64(item.revision), 10))
@@ -367,7 +373,7 @@ func (item novelItem) work(run model.CreationRun, premise string, length Length)
 		work.Input = model.RewriteChapterInput{
 			ChapterID: item.chapterID, ChapterPlanID: item.plan.ID, ChapterNumber: item.number,
 			Findings: item.notes, Directives: item.directives, Basis: item.basis,
-			Goal: "根据审阅意见重写本章：保持章节 ID 与 block 结构稳定，针对意见修改，不引入新的越界改动；重申报本章全部既有事实（确认、更新或删除）；严格满足 directives 列出的每条创作要求（用户原话），字数约束按 constraints 执行",
+			Goal: "根据审阅意见重写本章：针对意见修改，不引入新的越界改动；重申报本章全部既有事实（确认、更新或删除）；严格满足 directives 列出的每条创作要求（用户原话），字数约束按 constraints 执行",
 		}
 	default:
 		return creation.WorkItem{}, fmt.Errorf("unknown work item kind %d: %w", item.kind, model.ErrInvalid)

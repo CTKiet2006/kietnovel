@@ -63,8 +63,8 @@ func TestEveryOperationKindIsAssembled(t *testing.T) {
 		if _, err := prompt.BuiltinCapability(spec.Kind); err != nil {
 			t.Fatalf("kind %s has no capability: %v", spec.Kind, err)
 		}
-		if _, err := derive.BuildStoryContext(content, spec.Kind, task); err != nil {
-			t.Fatalf("kind %s has no story context contract: %v", spec.Kind, err)
+		if _, err := derive.BuildModelView(content, spec.Kind, task); err != nil {
+			t.Fatalf("kind %s has no model view contract: %v", spec.Kind, err)
 		}
 	}
 }

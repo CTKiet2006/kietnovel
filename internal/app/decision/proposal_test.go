@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	projectdoc "github.com/voocel/ainovel-cli/internal/app/project"
@@ -73,7 +74,8 @@ func newReviewFixture(t *testing.T, withModel bool) *reviewFixture {
 	t.Cleanup(func() { s.Close() })
 	analyzer := &stubAnalyzer{report: conflictReport()}
 	changes := change.NewWithSemanticAnalyzer(s, analyzer)
-	projects := projectdoc.New(s, changes)
+	official := resource.NewOfficial(s, changes, fstest.MapFS{"pack.jsonc": {Data: []byte(`{"id":"official","version":"1","name":"官方基线"}`)}})
+	projects := projectdoc.New(s, changes, official)
 	var executors task.ExecutorSet
 	if withModel {
 		executors.LLM = boundLLM{}

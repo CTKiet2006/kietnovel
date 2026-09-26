@@ -50,15 +50,8 @@ func TestExecuteUsesRoleBindingAndRecordsRunStart(t *testing.T) {
 		t.Fatal(err)
 	}
 	plan := func() json.RawMessage {
-		volume := domainmodel.PlanNode{ID: "volume-1", Kind: domainmodel.PlanVolume, Order: 1, Title: "卷", Summary: "卷"}
-		arc := domainmodel.PlanNode{ID: "arc-1", Kind: domainmodel.PlanArc, ParentID: "volume-1", Order: 1, Title: "弧", Summary: "弧"}
-		chapter := domainmodel.PlanNode{ID: "chapter-plan-1", Kind: domainmodel.PlanChapter, ParentID: "arc-1", Order: 1, Title: "第一章", Summary: "开篇"}
-		patch := func(node domainmodel.PlanNode) domainmodel.Patch {
-			content, _ := json.Marshal(node)
-			return domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentPlan, ID: node.ID}, Operation: domainmodel.PatchPut, Content: content}
-		}
-		payload, _ := json.Marshal(map[string]any{"reason": "规划", "patches": []domainmodel.Patch{patch(volume), patch(arc), patch(chapter)}})
-		return payload
+		return json.RawMessage(`{"reason":"规划","volumes":[{"volume":1,"title":"卷","summary":"卷"}],` +
+			`"arcs":[{"arc":1,"volume":1,"title":"弧","summary":"弧"}],"chapters":[{"chapter":1,"arc":1,"title":"第一章","summary":"开篇"}]}`)
 	}
 	task := json.RawMessage(`{"intent":"规划开篇","fixed_chapters":3,"requested_chapters":1}`)
 	runID := createRuntimeTestRun(t, ctx, authorityStore, "book-plan", now)

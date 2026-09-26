@@ -99,6 +99,44 @@ func TestCreateProjectAndStartOperationFreezeExecutionProfile(t *testing.T) {
 	}
 }
 
+// 新书默认启用官方包（D65）：写手提示词带写作标准，不带其他 Worker 的 Slot 文本。
+func TestNewBookCompilesOfficialPackIntoWorkerPrompt(t *testing.T) {
+	ctx := context.Background()
+	authorityStore := openTestStore(t)
+	service := newTestApp(authorityStore)
+	now := testTime()
+	project, err := service.Projects.CreateProject(ctx, projectdoc.CreateProjectCommand{
+		ProjectID: "book-1", ChangeID: "create-book-1", UserID: "user-1",
+		Reason: "创建作品", Draft: testProjectDraft(), CreatedAt: now,
+	})
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	operation, err := service.Tasks.StartOperation(ctx, tasks.StartOperationCommand{
+		OperationID: "write-1", ProjectID: project.ID,
+		RunID: ensureTestRun(t, ctx, authorityStore, project.ID, now),
+		Kind:  model.OperationWriteChapter, WorkerProfileID: "writer.compose",
+		Input:               json.RawMessage(`{"chapter_plan_id":"chapter-plan-1","chapter_number":1}`),
+		CoreProtocolVersion: "core-v1",
+		ApprovalPolicy:      model.ApprovalManual, CreatedAt: now.Add(time.Minute),
+	})
+	if err != nil {
+		t.Fatalf("start operation: %v", err)
+	}
+	text, sources, err := service.Prompts.Prompt(ctx, operation.Snapshot.ConfigDigest)
+	if err != nil {
+		t.Fatalf("show prompt: %v", err)
+	}
+	if !strings.Contains(text, "前情不复述") || strings.Contains(text, "审阅要回答的是") {
+		t.Fatalf("writer prompt does not carry exactly the writer slots:\n%s", text)
+	}
+	if !slices.ContainsFunc(sources, func(source prompt.Source) bool {
+		return source.Layer == "pack_defaults" && source.ID == "official@1"
+	}) {
+		t.Fatalf("sources = %#v", sources)
+	}
+}
+
 func TestLockedAIProposalRequiresServiceApproval(t *testing.T) {
 	ctx := context.Background()
 	authorityStore := openTestStore(t)

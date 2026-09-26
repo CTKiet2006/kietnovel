@@ -2,7 +2,9 @@ package prompt
 
 import (
 	"encoding/json"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -58,7 +60,7 @@ func TestReviewFindingSchemaIsConstrained(t *testing.T) {
 	}
 	required, _ := items["required"].([]any)
 	if len(required) != 3 {
-		t.Errorf("必填字段 = %v，want chapter_id / severity / note", required)
+		t.Errorf("必填字段 = %v，want chapter / severity / note", required)
 	}
 }
 
@@ -90,9 +92,9 @@ func TestVerdictCheckStatusMatchesDomain(t *testing.T) {
 	}
 }
 
-// authority_read 的 kind 曾是裸 string，模型就去猜 story_context / project_rules。
-// 取值是 DocumentKind 的子集（哪几种可读是本工具的决定），所以只断言"有取值域"。
-func TestAuthorityReadDeclaresReadableKinds(t *testing.T) {
+// authority_read 曾要求 kind/id/revision：模型得先学会存储种类和文档 ID 才能回查，
+// 这些 ID 随后流进正文（D66）。回查只按故事语言定位，每个参数都说清返回什么。
+func TestAuthorityReadSpeaksStoryLanguage(t *testing.T) {
 	for _, kind := range []model.OperationKind{model.OperationDevelopPlan, model.OperationWriteChapter, model.OperationReviewRange} {
 		definition, err := BuiltinCapability(kind)
 		if err != nil {
@@ -104,18 +106,20 @@ func TestAuthorityReadDeclaresReadableKinds(t *testing.T) {
 			}
 			var parsed struct {
 				Properties map[string]struct {
-					Enum        []string `json:"enum"`
-					Description string   `json:"description"`
+					Description string `json:"description"`
 				} `json:"properties"`
 			}
 			if err := json.Unmarshal(tool.InputSchema, &parsed); err != nil {
 				t.Fatalf("%s schema: %v", kind, err)
 			}
-			if len(parsed.Properties["kind"].Enum) == 0 {
-				t.Errorf("%s 的 authority_read.kind 没有取值域，模型只能猜", kind)
+			names := slices.Sorted(maps.Keys(parsed.Properties))
+			if want := []string{"arc", "chapter", "entity", "volume"}; !slices.Equal(names, want) {
+				t.Errorf("%s 的 authority_read 参数 = %v, want %v", kind, names, want)
 			}
-			if parsed.Properties["revision"].Description == "" {
-				t.Errorf("%s 的 authority_read.revision 没说明必填与上界", kind)
+			for name, property := range parsed.Properties {
+				if property.Description == "" {
+					t.Errorf("%s 的 authority_read.%s 没说明返回什么", kind, name)
+				}
 			}
 		}
 	}

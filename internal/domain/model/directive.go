@@ -139,6 +139,23 @@ func (v Directive) BoundedEnd() int {
 	return scope.to
 }
 
+// DescribeScope 用故事语言描述作用域（D66）：planLabel 把计划节点 ID 换成它的标签。
+func (v Directive) DescribeScope(planLabel func(id string) string) string {
+	scope, err := parseDirectiveScope(v.Scope)
+	switch {
+	case err != nil:
+		return v.Scope
+	case scope.planNodeID != "":
+		return planLabel(scope.planNodeID)
+	case scope.to > 0:
+		return fmt.Sprintf("第 %d–%d 章", scope.from, scope.to)
+	case scope.from > 0:
+		return fmt.Sprintf("第 %d 章起", scope.from)
+	default:
+		return "全书"
+	}
+}
+
 // ActiveDirectives 返回全部 active Directive，按 ID 排序保证确定性。
 func ActiveDirectives(directives []Directive) []Directive {
 	var active []Directive

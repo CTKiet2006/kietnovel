@@ -1,0 +1,15 @@
+{
+	// 官方内置包（D65）：随二进制发布，新书默认启用。只写创作方法，协议与工具形状归代码。
+	"id": "official",
+	"version": "1",
+	"name": "官方基线",
+	"prompts": {
+		"architect.story_design": "prompts/architect-story-design.md",
+		"architect.arc_expand": "prompts/architect-arc-expand.md",
+		"writer.chapter_plan": "prompts/writer-chapter-plan.md",
+		"writer.chapter_draft": "prompts/writer-chapter-draft.md",
+		"writer.rewrite": "prompts/writer-rewrite.md",
+		"editor.story_review": "prompts/editor-story-review.md",
+		"editor.style_review": "prompts/editor-style-review.md"
+	}
+}

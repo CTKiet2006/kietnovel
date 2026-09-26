@@ -113,6 +113,15 @@ func (s *Catalog) SetProjectAssets(ctx context.Context, command SetProjectAssets
 	}
 	refs := model.ProjectAssetRefs{}
 	for _, ref := range command.Packs {
+		// 浮动的官方包引用先同步到内置内容再固定（D65）。
+		if ref.ID == OfficialPackID && ref.Revision == model.InitialRevision {
+			pinned, err := s.official.Ensure(ctx, command.UserID, command.CreatedAt)
+			if err != nil {
+				return ProjectAssetsResult{}, err
+			}
+			refs.Packs = append(refs.Packs, pinned)
+			continue
+		}
 		// 启用前解析资产本体：既校验存在性，也把浮动引用固定到确认的版本。
 		pack, err := LoadPack(ctx, s.store, ref)
 		if err != nil {

@@ -79,7 +79,7 @@ func OpenReadOnly(ctx context.Context, path string) (*Store, error) {
 	}
 	if version != schemaVersion {
 		db.Close()
-		return nil, &DiagnosticOpenError{Code: "unsupported_schema", Err: fmt.Errorf("database schema version %d is not supported (expected %d)", version, schemaVersion)}
+		return nil, &DiagnosticOpenError{Code: "unsupported_schema", Err: unsupportedSchema(abs, version)}
 	}
 	return &Store{db: db}, nil
 }

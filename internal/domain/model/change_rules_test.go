@@ -75,7 +75,7 @@ func TestChapterTasksWriteExactlyTheirTargets(t *testing.T) {
 		{"write another plan", write, []Patch{chapter("chapter-1", "plan-2", ten)}, "does not implement the requested plan"},
 		{"write nothing", write, nil, "exactly one new chapter"},
 		{"write two chapters", write, []Patch{chapter("chapter-1", "plan-1", ten), chapter("chapter-2", "plan-1", ten)}, "exactly one new chapter"},
-		{"write too short", write, []Patch{chapter("chapter-1", "plan-1", "太短")}, "requires 9-11"},
+		{"write too short", write, []Patch{chapter("chapter-1", "plan-1", "太短")}, "needs 9-11"},
 		{"rewrite its chapter", rewrite, []Patch{chapter("chapter-1", "plan-1", "新")}, ""},
 		{"rewrite another chapter", rewrite, []Patch{chapter("chapter-2", "plan-1", "新")}, "exactly chapter chapter-1"},
 		{"rewrite cannot delete", rewrite, []Patch{chapter("chapter-1", "plan-1", "新"),

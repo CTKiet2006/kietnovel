@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -33,8 +34,13 @@ func TestEnsureSchemaIsIdempotentAndRejectsForeignVersions(t *testing.T) {
 		t.Fatalf("close database: %v", err)
 	}
 
-	if third, err := Open(ctx, path); err == nil {
+	third, err := Open(ctx, path)
+	if err == nil {
 		third.Close()
 		t.Fatal("database with a foreign schema version must be rejected, not migrated")
+	}
+	// 报错要让用户知道是哪个库、怎样重新开始。
+	if !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "改名备份") {
+		t.Fatalf("unsupported schema error lacks the path or the way out: %v", err)
 	}
 }

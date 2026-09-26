@@ -65,19 +65,24 @@ type PlanNode struct {
 
 // ChapterPlansInOrder 是章节计划的唯一排序口径：按 Order、再按 ID；章号即下标 +1。
 func ChapterPlansInOrder(plan []PlanNode) []PlanNode {
-	chapters := make([]PlanNode, 0, len(plan))
+	return PlanNodesInOrder(plan, PlanChapter)
+}
+
+// PlanNodesInOrder 按同一口径排列某一种计划节点：卷号、故事弧号与章号都是下标 +1（D66）。
+func PlanNodesInOrder(plan []PlanNode, kind PlanNodeKind) []PlanNode {
+	nodes := make([]PlanNode, 0, len(plan))
 	for _, node := range plan {
-		if node.Kind == PlanChapter {
-			chapters = append(chapters, node)
+		if node.Kind == kind {
+			nodes = append(nodes, node)
 		}
 	}
-	slices.SortFunc(chapters, func(left, right PlanNode) int {
+	slices.SortFunc(nodes, func(left, right PlanNode) int {
 		if left.Order != right.Order {
 			return left.Order - right.Order
 		}
 		return strings.Compare(left.ID, right.ID)
 	})
-	return chapters
+	return nodes
 }
 
 // PlanAncestry 返回节点自身及其祖先 ID（章 → 弧 → 卷），供作用域匹配；
@@ -207,23 +212,28 @@ func (v CanonFact) EffectiveChapter() string {
 
 func (v CanonFact) IsEvent() bool { return v.Kind == CanonEvent }
 
+// canonPrefixes 是事实种类与谓词受控前缀的唯一对照：种类由前缀推出（D66）。
+var canonPrefixes = map[CanonFactKind]string{
+	CanonEvent: "event.", CanonState: "state.", CanonRelationship: "relation.",
+	CanonWorldRule: "rule.", CanonForeshadow: "foreshadow.",
+}
+
+// CanonKindOf 按谓词前缀返回事实种类；前缀不在受控命名空间内时 ok=false。
+func CanonKindOf(predicate string) (CanonFactKind, bool) {
+	for kind, prefix := range canonPrefixes {
+		if strings.HasPrefix(predicate, prefix) {
+			return kind, true
+		}
+	}
+	return "", false
+}
+
 func (v CanonFact) Validate() error {
 	if strings.TrimSpace(v.ID) == "" || strings.TrimSpace(v.SubjectID) == "" || strings.TrimSpace(v.Predicate) == "" {
 		return fmt.Errorf("canon id, subject_id and predicate are required: %w", ErrInvalid)
 	}
-	var prefix string
-	switch v.Kind {
-	case CanonEvent:
-		prefix = "event."
-	case CanonState:
-		prefix = "state."
-	case CanonRelationship:
-		prefix = "relation."
-	case CanonWorldRule:
-		prefix = "rule."
-	case CanonForeshadow:
-		prefix = "foreshadow."
-	default:
+	prefix, ok := canonPrefixes[v.Kind]
+	if !ok {
 		return fmt.Errorf("unknown canon kind %q: %w", v.Kind, ErrInvalid)
 	}
 	if !strings.HasPrefix(v.Predicate, prefix) || !validCanonKey(v.Predicate) {

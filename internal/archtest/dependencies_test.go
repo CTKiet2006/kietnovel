@@ -23,19 +23,21 @@ const modulePath = "github.com/voocel/ainovel-cli"
 // import 的既成事实。
 var allowedImports = map[string][]string{
 	"archtest":                {},
+	"assets":                  {},
 	"domain/model":            {},
 	"infra/activity":          {},
 	"infra/export":            {},
 	"infra/store":             {"domain/model"},
 	"domain/change":           {"domain/model"},
-	"domain/derive":           {"domain/model"},
+	"domain/narrative":        {"domain/model"},
+	"domain/derive":           {"domain/model", "domain/narrative"},
 	"infra/workspace":         {"domain/model", "infra/store"},
 	"infra/llm":               {"domain/model", "infra/llm/models"},
 	"infra/llm/models":        {"domain/model"},
 	"infra/jsonc":             {"domain/model"},
 	"infra/capability/pack":   {"domain/model", "infra/jsonc"},
 	"infra/capability/prompt": {"domain/model", "infra/store"},
-	"infra/capability":        {"infra/activity", "domain/model", "infra/store", "domain/change", "infra/capability/prompt", "infra/workspace", "infra/llm", "infra/llm/models"},
+	"infra/capability":        {"infra/activity", "domain/model", "domain/narrative", "infra/store", "domain/change", "infra/capability/prompt", "infra/workspace", "infra/llm", "infra/llm/models"},
 	"domain/operation":        {"domain/model", "domain/change"},
 	"app/project":             {"domain/model", "infra/store", "domain/change"},
 	"app/diag":                {"domain/model", "infra/store", "infra/export"},
@@ -46,12 +48,12 @@ var allowedImports = map[string][]string{
 	// novel policies, presentation queries, or application assembly.
 	"domain/creation": {"domain/model"},
 	"app/evidence":    {"domain/model", "infra/store", "domain/change", "domain/operation"},
-	"app/novel":       {"domain/model", "infra/store", "domain/change", "domain/creation", "app/project", "app/resource", "app/task", "infra/export"},
+	"app/novel":       {"domain/model", "domain/narrative", "infra/store", "domain/change", "domain/creation", "app/project", "app/resource", "app/task", "infra/export"},
 	"app/decision":    {"domain/model", "infra/store", "domain/change", "app/project", "app/resource", "app/task"},
 	"app/workbench":   {"infra/activity", "domain/model", "infra/store", "domain/creation", "app/decision", "app/novel", "app/project"},
 	// 模型绑定用例只认配置与模型适配器，不认任务与作品。
 	"app/binding":    {"infra/config", "infra/llm", "infra/llm/models", "infra/capability/prompt"},
-	"bootstrap":      {"app/binding", "app/diag", "domain/model", "infra/store", "domain/change", "domain/creation", "app/decision", "app/evidence", "app/novel", "domain/operation", "app/profile", "app/project", "app/resource", "app/task", "app/workbench", "infra/activity", "infra/capability"},
+	"bootstrap":      {"assets", "app/binding", "app/diag", "domain/model", "infra/store", "domain/change", "domain/creation", "app/decision", "app/evidence", "app/novel", "domain/operation", "app/profile", "app/project", "app/resource", "app/task", "app/workbench", "infra/activity", "infra/capability"},
 	"infra/config":   {},
 	"entry/headless": {"app/binding", "app/diag", "domain/model", "bootstrap", "domain/creation", "app/decision", "app/novel", "app/profile", "app/project", "app/resource", "app/task", "infra/jsonc"},
 	"entry/tui":      {"app/binding", "app/diag", "infra/activity", "domain/model", "bootstrap", "app/decision", "app/novel", "app/project", "app/workbench", "infra/config", "infra/jsonc"},
@@ -65,9 +67,13 @@ var allowedTestImports = map[string][]string{
 	"domain/change":    {"infra/store"},
 	"domain/operation": {"infra/store"},
 	"domain/creation":  {"infra/store"},
-	"bootstrap":        {"infra/capability/prompt", "domain/derive", "infra/config", "infra/llm/models"},
+	"bootstrap":        {"infra/capability/prompt", "domain/derive", "domain/narrative", "infra/config", "infra/llm/models"},
 	"entry/headless":   {"infra/store", "infra/config", "infra/llm/models"},
 	"entry/tui":        {"infra/store", "infra/llm/models"},
+	// 官方包的覆盖守护要用内置 Worker 定义核对 Slot（D65）。
+	"assets": {"infra/capability/pack", "infra/capability/prompt"},
+	// 工具 Schema 的漂移守护按宿主解码的故事语言类型核对字段（D66）。
+	"infra/capability/prompt": {"domain/narrative"},
 }
 
 func TestInternalPackagesRespectDependencyDirection(t *testing.T) {

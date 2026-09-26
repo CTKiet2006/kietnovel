@@ -450,9 +450,7 @@ Operation 的产出统一表达为 Outcome：`proposal`、`verdict`、`artifacts
 
 模型工具层读取工件时，将 JSON 内容直接返回为 JSON 对象／数组；`workspace_list` 仅返回 key、version 等元数据，正文通过 `workspace_read` 获取。存储层仍使用字节内容，不改变持久化格式。
 
-章节提交优先采用版本引用：单章传 `workspace_key` 与 `workspace_version`，批量重写传 `workspace_keys` 与 `workspace_versions`（key 到版本的映射）。Host 校验版本后从工作稿装配正文 patch，模型只提交 Canon Delta、实体等附带变更。版本引用不得同时携带 manuscript patch，避免两份正文来源；版本冲突明确拒绝，不静默使用最新稿。生成的 Proposal 继续经过原有章节范围、字数、Canon 和结构校验，不直接写入权威状态。
-
-为兼容已冻结的执行配置，无版本参数的旧式完整正文提交仍可用，并继续要求与工作稿一致。新工具 Schema 区分单章与多章参数；运行时同时传两种键参数会明确报互斥错误。正文不一致时指出 block 和首个差异位置，缺少正文 patch 与内容不一致分别说明。
+正文只经工作稿提交：单章必传 `workspace_key` 与 `workspace_version`，批量重写必传 `workspace_versions`（key 到版本的映射）。Host 校验版本后从工作稿逐字装配正文 patch，`patches` 从不携带正文（补丁种类不含 manuscript，出现即拒），模型只提交 Canon Delta、实体等附带变更；版本冲突明确拒绝，不静默使用最新稿。生成的 Proposal 继续经过原有章节范围、字数、Canon 和结构校验，不直接写入权威状态。
 
 Operation 必须拥有可持久化但非权威的工作区，用来保存：
 
@@ -464,9 +462,9 @@ Operation 必须拥有可持久化但非权威的工作区，用来保存：
 
 Agent 可以通过受限工具读写所属 Operation Workspace，但不能直接写 Project Authority Store。`WriteChapter` 可以在工作区内反复写入、按稳定块 ID 修改和校验草稿；完成后只把最终候选提交为 Proposal。`RewriteChapter` 从已批准的 Manuscript Revision 播种独立工作副本，不直接原地修改正式章节。
 
-提交工具是模型唯一能看见校验结果的地方：`proposal_submit` 装配工作稿、做宿主规范化（`model.NormalizeSubmission`）后调用 Change Engine 的只读 `Validate`，按提案自身基线执行全部确定性校验——通用结构（内容、依赖、只追加、工件）与 `model.ValidateChange`（事实身份与 old_value、D41 来源与重申报、署名、以及按所属任务执行的提交契约：规划数量与罗盘、章节目标、字数、事实核验范围），冲突原样回给模型在同一会话内自纠。收尾的 `PrepareExecution` 与用户批准时的提交执行同一份校验并处理基线漂移（D64）。工具边界只保留工作区自身的检查（键、版本、正文与草稿一致），不得另写引擎规则的子集。
+提交工具是模型唯一能看见校验结果的地方：`proposal_submit` 装配工作稿、做宿主规范化（`model.NormalizeSubmission`）后调用 Change Engine 的只读 `Validate`，按提案自身基线执行全部确定性校验——通用结构（内容、依赖、只追加、工件）与 `model.ValidateChange`（事实身份与 old_value、D41 来源与重申报、署名、以及按所属任务执行的提交契约：规划数量与罗盘、章节目标、字数、事实核验范围），冲突原样回给模型在同一会话内自纠。收尾的 `PrepareExecution` 与用户批准时的提交执行同一份校验并处理基线漂移（D64）。工具边界只保留工作区自身的检查（键、版本、正文取自草稿），不得另写引擎规则的子集。
 
-工具输入的机械装配不改变上述协议：`proposal_submit` 可从 Operation 冻结的 BaseRevision 补齐省略的 Canon `old_value`；`confirm_canon` 明确列出的事实从同一基线复制为确认型 put（old/new 相同），与显式 patches 不得重复。最终 Proposal 仍携带完整旧值并通过所有原有校验，不用最新版本覆盖冻结基线，不自动确认模型未列出的事实，显式错误旧值仍被拒绝。运行时在同一提交工具连续三次出现相同错误后明确失败并保留工作区，避免校验错误陷入无进展循环；不同错误或成功提交重置该工具的计数，普通读写工具不清零。
+工具输入用故事语言（D66）：模型按章号、序号、名称与主体+谓词提交卷弧章编辑、实体与事实，`narrative.Resolve` 基于 Operation 冻结的 BaseRevision 解析成补丁——新文档由宿主分配 ID，已有文档按自然键定位，更新事实的 `old_value` 一律取自冻结基线；`confirm_facts` 列出的事实复制为确认型 put（old/new 相同），同一事实在一次提交里只能出现一次。最终 Proposal 仍携带完整旧值并通过所有原有校验，不用最新版本覆盖冻结基线，不自动确认模型未列出的事实。运行时在同一提交工具连续三次出现相同错误后明确失败并保留工作区，避免校验错误陷入无进展循环；不同错误或成功提交重置该工具的计数，普通读写工具不清零。
 
 工作区编辑以 `block_id + expected_workspace_version` 为主要定位和并发前提，不以逐字匹配整段 `old_string` 作为核心协议。Markdown 导出不要求用户看见内部 ID，但显式导入时必须携带基线版本并重建稳定映射；无法唯一定位时明确冲突，不猜测替换位置。
 
@@ -565,12 +563,12 @@ Review Operation 必须先把审阅过程记录为所属 Workspace 的结构化 
 - locked / guided 约束；
 - 作用域命中当前章的 active Directive（§4.9）——装在 Operation Task 的指令平面而非 Story Context 数据块，但计入同一份上下文预算。
 
-上下文必须有显式预算（D61 已实现，`story_context.v3`），装配分两段：
+上下文必须有显式预算（D61 已实现），装配分两段：
 
 - **固定段**：大小与章数无关，照装。包括当前任务的目标及其祖先、上一章正文、近期窗口（近 5 章计划与来源于这些章的事件、后 3 章计划）、重写目标的全部来源事实，以及对当前任务生效的强制内容。命中的 Directive 在任务平面，计入同一预算。
 - **排序段**：随作品增长的部分，按确定性顺序吃剩余预算，只在这一处截断。顺序为：约束（受保护事实、世界规则、未回收伏笔，由早到晚）> 相关实体的当前事实 > 其余当前事实 > 卷弧结构。
 
-固定段自身超预算时照装，以 `budget.used > limit` 显式暴露。裁剪结果以 `budget.omitted` 计数，来源可由 Revision 与 ContextKey 重建（§0.4 第 3 条）。
+固定段自身超预算时照装。裁剪结果以 `omitted` 计数，来源可由 Revision 与 ViewKey 重建（§0.4 第 3 条）。选中的文档用故事语言渲染（D66）：卷→弧→章的大纲树、实体名称、事实（主体名+谓词+来源章号）与正文文本，连同全书规模 `totals`；规则与任务同样渲染，三者作为一个派生文档（`model_view.v1`）缓存。
 
 ### 6.6 工件与附件
 
@@ -584,7 +582,7 @@ GC 只显式触发（`artifact gc`）：无元数据、无发布保护记录且�
 
 ## 7. Prompt Compiler
 
-> 层级说明：§7–§9 是核心诉求（§0 四承诺、§3 场景）验证之后的扩展层。它们的边界长期有效，但交付顺序由产品计划决定，不得先于 S1–S13 的真实模型验证；在核心诉求未验证前扩大这三节的实现面，属于 §0.1 第一问答错。
+> 层级说明：§7–§9 是核心诉求（§0 四承诺、§3 场景）验证之后的扩展层。它们的边界长期有效，但交付顺序由产品计划决定，不得先于 S1–S13 的真实模型验证；在核心诉求未验证前扩大这三节的实现面，属于 §0.1 第一问答错。例外是 §7.2 的 Slot 基线文本（官方包，D65）：它属于最小可运行集合，没有它的实跑只能测到一个没被告知在写小说的模型，验证结论无效。
 
 ### 7.1 Prompt 分层
 
@@ -737,7 +735,7 @@ my-pack/
 
 适用内容：题材包、世界观模板、叙事方法、Editor Rubric、角色模板和 Prompt Overlay。
 
-官方内置内容也必须封装为普通 Novel Pack，复用相同的清单、校验、版本和启用语义；仓库 `assets/` 只负责这些 Pack 的编译期打包，不形成第四类资产。Core Protocol 与 Worker Contract 仍归代码，项目及用户资产仍归各自 Authority Stream。
+官方内置内容也必须封装为普通 Novel Pack，复用相同的清单、校验、版本和启用语义；`internal/assets/` 只负责这些 Pack 的编译期打包，不形成第四类资产。官方包 `official` 为新书默认启用，落地方式见 D65。Core Protocol 与 Worker Contract 仍归代码，项目及用户资产仍归各自 Authority Stream。
 
 Pack 对用户暴露为三个形态，需分开设计：
 
@@ -830,6 +828,7 @@ internal/
 │   ├── change/             # 影响、授权、校验、提交；声明持久化契约
 │   ├── operation/          # 执行、隔离、恢复、结果收尾；声明持久化契约
 │   ├── creation/           # Goal 决策、任务驱动、运行落点；声明任务及持久化契约
+│   ├── narrative/          # 模型面对的故事语言：编号、标签、视图与提交解析（D66）
 │   └── derive/             # 确定性创作上下文与可重建数据推导
 ├── app/                    # 应用用例，各自持有所需依赖
 │   ├── novel/              # 小说预设、纯推进规则、审阅解释和用户裁决
@@ -856,6 +855,7 @@ internal/
 │   ├── tui/                # Bubble Tea，调用具名用例
 │   └── headless/           # 命令入口，调用具名用例
 ├── bootstrap/              # 静态构造和连接组件；无业务或转发方法
+├── assets/                 # 官方内置 Pack 的编译期打包（D65）；零依赖
 └── archtest/               # 包依赖与关键架构契约测试
 ```
 
@@ -872,7 +872,7 @@ entry → bootstrap 装配出的 app 具名用例及 creation 驱动入口
 bootstrap → app / domain / infra 的构造器；任何组件不得反向依赖 bootstrap
 app → domain；按用例需要依赖其他具名 app 组件与 infra 适配
 domain/{change,operation,creation} → 自己声明的接口、model 及必要的领域机制
-domain/derive → domain/model
+domain/derive → domain/narrative → domain/model
 domain/model → 标准库（零 IO）
 infra/store → 领域契约；不理解 Prompt 或模型
 infra/capability → 领域契约、工作区、模型与提示词适配
@@ -955,7 +955,7 @@ README 只负责启动和使用入口，不维护另一份架构或完成度清�
 | D33 | Directive 作为一等对象 | **已决定**（2026-09-06） | 用户创作要求是 Project Authority 中独立文档类型（§4.9）：作者仅限用户，原话保留不翻译成事实变更，按作用域装入 Operation Task 指令平面（不进 Story Context 数据块：核心协议规定数据块里的命令式文字不改变任务），审阅裁定逐项核验，可机械校验字段在提交边界走确定性校验器；拒绝理由是其特例；Coordinator 零分支由架构测试守护；S11–S13 进入首版验收。首版切片已落地（领域文档、变更引擎、任务装配、裁定核验、字数校验、否决回流、headless/TUI 入口）；作用域重定位待第二切片 |
 | D34 | 正文作者标记与用户章节保护 | **已决定并实现**（2026-09-08） | 章节正文记录作者；用户手写/修订章默认 locked，AI 重写与影响修复不得自动覆盖；用户章节缺 Canon Delta 时显式标记未入账并提示补账，不静默失明（§4.5） |
 | D35 | 实体 ID 与依赖边由 Host 记录 | **已决定并实现**（2026-09-08） | 角色/地点/物品/组织为独立权威节点（`entity`），Canon 主体引用实体 ID；章节 depends_on 由 Host 在提交时绑定为计划节点与该章 Canon Delta 引用的实体，不由模型声明；结构影响分析与相关事实检索以此为地基（§4.4 第 4-5 条） |
-| D36 | Coordinator 缺口对账 | **已决定**（2026-09-06） | 协调器按缺口枚举与确定性优先级推导下一任务，用户发起的 Operation 进入同一推导链；创作指导语归 Prompt Slot 且 Slot 必须有内置基线文本，Coordinator 只提供事实（§6.3、§7.2） |
+| D36 | Coordinator 缺口对账 | **已决定**（2026-09-06） | 协调器按缺口枚举与确定性优先级推导下一任务，用户发起的 Operation 进入同一推导链；创作指导语归 Prompt Slot 且 Slot 必须有内置基线文本（由 D65 官方包落地），Coordinator 只提供事实（§6.3、§7.2） |
 | D37 | 重构回本度量 | **已决定**（2026-09-06） | §0.4 四项指标（控制扩展成本、S1–S13 真实模型覆盖、每章成本与上下文预算、完成与返工率对照 v0）为 v1 可替代 v0 的验收依据；§0.2 的赌注按此验证 |
 | D38 | 内核稳定与无兼容纪律 | **已决定**（2026-09-07） | “一个内核，两种预设”升为 §0 结构承诺；v1 是彻底重建、无存量数据：schema 只有单一当前版本（版本不符即拒绝），依赖按锁定版本编码，不为旧版本、旧数据或不可能的失败保留回退分支；保留的只有有文档依据的产品决策 |
 | D39 | 用户控制的三类落点 | **已决定**（2026-09-07） | 内容要求优先复用 Directive/Ownership，必要时才新增文档类型；运行控制在 CreationRun Goal/RunStrategy 版本化演进，调整已有策略值不改协议、新增运行语义可演进 Coordinator 推导；改变权威归属、授权、提交前提、执行隔离、生命周期、恢复或完成语义才需架构决策；强制内容不可裁剪，可机械发现的要求矛盾在入账时报告（§6.5、§4.9） |
@@ -1052,6 +1052,13 @@ Runtime 直接运行单次 `AgentLoop`：串行工具执行、同步持久化消
 同一标准随后清理了 `verdict_submit`：`chapter_ids`（模型复述、再校验"必须与请求完全一致"）、`review_version`（宿主已知的记录版本）、内联 `findings`（要求模型逐字节复述已存记录，属"旧协议"兼容路径，按 no-compat 一并删除）三个参数移除，范围取自任务输入、发现取自审阅记录当前版本。同一函数里 `Revision` 与 `Basis` 早已由宿主盖入，现在整个裁定只剩真正需要模型判断的 `status` / `intent` / `directives`。收尾时的证据检查（记录在提交后被改则拒）保留，宿主填入后它天然成立。
 
 同一时期暴露的另一种形态是两份真理源漂移：`ManuscriptChapter` 有 `depends_on`，`workspace_put_chapter` 的 schema 没列且 `additionalProperties=false`，模型照抄读到的章节写回即被硬拒（单轮 18 次）。字段覆盖可以机械校验——`TestToolSchemaCoversDomainFields` 以反射比对领域结构体 json tag 与 schema properties，不需要人工登记映射；取值域 enum 不做同类自动检查，因为正确的 enum 常是领域取值的子集（如 `authority_read.kind` 只开放 5 种故事文档），推导不出来。
+
+实跑补充（2026-09-25）：64 次工具报错逐条归因，代码侧四类按同一标准收口——**没有合法用途的参数不公开，读到的形状就是能写回的形状**。
+- `confirm_canon` 只公开给要重申报已有事实的任务（重写、受影响重写、事实核验）；写新章时本章还没有事实，此前公开它、协议又写成"未修改的事实都确认"，模型每章确认前文全部事实，ch-2 至 ch-12 各撞一次 D41。
+- 删除无版本的旧式整章提交：`patches` 描述里的 manuscript 形状与可选版本让模型带着版本仍把整章抄进 patches，输出翻倍，JSON 损坏与字段错层多出在这类超长提交里。提交说明给出一条完整补丁示例，替代省略的 `[...]`。
+- `authority_read` 只返回文档内容：存储信封里的 `change_set_id` 被抄进章节。读不到时报出文档引用与版本（工作稿报出键），不再是裸的 not found。
+- 正文段落说明写明中文引号与禁用内部 ID：10 次 JSON 损坏中 6 次是正文里未转义的英文双引号，整章白写；已入账正文里的英文引号、"比ch-3时" 同源。
+其余（多写括号、字段错层、猜 ID、审阅自拟 checks 等）是模型能力，报错已足以自纠，不改。
 
 仍未清的（同一标准，待动手）：工作稿 `key` 由模型自由命名（`ch-001-draft`、`chapter-4-draft`、`ch-010` 并存），回读时只能猜自己起的名字，单轮 10 次读不存在的 key；而 `workspace_put_chapter` 的 payload 已有 `chapter.id`，key 与之冗余。改它会连带 `proposal_submit` 的 `workspace_key(s)`，动的是提交路径，单独排期。另有一类不同根因：`proposal_submit` 的 `patches[].content` 是自由 object，entity/canon/plan 的形状与取值域全部写在一段约 800 字的散文描述里，约 14% 的报错出自这里。
 
@@ -1246,3 +1253,72 @@ v0 由 AI 定篇幅：指南针加滚动续卷，模型宣布完结，确定性�
 - 执行中暂停单任务，Run 落 paused、可续跑；取消单任务，Run 落 cancelled（终态，再写开新一轮），不再误记为 failed；
 - 取消后的任务，其旧稿不能再由用户批准入账；
 - 不含正文却触及 guided 文档的 AI 提案一律等待用户（没有可绑定的合规证据）。
+
+### D65：官方内置包（2026-09-26）
+
+**实证**：30 章实跑成书不像小说：大段抽象论述，"不是……而是……"出现 318 次，前情提要式复述，结局之后原地打转。从 `execution_profiles` 取出写手实际收到的提示词：7 个 Prompt Slot 只有名字，没有任何内容，模型拿到的只有 Core Protocol、工具 Schema 和数据，没有一个字讲怎么写小说。D36 与 §7.2 早已要求每个 Slot 有内置基线文本，但一直没实现。
+
+**决定**：官方包就是一个普通 Novel Pack，只有来源不同。
+1. **来源**：`internal/assets/packs/official`（`pack.jsonc` + 每个 Slot 一份 md），编译期嵌入。`pack.LoadFS` 与 `LoadDirectory` 共用同一套清单组装与校验。
+2. **进入权威**：`resource.Official.Ensure` 比较库里当前版本与内置清单，逐字节相同就复用；不同就经 Change Engine 提交新版本。署名是触发它的用户（建书或启用），提案 ID 绑定基线版本与内容摘要。内核不为此新增 system 直接提交路径。
+3. **保留 ID**：`official` 不允许用户安装。想定制，就导出后改 id，作为自己的包安装。
+4. **默认启用**：`project.CreateProject` 在创建提交里写入 `assets`，固定官方包的当前版本；`project` 通过 `OfficialPack` 端口取得引用，不反向依赖 `resource`。已有作品保持固定版本（D31）；`project assets --pack official` 解析浮动引用时先同步，再固定到最新内置版本。
+5. **内容纪律**：只写创作方法，不写协议、不引用字段名、不带题材色彩；每个 Worker 的包文本约 650–900 字。暂不使用 references：编译器会把全部 references 注入给每个 Worker，不按角色裁剪。方法直接写进各角色的 Slot。
+6. **Slot 归属**：重写 Worker（`writer.revise`、`writer.revise_affected`）同时挂 `writer.chapter_draft`，重写与新写共用同一份写作标准。
+7. **lint**：一个包同时服务多个 Worker 是常态。`prompt lint` 不再对"属于其他 Worker 的 Slot"报诊断（原 `inactive_pack_overlay`），只报任何内置 Worker 都不用的 Slot（`unknown_pack_slot`，多半是拼错，会静默失效）。
+8. **守护**：
+   - `assets` 测试：内置 Worker 用到的每个 Slot 都有官方文本，官方包不声明无人使用的 Slot。
+   - `resource` 测试：同步幂等，内容变化才出新版本；保留 ID 被拒；浮动引用先同步再固定。
+   - `bootstrap` 测试：新书写手提示词带官方写作标准，不带其他 Worker 的 Slot 文本。
+
+**行为变化**：
+- 新书的每个 Worker 都带官方基线；已有作品不变，需要时用 `project assets` 启用。
+- 用户安装 id 为 `official` 的包会被拒绝。
+- `prompt lint` 的 `inactive_pack_overlay` 改为 `unknown_pack_slot`。
+
+**未解决**：官方包管写法，管不了两处结构问题。一是正文泄漏内部 ID，由 D66 在协议层解决。二是固定篇幅时不能改罗盘终局，续写已完结的作品只能围着旧结局空转。
+
+### D66：身份与叙事分离（2026-09-26）
+
+**实证**：30 章成书的正文里出现 ch-18、ch-20。根因不在写法，在协议：
+- 故事上下文是存储文档原样，文档之间用 ID 互相引用；
+- 文档 ID 由模型照工具示例自己起（`canon-ch-3-oath`、`ch-001`），带章节语义；
+- 工具还要模型复述宿主已知的 ID（`chapter_plan_id`、`confirm_canon`、`chapter_id`、`revision`）。
+
+模型于是把 ID 当成了章节的名字，写进大纲摘要、事实值，最后进了正文。提示词禁令与正文校验都是治标，已否决。
+
+**决定**：文档 ID、Revision、Operation/Proposal ID 都是宿主内部标识，模型既看不到也不书写。模型只说故事语言，每样东西都有自然键：
+- 章：章号（`ChapterPlansInOrder` 下标+1）；卷与故事弧：各自的序号（同一排序口径 `PlanNodesInOrder`）；
+- 实体：名称或别名；
+- 事实：state/rule/foreshadow 按主体+谓词（D61）；事件与关系按来源章+主体+谓词，同一章里同一主体的同一谓词只记一条，由解析器按构造保证。事实种类由谓词前缀推出（`CanonKindOf`），模型不再单独填 kind。
+
+1. **`domain/narrative`**（只依赖 model，纯函数）是这层语言的唯一实现：
+   - `Story` 是故事索引：编号、标签与自然键查找；
+   - 视图：大纲树、实体、事实、正文、回查结果；
+   - `Task` / `Ownership` 把任务输入与控制规则渲染成故事语言，丢掉 basis、base_revision、提案 ID 这类宿主簿记；
+   - `Draft` / `Findings` 由任务给工作稿与审阅发现补齐身份；
+   - `Resolve` 把故事语言提交解析成补丁，取代原 `capability/submission_canon.go`；
+   - `Humanize` 把宿主错误里引号括起的内部 ID 换成故事标签，保留错误链。
+2. **ID 由宿主分配**：新文档按前缀 v/a/c/e/f 取下一个空号，同一基线上的同一提交得到相同 ID；正文与其章节计划同 ID。新增的卷、弧、章必须紧接现有总数连续编号并排在末尾——规划只追加、不插入不删除，已有序号就地修改。
+3. **上下文**：derive 的选择逻辑不变，结果用 narrative 渲染。`ModelView{ownership, story_context, task}` 整体作为派生文档缓存（`model_view.v1`），同一 Revision 与任务的重编译结果逐字不变；`prompt.CompileRequest.Ownership` 改为预渲染 JSON。
+4. **工具**：
+   - `authority_read{chapter|arc|volume|entity}` 固定读任务基线，去掉 revision；
+   - `workspace_put_chapter` 只收标题与段落，受影响重写多一个 `number`；
+   - 工作区写入只回键与版本，`workspace_read` 读回写入时的形状；
+   - `workspace_put_review` 的发现用章号；
+   - `proposal_submit` 按 Worker 公开参数：规划有意图、罗盘与卷弧章编辑，写新章必须带事实，重写另有 `confirm_facts` / `remove_facts`，多章改写的事实带来源章；
+   - `proposal_submit` 回 `{status}`，`verdict_submit` 回 `{status}`；
+   - 所有工具错误经 `Humanize`，提交的校验错误用应用补丁后的故事翻译，新建文档也能认出。
+5. **app/novel**：goal 文案去掉 ID；待兑现要求的作用域（`Directive.DescribeScope`）、收官要求的伏笔清单、等待提示都用故事标签。字数越界报要求原文，不报要求 ID。
+6. **守护**：
+   - narrative 测试：自然键解析、ID 分配、各视图无 ID、错误翻译；
+   - derive 测试：模型视图无 ID；
+   - prompt 测试：各 Worker 只公开有用途的参数，Schema 字段都能被宿主严格解码（`TestToolSchemaFieldsAreDecodable` 取代 D60 的 `TestToolSchemaCoversDomainFields`：模型读到的是视图，不再照抄领域结构体）；
+   - bootstrap 测试：种子作品编译出的六类任务完整提示词里一个文档 ID 也没有。
+
+**边界**：语义影响与偏好分析是单次结构化判断，不产出叙事，本次不改。审阅要求 ID（`directive:…`、`intent:required:N`）与工作稿键、段落编号是协议句柄，不是文档身份，保留。提示词块元数据里的项目 ID 同样保留。
+
+**行为变化**：
+- 模型协议整体换成故事语言，旧的 patches / confirm_canon / kind+id+revision 参数全部移除；
+- 用户以 `plan_node:<id>` 指向尚不存在的节点时，规划看到的是"大纲中尚不存在的节点"，AI 不再能按用户预设的 ID 建节点；
+- 派生文档种类改为 `model_view.v1`，旧缓存不再命中。

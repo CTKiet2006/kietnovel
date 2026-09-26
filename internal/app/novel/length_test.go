@@ -91,7 +91,7 @@ func TestFinaleRequirementTracksOpenThreads(t *testing.T) {
 		Predicate: "foreshadow.jade_seal", Value: json.RawMessage(`"玉玺下落"`)}
 	project.Canon = append(project.Canon, thread)
 	open := finaleRequirement(project, 5)
-	if open.ID == base.ID || !strings.Contains(open.Text, "jade-seal（foreshadow.jade_seal）") {
+	if open.ID == base.ID || !strings.Contains(open.Text, "「主角」foreshadow.jade_seal：玉玺下落") || strings.Contains(open.Text, "jade-seal") {
 		t.Fatalf("open thread finale = %+v", open)
 	}
 	project.Canon[len(project.Canon)-1].Resolved = true
@@ -130,7 +130,7 @@ func TestAIFinaleCannotDropUserRequirements(t *testing.T) {
 	finale := finaleRequirement(project, 3).ID
 	first := []string{"chapter-i", "chapter-ii", "chapter-iii"}
 	closed := Evidence{Verdicts: []StoredVerdict{storedTestVerdict("review-a", 1, model.ReviewPass, first, nil, check(finale, model.CheckSatisfied))}}
-	assertStep(t, project, testRun(0, 2), closed, stepWant{wait: "要求「第五六章主角死亡」（作用域 chapter_range:5-6）因此落空"})
+	assertStep(t, project, testRun(0, 2), closed, stepWant{wait: "要求「第五六章主角死亡」（作用域：第 5–6 章）因此落空"})
 	assertStep(t, project, testRun(3, 2), closed, stepWant{done: "全书 3 章完成并通过审阅"})
 }
 

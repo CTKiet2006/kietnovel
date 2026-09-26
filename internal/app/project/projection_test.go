@@ -17,6 +17,13 @@ const (
 	fixtureUser    = "user-1"
 )
 
+// fixedOfficial 给新书一个固定的官方包引用；本包只写引用，不加载包本体。
+type fixedOfficial struct{}
+
+func (fixedOfficial) Ensure(context.Context, string, time.Time) (model.ProjectPackRef, error) {
+	return model.ProjectPackRef{ID: "official", Revision: 1}, nil
+}
+
 type projectionFixture struct {
 	ctx  context.Context
 	repo *Repository
@@ -33,7 +40,7 @@ func newProjectionFixture(t *testing.T) *projectionFixture {
 	}
 	t.Cleanup(func() { authorityStore.Close() })
 	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
-	repo := New(authorityStore, change.New(authorityStore))
+	repo := New(authorityStore, change.New(authorityStore), fixedOfficial{})
 	if _, err := repo.CreateProject(ctx, CreateProjectCommand{
 		ProjectID: fixtureProject, ChangeID: "create", UserID: fixtureUser, Reason: "创建作品",
 		Draft: ProjectDraft{

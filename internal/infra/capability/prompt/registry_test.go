@@ -66,17 +66,19 @@ func TestReloadPersistsImmutableExecutionProfiles(t *testing.T) {
 	}
 }
 
+// 同 Slot 多 Pack 追加与拼错的 Slot 要提示；服务其他 Worker 的 Slot 不是问题。
 func TestLintReportsDeterministicPackOverlayConflict(t *testing.T) {
 	request := testCompileRequest(t)
 	request.Packs[1].Manifest.PromptOverlays = map[string]string{
 		"writer.chapter_draft": "增加悬念",
-		"editor.story_review":  "未激活的审阅规则",
+		"editor.story_review":  "其他 Worker 的审阅规则",
+		"writer.chapter_drfat": "拼错的 Slot",
 	}
 	diagnostics, err := Lint(request)
 	if err != nil {
 		t.Fatalf("lint: %v", err)
 	}
-	if len(diagnostics) != 2 || diagnostics[0].Code != "inactive_pack_overlay" || diagnostics[1].Code != "multiple_pack_overlays" {
+	if len(diagnostics) != 2 || diagnostics[0].Code != "multiple_pack_overlays" || diagnostics[1].Code != "unknown_pack_slot" {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
 }
@@ -91,7 +93,8 @@ func TestRegistryLintUsesFrozenExecutionProfileSources(t *testing.T) {
 	request := testCompileRequest(t)
 	request.Packs[1].Manifest.PromptOverlays = map[string]string{
 		"writer.chapter_draft": "增加悬念",
-		"editor.story_review":  "未激活的审阅规则",
+		"editor.story_review":  "其他 Worker 的审阅规则",
+		"writer.chapter_drfat": "拼错的 Slot",
 	}
 	registry := NewRegistry(authorityStore)
 	compiled, err := registry.Reload(ctx, request, time.Date(2026, 8, 18, 12, 0, 0, 0, time.UTC))
@@ -102,7 +105,7 @@ func TestRegistryLintUsesFrozenExecutionProfileSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lint stored profile: %v", err)
 	}
-	if len(diagnostics) != 2 || diagnostics[0].Code != "inactive_pack_overlay" || diagnostics[1].Code != "multiple_pack_overlays" {
+	if len(diagnostics) != 2 || diagnostics[0].Code != "multiple_pack_overlays" || diagnostics[1].Code != "unknown_pack_slot" {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
 }

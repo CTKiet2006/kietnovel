@@ -3,72 +3,86 @@ package prompt
 import (
 	"encoding/json"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/voocel/ainovel-cli/internal/domain/model"
+	"github.com/voocel/ainovel-cli/internal/domain/narrative"
 )
 
-// 工具 Schema 与领域结构体是两份手工维护的真理源。它们漂移一次的代价：
-// ManuscriptChapter 有 depends_on 而 schema 没列，additionalProperties=false
-// 直接硬拒——模型照抄读到的章节写回去，连撞 6 次。
-//
-// 这条检查纯靠反射比对 json tag，不需要任何人工登记的映射，因此不会自己失效。
-// （取值域 enum 不适用：正确的 enum 常是领域取值的子集，推导不出来。）
-func TestToolSchemaCoversDomainFields(t *testing.T) {
-	schemas := map[string]map[string]any{}
+// 工具 Schema 与宿主解码的结构体是两份手工维护的真理源。宿主按严格模式解码工具参数：
+// Schema 公开了结构体没有的字段，模型照 Schema 填写就会被硬拒——连撞到提交保护停机。
+// 这条检查按每个 Worker 的实际 Schema 逐路径比对 json tag，不需要人工登记的映射。
+func TestToolSchemaFieldsAreDecodable(t *testing.T) {
 	definitions, err := BuiltinCapabilities()
 	if err != nil {
 		t.Fatalf("built-in capabilities: %v", err)
 	}
+	submission := append(jsonFields(narrative.Submission{}), "reason", "workspace_key", "workspace_version", "workspace_versions")
+	cases := []struct {
+		tool, path string
+		fields     []string
+	}{
+		{ToolAuthorityRead, "", jsonFields(narrative.Query{})},
+		{ToolWorkspacePutChapter, "chapter", jsonFields(narrative.ChapterDraft{})},
+		{ToolWorkspacePutChapter, "chapter.blocks[]", jsonFields(model.ManuscriptBlock{})},
+		{ToolWorkspacePutReview, "findings[]", jsonFields(narrative.Finding{})},
+		{ToolVerdictSubmit, "checks[]", jsonFields(model.RequirementCheck{})},
+		{ToolProposalSubmit, "", submission},
+		{ToolProposalSubmit, "intent", jsonFields(model.Intent{})},
+		{ToolProposalSubmit, "compass", jsonFields(model.Compass{})},
+		{ToolProposalSubmit, "volumes[]", jsonFields(narrative.VolumeEdit{})},
+		{ToolProposalSubmit, "arcs[]", jsonFields(narrative.ArcEdit{})},
+		{ToolProposalSubmit, "chapters[]", jsonFields(narrative.ChapterEdit{})},
+		{ToolProposalSubmit, "entities[]", jsonFields(narrative.EntityEdit{})},
+		{ToolProposalSubmit, "facts[]", jsonFields(narrative.FactEdit{})},
+		{ToolProposalSubmit, "confirm_facts[]", jsonFields(narrative.FactRef{})},
+		{ToolProposalSubmit, "remove_facts[]", jsonFields(narrative.FactRef{})},
+	}
 	for _, definition := range definitions {
 		for _, tool := range definition.Worker.Tools {
-			var parsed map[string]any
-			if err := json.Unmarshal(tool.InputSchema, &parsed); err != nil {
+			var schema map[string]any
+			if err := json.Unmarshal(tool.InputSchema, &schema); err != nil {
 				t.Fatalf("%s schema: %v", tool.Name, err)
 			}
-			schemas[tool.Name] = parsed
-		}
-	}
-
-	// 每条给出：工具、到达该对象的 schema 路径、对应的领域类型。
-	for _, c := range []struct {
-		tool, path string
-		typ        any
-	}{
-		{ToolWorkspacePutChapter, "chapter", model.ManuscriptChapter{}},
-		{ToolWorkspacePutChapter, "chapter.blocks[]", model.ManuscriptBlock{}},
-		{ToolWorkspacePutReview, "findings[]", model.ReviewFinding{}},
-		{ToolVerdictSubmit, "checks[]", model.RequirementCheck{}},
-	} {
-		t.Run(c.tool+"/"+c.path, func(t *testing.T) {
-			properties, err := schemaProperties(schemas[c.tool], c.path)
-			if err != nil {
-				t.Fatalf("%s: %v", c.path, err)
-			}
-			domain := reflect.TypeOf(c.typ)
-			var missing []string
-			for i := 0; i < domain.NumField(); i++ {
-				name := strings.Split(domain.Field(i).Tag.Get("json"), ",")[0]
-				if name == "" || name == "-" {
+			for _, c := range cases {
+				if c.tool != tool.Name {
 					continue
 				}
-				if _, ok := properties[name]; !ok {
-					missing = append(missing, name)
+				properties, err := schemaProperties(schema, c.path)
+				if err != nil {
+					continue // 该 Worker 不公开这条路径
+				}
+				for name := range properties {
+					if !slices.Contains(c.fields, name) {
+						t.Errorf("%s/%s/%s 公开了宿主不解码的字段 %s", definition.Worker.ID, c.tool, c.path, name)
+					}
 				}
 			}
-			if len(missing) > 0 {
-				t.Errorf("%s 缺少 %s 的字段 %v；additionalProperties=false 会硬拒它们，模型照抄读到的形状就会连撞",
-					c.path, domain.Name(), missing)
-			}
-		})
+		}
 	}
+}
+
+func jsonFields(value any) []string {
+	var names []string
+	domain := reflect.TypeOf(value)
+	for i := 0; i < domain.NumField(); i++ {
+		name := strings.Split(domain.Field(i).Tag.Get("json"), ",")[0]
+		if name != "" && name != "-" {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 // schemaProperties 沿 "a.b[]" 这样的路径取到目标对象的 properties。
 func schemaProperties(schema map[string]any, path string) (map[string]any, error) {
 	node := schema
 	for _, segment := range strings.Split(path, ".") {
+		if segment == "" {
+			break
+		}
 		properties, ok := node["properties"].(map[string]any)
 		if !ok {
 			return nil, errSchemaPath(path, segment, "上一级没有 properties")

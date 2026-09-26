@@ -22,11 +22,18 @@ type Catalog struct {
 	store    *store.Store
 	changes  *change.Engine
 	projects *projectdoc.Repository
+	official *Official
 	analyzer PreferenceAnalyzer
 }
 
-func New(authorityStore *store.Store, changes *change.Engine, projects *projectdoc.Repository, analyzer PreferenceAnalyzer) *Catalog {
-	return &Catalog{store: authorityStore, changes: changes, projects: projects, analyzer: analyzer}
+func New(
+	authorityStore *store.Store,
+	changes *change.Engine,
+	projects *projectdoc.Repository,
+	official *Official,
+	analyzer PreferenceAnalyzer,
+) *Catalog {
+	return &Catalog{store: authorityStore, changes: changes, projects: projects, official: official, analyzer: analyzer}
 }
 
 type PackRef struct {
@@ -268,6 +275,9 @@ func (s *Catalog) installPack(
 	changeID, userID, reason string,
 	createdAt time.Time,
 ) (InstalledPack, error) {
+	if loaded.Manifest.ID == OfficialPackID {
+		return InstalledPack{}, fmt.Errorf("pack id %q is reserved for the built-in official pack; change the id to install a copy: %w", OfficialPackID, model.ErrInvalid)
+	}
 	target := model.AuthorityTarget{Kind: model.AuthorityPack, ID: loaded.Manifest.ID}
 	base, err := currentRevision(ctx, s.store, target)
 	if err != nil {
@@ -277,15 +287,7 @@ func (s *Catalog) installPack(
 	if err != nil {
 		return InstalledPack{}, fmt.Errorf("encode pack manifest: %w", err)
 	}
-	proposal := model.Proposal{
-		ID: changeID, Target: target, BaseRevision: base,
-		Author: model.Author{Kind: model.AuthorUser, ID: userID}, Reason: reason,
-		Patches: []model.Patch{{
-			Document:  model.DocumentRef{Kind: model.DocumentPack, ID: loaded.Manifest.ID},
-			Operation: model.PatchPut, Content: content,
-		}}, ApprovalState: model.ApprovalPending, CreatedAt: createdAt,
-	}
-	committed, err := s.changes.CommitUser(ctx, proposal, createdAt)
+	committed, err := commitPack(ctx, s.changes, target, base, content, changeID, userID, reason, createdAt)
 	if err != nil {
 		return InstalledPack{}, err
 	}
@@ -293,6 +295,26 @@ func (s *Catalog) installPack(
 		Manifest: loaded.Manifest, Revision: committed.NewRevision,
 		Digest: loaded.Digest, Source: loaded.Root,
 	}, nil
+}
+
+// commitPack 以用户身份把 Pack 清单提交为该 Pack 权威流的新版本。
+func commitPack(
+	ctx context.Context,
+	changes *change.Engine,
+	target model.AuthorityTarget,
+	base model.Revision,
+	content json.RawMessage,
+	changeID, userID, reason string,
+	at time.Time,
+) (model.ChangeSet, error) {
+	return changes.CommitUser(ctx, model.Proposal{
+		ID: changeID, Target: target, BaseRevision: base,
+		Author: model.Author{Kind: model.AuthorUser, ID: userID}, Reason: reason,
+		Patches: []model.Patch{{
+			Document:  model.DocumentRef{Kind: model.DocumentPack, ID: target.ID},
+			Operation: model.PatchPut, Content: content,
+		}}, ApprovalState: model.ApprovalPending, CreatedAt: at,
+	}, at)
 }
 
 func (s *Catalog) SaveCreatorProfile(

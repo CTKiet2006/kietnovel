@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 
 	"github.com/voocel/ainovel-cli/internal/domain/model"
 )
@@ -118,5 +119,32 @@ func writeTestFile(t *testing.T, root, relative, content string) {
 	}
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write test file: %v", err)
+	}
+}
+
+// 嵌入包与目录包是同一份清单语义：同样内容得到同样摘要，越界路径同样被拒。
+func TestLoadFSMatchesDirectoryAndRejectsEscapes(t *testing.T) {
+	manifest := `{"id":"official","version":"1","name":"官方","prompts":{"writer.chapter_draft":"prompts/draft.md"}}`
+	root := t.TempDir()
+	writeTestFile(t, root, "pack.jsonc", manifest)
+	writeTestFile(t, root, "prompts/draft.md", "用场景推进")
+	fromDirectory, err := LoadDirectory(root)
+	if err != nil {
+		t.Fatalf("load directory: %v", err)
+	}
+	fromFS, err := LoadFS(fstest.MapFS{
+		"pack.jsonc":       {Data: []byte(manifest)},
+		"prompts/draft.md": {Data: []byte("用场景推进")},
+	})
+	if err != nil {
+		t.Fatalf("load fs: %v", err)
+	}
+	if fromFS.Root != "" || fromFS.Digest != fromDirectory.Digest {
+		t.Fatalf("fs pack = %#v, directory digest %s", fromFS, fromDirectory.Digest)
+	}
+
+	escaping := fstest.MapFS{"pack.jsonc": {Data: []byte(`{"id":"x","version":"1","name":"x","prompts":{"writer.chapter_draft":"../draft.md"}}`)}}
+	if _, err := LoadFS(escaping); !errors.Is(err, model.ErrInvalid) {
+		t.Fatalf("escaping asset path error = %v", err)
 	}
 }

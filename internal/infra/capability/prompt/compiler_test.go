@@ -157,12 +157,10 @@ func testCompileRequest(t *testing.T) CompileRequest {
 			{Revision: 3, Profile: model.CreatorProfile{ID: "user-1", Scope: "book:book-1", ExplicitRules: []string{"短句为主"}}},
 			{Revision: 1, Profile: model.CreatorProfile{ID: "user-1", Scope: "global", ExplicitRules: []string{"避免说教"}}},
 		},
-		Intent: model.Intent{Premise: "凡人修仙", Required: []string{"主角保持凡人视角"}},
-		Ownership: []model.OwnershipRule{{
-			Target: model.DocumentRef{Kind: model.DocumentCanon, ID: "hero-origin"}, Control: model.ControlLocked,
-		}},
-		StoryContext: json.RawMessage(`{"chapter":1,"facts":["hero-origin"]}`),
-		Task:         json.RawMessage(`{"chapter_plan_id":"chapter-plan-1"}`),
+		Intent:       model.Intent{Premise: "凡人修仙", Required: []string{"主角保持凡人视角"}},
+		Ownership:    json.RawMessage(`[{"target":"「主角」state.origin","control":"locked"}]`),
+		StoryContext: json.RawMessage(`{"chapters":[{"chapter":1,"title":"山门","text":"雨"}]}`),
+		Task:         json.RawMessage(`{"chapter":1}`),
 		BaseRevision: 4, ProjectOverlayRevision: 4,
 	}
 }

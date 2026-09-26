@@ -10,13 +10,14 @@ import (
 	"unicode/utf8"
 
 	"github.com/voocel/ainovel-cli/internal/domain/model"
+	"github.com/voocel/ainovel-cli/internal/domain/narrative"
 )
 
-// StoryContextKind 是上下文的显式 schema 版本：结构演进时必须升版，
+// ViewKind 是模型视图的显式 schema 版本：视图结构或故事语言渲染演进时必须升版，
 // 旧 Execution Profile 仍按其记录的版本解释，不做静默兼容。
-const StoryContextKind = "story_context.v3"
+const ViewKind = "model_view.v1"
 
-// contextPolicy 是有界装配参数（§6.5）。它进入 ContextKey，改参数即换缓存键。
+// contextPolicy 是有界装配参数（§6.5）。它进入 ViewKey，改参数即换缓存键。
 type contextPolicy struct {
 	Window    int `json:"window"`    // 近 N 章：章节计划与来源于这些章的事件
 	Lookahead int `json:"lookahead"` // 后 N 章章节计划
@@ -25,7 +26,7 @@ type contextPolicy struct {
 
 var defaultPolicy = contextPolicy{Window: 5, Lookahead: 3, Budget: 32000}
 
-func ContextKey(kind model.OperationKind, task json.RawMessage) (string, error) {
+func ViewKey(kind model.OperationKind, task json.RawMessage) (string, error) {
 	if kind == "" || len(task) == 0 || !json.Valid(task) {
 		return "", fmt.Errorf("context operation kind and task are required: %w", model.ErrInvalid)
 	}
@@ -43,7 +44,7 @@ func ContextKey(kind model.OperationKind, task json.RawMessage) (string, error) 
 		Policy  contextPolicy       `json:"policy"`
 		Kind    model.OperationKind `json:"kind"`
 		Task    any                 `json:"task"`
-	}{Version: StoryContextKind, Policy: defaultPolicy, Kind: kind, Task: value})
+	}{Version: ViewKind, Policy: defaultPolicy, Kind: kind, Task: value})
 }
 
 type ProjectContent struct {
@@ -57,57 +58,116 @@ type ProjectContent struct {
 	Ownership  []model.OwnershipRule
 }
 
-type ContextDocument struct {
-	Ref     model.DocumentRef `json:"ref"`
-	Content json.RawMessage   `json:"content"`
+func (c ProjectContent) story() *narrative.Story {
+	return narrative.New(narrative.Content{Plan: c.Plan, Entities: c.Entities, Canon: c.Canon, Manuscript: c.Manuscript})
 }
 
-type ChapterIndexEntry struct {
-	ID     string `json:"id"`
-	Number int    `json:"number"`
-	Title  string `json:"title"`
+// ContextDocument 是装配选中的一份权威文档；它只在选择阶段存在，渲染后模型看不到 ID。
+type ContextDocument struct {
+	Ref     model.DocumentRef
+	Content json.RawMessage
 }
 
 // ContextBudget 让裁剪可见：Used 超过 Limit 表示必选内容本身超预算；Omitted 是各类
-// 文档未装配的数量，模型可凭已知 ID 用 authority_read 回查。
+// 文档未装配的数量。
 type ContextBudget struct {
-	Limit   int                        `json:"limit"`
-	Used    int                        `json:"used"`
-	Omitted map[model.DocumentKind]int `json:"omitted,omitempty"`
+	Limit   int
+	Used    int
+	Omitted map[model.DocumentKind]int
 }
 
-// StoryContext 是按预算装配的有界视图。Intent 与 Ownership 在 project_rules 层，不重复。
+// selection 是有界装配的结果：选中的文档与预算，再由 render 渲染成故事语言。
+type selection struct {
+	Documents []ContextDocument
+	Budget    ContextBudget
+}
+
+// StoryContext 是按预算装配、用故事语言渲染的有界视图（D66）：卷弧章大纲、实体、
+// 事实与正文，外加全书规模。Intent 与 Ownership 在 project_rules 层，不重复。
 type StoryContext struct {
-	SchemaVersion string              `json:"schema_version"`
-	ProjectID     string              `json:"project_id"`
-	Revision      model.Revision      `json:"revision"`
-	Documents     []ContextDocument   `json:"relevant_documents"`
-	Chapters      []ChapterIndexEntry `json:"chapter_index"`
-	Budget        ContextBudget       `json:"budget"`
+	Compass  *model.Compass          `json:"compass,omitempty"`
+	Totals   narrative.Totals        `json:"totals"`
+	Outline  []narrative.VolumeView  `json:"outline,omitempty"`
+	Entities []narrative.EntityView  `json:"entities,omitempty"`
+	Facts    []narrative.FactView    `json:"facts,omitempty"`
+	Chapters []narrative.ChapterText `json:"chapters,omitempty"`
+	// Omitted 是各类内容未装配的数量，模型按章号或名称用 authority_read 回查。
+	Omitted map[string]int `json:"omitted,omitempty"`
 }
 
-func BuildStoryContext(content ProjectContent, kind model.OperationKind, task json.RawMessage) (StoryContext, error) {
-	return buildStoryContext(content, kind, task, defaultPolicy)
+// ModelView 是一次任务里模型看到的全部作品内容（D66）：规则、上下文与任务都用故事
+// 语言。它整体作为一个派生文档缓存，同一 Revision 与任务的重编译结果逐字不变。
+type ModelView struct {
+	Ownership []narrative.RuleView `json:"ownership"`
+	Context   StoryContext         `json:"story_context"`
+	Task      json.RawMessage      `json:"task"`
+}
+
+func BuildModelView(content ProjectContent, kind model.OperationKind, task json.RawMessage) (ModelView, error) {
+	selected, err := buildStoryContext(content, kind, task, defaultPolicy)
+	if err != nil {
+		return ModelView{}, err
+	}
+	story := content.story()
+	ownership, err := story.Ownership(content.Ownership)
+	if err != nil {
+		return ModelView{}, err
+	}
+	rendered, err := story.Task(kind, task)
+	if err != nil {
+		return ModelView{}, err
+	}
+	return ModelView{Ownership: ownership, Context: selected.render(story, content.Compass), Task: rendered}, nil
+}
+
+// omittedNames 是未装配计数在模型视图里的名字。
+var omittedNames = map[model.DocumentKind]string{
+	model.DocumentPlan: "outline", model.DocumentEntity: "entities",
+	model.DocumentCanon: "facts", model.DocumentManuscript: "chapters",
+}
+
+func (s selection) render(story *narrative.Story, compass *model.Compass) StoryContext {
+	byKind := make(map[model.DocumentKind][]string)
+	for _, document := range s.Documents {
+		byKind[document.Ref.Kind] = append(byKind[document.Ref.Kind], document.Ref.ID)
+	}
+	context := StoryContext{
+		Totals: story.Totals(), Outline: story.Outline(byKind[model.DocumentPlan]),
+		Entities: story.Entities(byKind[model.DocumentEntity]), Facts: story.Facts(byKind[model.DocumentCanon]),
+		Chapters: story.Texts(byKind[model.DocumentManuscript]),
+	}
+	if len(byKind[model.DocumentCompass]) > 0 {
+		context.Compass = compass
+	}
+	for kind, count := range s.Budget.Omitted {
+		if name, ok := omittedNames[kind]; ok {
+			if context.Omitted == nil {
+				context.Omitted = make(map[string]int)
+			}
+			context.Omitted[name] = count
+		}
+	}
+	return context
 }
 
 // buildStoryContext 分两段装配（§6.5）：固定段大小与章数无关，照装；随作品增长的
 // 当前事实与卷弧结构按优先级排序，吃剩余预算。整个流程只在一处截断。
-func buildStoryContext(content ProjectContent, kind model.OperationKind, task json.RawMessage, policy contextPolicy) (StoryContext, error) {
+func buildStoryContext(content ProjectContent, kind model.OperationKind, task json.RawMessage, policy contextPolicy) (selection, error) {
 	if strings.TrimSpace(content.ID) == "" || content.Revision <= model.InitialRevision || len(task) == 0 || !json.Valid(task) {
-		return StoryContext{}, fmt.Errorf("context project, positive revision and task are required: %w", model.ErrInvalid)
+		return selection{}, fmt.Errorf("context project, positive revision and task are required: %w", model.ErrInvalid)
 	}
 	for _, rule := range content.Ownership {
 		if err := rule.Validate(); err != nil {
-			return StoryContext{}, err
+			return selection{}, err
 		}
 	}
 	input, err := model.DecodeTaskInput(kind, task)
 	if err != nil {
-		return StoryContext{}, err
+		return selection{}, err
 	}
 	s, err := newSelector(content, max(0, policy.Budget-utf8.RuneCount(task)))
 	if err != nil {
-		return StoryContext{}, err
+		return selection{}, err
 	}
 	switch input := input.(type) {
 	case *model.InitializeProjectInput, *model.DevelopPlanInput, *model.RevisePlanInput:
@@ -120,7 +180,7 @@ func buildStoryContext(content ProjectContent, kind model.OperationKind, task js
 		// 事实核验（D41）：本章正文与来源于它的事实，对着正文逐条核对。
 		chapter, ok := s.manuscripts[input.ChapterID]
 		if !ok {
-			return StoryContext{}, fmt.Errorf("context dependency %q does not exist: %w", manuscriptRef(input.ChapterID).Key(), model.ErrInvalid)
+			return selection{}, fmt.Errorf("context dependency %q does not exist: %w", manuscriptRef(input.ChapterID).Key(), model.ErrInvalid)
 		}
 		err = s.assemble(focus{anchor: s.position[chapter.PlanNodeID], targets: s.chapterTargets(chapter.ID)}, policy)
 	case *model.RewriteAffectedInput:
@@ -136,19 +196,19 @@ func buildStoryContext(content ProjectContent, kind model.OperationKind, task js
 		var targets []model.DocumentRef
 		for _, id := range input.ChapterIDs {
 			if _, ok := s.manuscripts[id]; !ok {
-				return StoryContext{}, fmt.Errorf("context dependency %q does not exist: %w", manuscriptRef(id).Key(), model.ErrInvalid)
+				return selection{}, fmt.Errorf("context dependency %q does not exist: %w", manuscriptRef(id).Key(), model.ErrInvalid)
 			}
 			anchor = min(anchor, s.chapterPosition(id))
 			targets = append(targets, s.chapterTargets(id)...)
 		}
 		err = s.assemble(focus{anchor: anchor, targets: targets, previous: true}, policy)
 	default:
-		return StoryContext{}, fmt.Errorf("operation %s has no story context contract: %w", kind, model.ErrInvalid)
+		return selection{}, fmt.Errorf("operation %s has no story context contract: %w", kind, model.ErrInvalid)
 	}
 	if err != nil {
-		return StoryContext{}, err
+		return selection{}, err
 	}
-	return s.result(content), nil
+	return s.result(), nil
 }
 
 // focus 描述锚定任务：锚点是章节计划有序下标，targets 是任务本身必须看到的文档。
@@ -250,7 +310,7 @@ func (s *selector) writing(planID, chapterID string, policy contextPolicy) error
 }
 
 // chapterTargets 是改动某章时必须看到的内容：正文与来源于它的全部事实——重写要
-// 重申报这些事实（D41），没有 ID 就无法确认。
+// 重申报这些事实（D41），看不到就无从确认。
 func (s *selector) chapterTargets(chapterID string) []model.DocumentRef {
 	refs := []model.DocumentRef{manuscriptRef(chapterID)}
 	for _, id := range s.sourced[chapterID] {
@@ -486,27 +546,12 @@ func (s *selector) chapterPosition(chapterID string) int {
 	return -1
 }
 
-func (s *selector) result(content ProjectContent) StoryContext {
-	result := StoryContext{
-		SchemaVersion: StoryContextKind, ProjectID: content.ID, Revision: content.Revision,
-		Budget: ContextBudget{Limit: s.limit, Used: s.used},
-	}
-	referenced := make(map[string]bool)
+func (s *selector) result() selection {
+	result := selection{Budget: ContextBudget{Limit: s.limit, Used: s.used}}
 	selectedKinds := make(map[model.DocumentKind]int)
 	for _, document := range s.selected {
 		result.Documents = append(result.Documents, document)
 		selectedKinds[document.Ref.Kind]++
-		switch document.Ref.Kind {
-		case model.DocumentManuscript:
-			referenced[document.Ref.ID] = true
-		case model.DocumentCanon:
-			fact := s.facts[document.Ref.ID]
-			referenced[fact.SourceChapterID], referenced[fact.EffectiveChapterID] = true, true
-		case model.DocumentPlan:
-			if chapter, ok := s.written[document.Ref.ID]; ok {
-				referenced[chapter.ID] = true
-			}
-		}
 	}
 	slices.SortFunc(result.Documents, func(left, right ContextDocument) int {
 		return strings.Compare(left.Ref.Key(), right.Ref.Key())
@@ -523,18 +568,6 @@ func (s *selector) result(content ProjectContent) StoryContext {
 			result.Budget.Omitted[kind] = omitted
 		}
 	}
-	result.Chapters = []ChapterIndexEntry{}
-	for _, chapter := range content.Manuscript {
-		if referenced[chapter.ID] {
-			result.Chapters = append(result.Chapters, ChapterIndexEntry{ID: chapter.ID, Number: chapter.Number, Title: chapter.Title})
-		}
-	}
-	slices.SortFunc(result.Chapters, func(left, right ChapterIndexEntry) int {
-		if left.Number != right.Number {
-			return left.Number - right.Number
-		}
-		return strings.Compare(left.ID, right.ID)
-	})
 	return result
 }
 

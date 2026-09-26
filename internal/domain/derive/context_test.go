@@ -10,12 +10,16 @@ import (
 	"github.com/voocel/ainovel-cli/internal/domain/model"
 )
 
+func selectContext(content ProjectContent, kind model.OperationKind, task json.RawMessage) (selection, error) {
+	return buildStoryContext(content, kind, task, defaultPolicy)
+}
+
 func TestContextKeyCanonicalizesEquivalentTaskJSON(t *testing.T) {
-	left, err := ContextKey(model.OperationWriteChapter, json.RawMessage(`{"chapter_plan_id":"chapter-1","note":"雨"}`))
+	left, err := ViewKey(model.OperationWriteChapter, json.RawMessage(`{"chapter_plan_id":"chapter-1","note":"雨"}`))
 	if err != nil {
 		t.Fatalf("left context key: %v", err)
 	}
-	right, err := ContextKey(model.OperationWriteChapter, json.RawMessage(`{ "note": "雨", "chapter_plan_id": "chapter-1" }`))
+	right, err := ViewKey(model.OperationWriteChapter, json.RawMessage(`{ "note": "雨", "chapter_plan_id": "chapter-1" }`))
 	if err != nil {
 		t.Fatalf("right context key: %v", err)
 	}
@@ -29,7 +33,7 @@ func TestWriteContextMeetsMinimumWritingContract(t *testing.T) {
 	// 最新有效 Canon 状态、上一章正文结尾；更早的正文只留索引不进上下文。
 	locked := model.DocumentRef{Kind: model.DocumentCanon, ID: "hero-bottom-line"}
 	relevant := model.DocumentRef{Kind: model.DocumentCanon, ID: "hero-location"}
-	context, err := BuildStoryContext(ProjectContent{
+	context, err := selectContext(ProjectContent{
 		ID: "book-1", Revision: 4,
 		Plan: []model.PlanNode{
 			{ID: "volume-1", Kind: model.PlanVolume, Title: "远行", Summary: "离开故乡"},
@@ -56,9 +60,6 @@ func TestWriteContextMeetsMinimumWritingContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build context: %v", err)
 	}
-	if context.SchemaVersion != StoryContextKind {
-		t.Fatalf("schema version = %q, want %q", context.SchemaVersion, StoryContextKind)
-	}
 	keys := make(map[string]bool)
 	for _, document := range context.Documents {
 		keys[document.Ref.Key()] = true
@@ -72,8 +73,8 @@ func TestWriteContextMeetsMinimumWritingContract(t *testing.T) {
 			t.Fatalf("missing minimum-contract document %q: %#v", key, context.Documents)
 		}
 	}
-	if keys["manuscript:chapter-1"] || len(context.Chapters) != 2 {
-		t.Fatalf("older manuscript body entered context or index broken: %#v", context)
+	if keys["manuscript:chapter-1"] {
+		t.Fatalf("older manuscript body entered context: %#v", context)
 	}
 }
 
@@ -111,7 +112,7 @@ func contextFixture() ProjectContent {
 	}
 }
 
-func documentKeys(context StoryContext) []string {
+func documentKeys(context selection) []string {
 	keys := make([]string, 0, len(context.Documents))
 	for _, document := range context.Documents {
 		keys = append(keys, document.Ref.Key())
@@ -196,15 +197,12 @@ func TestBuildStoryContextSelectsDocumentsByOperation(t *testing.T) {
 			if tc.edit != nil {
 				tc.edit(&content)
 			}
-			context, err := BuildStoryContext(content, tc.kind, json.RawMessage(tc.task))
+			context, err := selectContext(content, tc.kind, json.RawMessage(tc.task))
 			if err != nil {
 				t.Fatalf("build context: %v", err)
 			}
 			if got := documentKeys(context); !slices.Equal(got, tc.want) {
 				t.Fatalf("documents = %v, want %v", got, tc.want)
-			}
-			if context.SchemaVersion != StoryContextKind || context.ProjectID != "book-1" || context.Revision != 3 {
-				t.Fatalf("context header = %q %q %d", context.SchemaVersion, context.ProjectID, context.Revision)
 			}
 		})
 	}
@@ -222,7 +220,7 @@ func TestStoryContextCarriesTheCompass(t *testing.T) {
 		model.OperationReviseCanon:    `{"chapter_id":"chapter-1","reason":"核验事实"}`,
 		model.OperationRewriteChapter: `{"chapter_id":"chapter-2","chapter_plan_id":"chapter-plan-2","chapter_number":2,"findings":["节奏慢"]}`,
 	} {
-		context, err := BuildStoryContext(content, kind, json.RawMessage(task))
+		context, err := selectContext(content, kind, json.RawMessage(task))
 		if err != nil {
 			t.Fatalf("%s context: %v", kind, err)
 		}
@@ -232,18 +230,29 @@ func TestStoryContextCarriesTheCompass(t *testing.T) {
 	}
 }
 
-// 章节索引只收录已选文档引用到的章节，让事实里的章节 ID 可解读，而不随章数增长。
-func TestBuildStoryContextIndexesReferencedChaptersAndEncodesDocuments(t *testing.T) {
-	context, err := BuildStoryContext(contextFixture(), model.OperationRewriteAffected, json.RawMessage(rewriteChapter2Task))
+// 模型视图用故事语言渲染（D66）：章号、名称与正文文本，任务同样换成章号，没有任何文档 ID。
+func TestModelViewRendersStoryLanguage(t *testing.T) {
+	content := contextFixture()
+	content.Ownership = []model.OwnershipRule{{Target: model.DocumentRef{Kind: model.DocumentManuscript, ID: "chapter-1"}, Control: model.ControlLocked}}
+	view, err := BuildModelView(content, model.OperationRewriteAffected, json.RawMessage(rewriteChapter2Task))
 	if err != nil {
-		t.Fatalf("build context: %v", err)
+		t.Fatalf("build view: %v", err)
 	}
-	if want := []ChapterIndexEntry{{ID: "chapter-2", Number: 2, Title: "第二章"}}; !slices.Equal(context.Chapters, want) {
-		t.Fatalf("chapter index = %#v", context.Chapters)
+	// 锁定的第 1 章随受影响重写进入上下文，与目标章一起按章号渲染。
+	if chapters := view.Context.Chapters; len(chapters) != 2 || chapters[1].Chapter != 2 || chapters[1].Text != "荒村正文\n夜话" {
+		t.Fatalf("chapters = %#v", chapters)
 	}
-	var chapter model.ManuscriptChapter
-	if err := json.Unmarshal(context.Documents[3].Content, &chapter); err != nil || chapter.ID != "chapter-2" || len(chapter.Blocks) != 2 {
-		t.Fatalf("manuscript document = %s (%v)", context.Documents[3].Content, err)
+	if string(view.Task) != `{"chapters":[2],"reason":"底线改变"}` {
+		t.Fatalf("task = %s", view.Task)
+	}
+	if len(view.Ownership) != 1 || view.Ownership[0].Target != "第 1 章《第一章》的正文" {
+		t.Fatalf("ownership = %#v", view.Ownership)
+	}
+	payload, _ := json.Marshal(view)
+	for _, id := range []string{"chapter-1", "chapter-2", "chapter-plan-2", "hero", "arc-1", "volume-1", "hero-location"} {
+		if strings.Contains(string(payload), `"`+id+`"`) {
+			t.Fatalf("internal id %q leaked: %s", id, payload)
+		}
 	}
 }
 
@@ -254,7 +263,7 @@ func TestBuildStoryContextIncludesLockedAndGuidedOwnershipTargets(t *testing.T) 
 		{Target: model.DocumentRef{Kind: model.DocumentEntity, ID: "villain"}, Control: model.ControlGuided, Guidance: []string{"反派不能脸谱化"}},
 		{Target: model.DocumentRef{Kind: model.DocumentCanon, ID: "hero-bottom-line"}, Control: model.ControlLocked},
 	}
-	context, err := BuildStoryContext(content, model.OperationRewriteAffected, json.RawMessage(rewriteChapter2Task))
+	context, err := selectContext(content, model.OperationRewriteAffected, json.RawMessage(rewriteChapter2Task))
 	if err != nil {
 		t.Fatalf("build context: %v", err)
 	}
@@ -268,7 +277,7 @@ func TestBuildStoryContextIncludesLockedAndGuidedOwnershipTargets(t *testing.T) 
 func TestBuildStoryContextSkipsIntentDependencyWithoutDocument(t *testing.T) {
 	content := contextFixture()
 	content.Plan[0].DependsOn = []model.DocumentRef{{Kind: model.DocumentIntent, ID: model.SingletonDocumentID}}
-	context, err := BuildStoryContext(content, model.OperationRewriteAffected, json.RawMessage(rewriteChapter2Task))
+	context, err := selectContext(content, model.OperationRewriteAffected, json.RawMessage(rewriteChapter2Task))
 	if err != nil {
 		t.Fatalf("build context: %v", err)
 	}
@@ -322,7 +331,7 @@ func TestBuildStoryContextRejectsMissingDependencies(t *testing.T) {
 			if tc.edit != nil {
 				tc.edit(&content)
 			}
-			_, err := BuildStoryContext(content, tc.kind, json.RawMessage(tc.task))
+			_, err := selectContext(content, tc.kind, json.RawMessage(tc.task))
 			if !errors.Is(err, model.ErrInvalid) || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want ErrInvalid containing %q", err, tc.want)
 			}
@@ -355,7 +364,7 @@ func TestBuildStoryContextRejectsInvalidInput(t *testing.T) {
 			if tc.edit != nil {
 				tc.edit(&content)
 			}
-			_, err := BuildStoryContext(content, tc.kind, json.RawMessage(tc.task))
+			_, err := selectContext(content, tc.kind, json.RawMessage(tc.task))
 			if !errors.Is(err, model.ErrInvalid) || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("error = %v, want ErrInvalid containing %q", err, tc.want)
 			}
@@ -366,7 +375,7 @@ func TestBuildStoryContextRejectsInvalidInput(t *testing.T) {
 func TestContextKeyIsCanonicalAndBoundToKindAndVersion(t *testing.T) {
 	key := func(kind model.OperationKind, task string) string {
 		t.Helper()
-		value, err := ContextKey(kind, json.RawMessage(task))
+		value, err := ViewKey(kind, json.RawMessage(task))
 		if err != nil {
 			t.Fatalf("context key for %s %s: %v", kind, task, err)
 		}
@@ -382,8 +391,8 @@ func TestContextKeyIsCanonicalAndBoundToKindAndVersion(t *testing.T) {
 	if base == key(model.OperationRewriteChapter, `{"chapter_plan_id":"c","chapter_number":9007199254740993,"directives":[]}`) {
 		t.Fatal("operation kind is not part of the context key")
 	}
-	if StoryContextKind != "story_context.v3" {
-		t.Fatalf("schema version = %q", StoryContextKind)
+	if ViewKind != "model_view.v1" {
+		t.Fatalf("schema version = %q", ViewKind)
 	}
 	for name, invalid := range map[string]struct {
 		kind model.OperationKind
@@ -394,7 +403,7 @@ func TestContextKeyIsCanonicalAndBoundToKindAndVersion(t *testing.T) {
 		"malformed task": {model.OperationWriteChapter, `{"a":`},
 		"two values":     {model.OperationWriteChapter, `{} {}`},
 	} {
-		if _, err := ContextKey(invalid.kind, json.RawMessage(invalid.task)); !errors.Is(err, model.ErrInvalid) {
+		if _, err := ViewKey(invalid.kind, json.RawMessage(invalid.task)); !errors.Is(err, model.ErrInvalid) {
 			t.Fatalf("%s: error = %v, want ErrInvalid", name, err)
 		}
 	}

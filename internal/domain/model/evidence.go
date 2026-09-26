@@ -31,10 +31,6 @@ type ScopeBasis struct {
 
 const ScopeDirective = "directive"
 
-// BasisField 是任务输入里承载基线的 JSON 字段名：基线是内核判定有效性的依据，
-// 不进入模型提示词。
-const BasisField = "basis"
-
 func (b EvidenceBasis) Validate() error {
 	seen := make(map[string]struct{}, len(b.Documents)+len(b.Scopes)+len(b.Artifacts))
 	unique := func(key string) error {

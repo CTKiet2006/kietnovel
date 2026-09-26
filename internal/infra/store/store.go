@@ -65,7 +65,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return nil, fmt.Errorf("resolve artifact database path: %w", err)
 	}
 	s.artifactRoot = resolved + ".artifacts"
-	if err := s.ensureSchema(ctx); err != nil {
+	if err := s.ensureSchema(ctx, absPath); err != nil {
 		db.Close()
 		return nil, err
 	}

@@ -98,13 +98,14 @@ type VersionedCreatorProfile struct {
 }
 
 type CompileRequest struct {
-	ProjectID              string
-	CoreProtocolVersion    string
-	Worker                 WorkerProfile
-	Packs                  []VersionedPack
-	CreatorProfiles        []VersionedCreatorProfile
-	Intent                 model.Intent
-	Ownership              []model.OwnershipRule
+	ProjectID           string
+	CoreProtocolVersion string
+	Worker              WorkerProfile
+	Packs               []VersionedPack
+	CreatorProfiles     []VersionedCreatorProfile
+	Intent              model.Intent
+	// Ownership、StoryContext、Task 是已渲染成故事语言的模型视图（D66），编译器只做规范化。
+	Ownership              json.RawMessage
 	OverlayRules           []string
 	StoryContext           json.RawMessage
 	Task                   json.RawMessage

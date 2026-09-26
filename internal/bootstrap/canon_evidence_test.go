@@ -13,6 +13,7 @@ import (
 	"github.com/voocel/ainovel-cli/internal/domain/change"
 	"github.com/voocel/ainovel-cli/internal/domain/derive"
 	"github.com/voocel/ainovel-cli/internal/domain/model"
+	"github.com/voocel/ainovel-cli/internal/domain/narrative"
 )
 
 func editCanonEvidence(t *testing.T, api *testApp, project projectdoc.Snapshot, id string, patches ...model.Patch) projectdoc.Snapshot {
@@ -66,14 +67,14 @@ func TestWindowReviewEvidencePinsManuscriptsNotCanon(t *testing.T) {
 		t.Fatal(err)
 	}
 	input, _ := json.Marshal(model.ReviewRangeInput{ChapterIDs: firstWindow, Basis: firstBasis})
-	story, err := derive.BuildStoryContext(derive.ProjectContent{ID: project.ID, Revision: project.Revision, Plan: project.Plan, Entities: project.Entities, Canon: project.Canon, Manuscript: project.Manuscript}, model.OperationReviewRange, input)
+	view, err := derive.BuildModelView(derive.ProjectContent{ID: project.ID, Revision: project.Revision, Plan: project.Plan, Entities: project.Entities, Canon: project.Canon, Manuscript: project.Manuscript}, model.OperationReviewRange, input)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.ContainsFunc(story.Documents, func(document derive.ContextDocument) bool {
-		return document.Ref == model.DocumentRef{Kind: model.DocumentCanon, ID: "chapter-chapter-plan-1-outcome"}
+	if !slices.ContainsFunc(view.Context.Facts, func(fact narrative.FactView) bool {
+		return fact.Chapter == 1 && fact.Predicate == "event.chapter_outcome"
 	}) {
-		t.Fatal("review context must still show the window's own facts")
+		t.Fatalf("review context must still show the window's own facts: %+v", view.Context.Facts)
 	}
 	for _, document := range append(slices.Clone(firstBasis.Documents), laterBasis.Documents...) {
 		if document.Ref.Kind == model.DocumentCanon {

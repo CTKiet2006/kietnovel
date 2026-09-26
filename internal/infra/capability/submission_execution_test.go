@@ -28,7 +28,7 @@ func (m *repeatingSubmissionModel) GenerateStream(_ context.Context, _ []agentco
 		return nil, errors.New("guard did not stop model calls")
 	}
 	message := runtimeToolCallMessage(fmt.Sprintf("submit-%d", m.calls), prompt.ToolProposalSubmit,
-		json.RawMessage(`{"reason":"提交","workspace_key":"draft","workspace_version":99,"patches":[]}`), m.now)
+		json.RawMessage(`{"reason":"提交","workspace_key":"draft","workspace_version":99,"facts":[{"subject":"主角","predicate":"event.arrival","value":"抵达"}]}`), m.now)
 	stream := make(chan agentcore.StreamEvent, 3)
 	call := message.ToolCalls()[0]
 	stream <- agentcore.StreamEvent{Type: agentcore.StreamEventToolCallStart, Message: message}
@@ -123,7 +123,7 @@ func TestRuntimeSubmissionStopsOnlyAfterResultIsPersisted(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			s, op := runningWriterWithDraft(t, ctx)
-			llm := &recoveryRuntimeModel{now: time.Now(), proposalArgs: json.RawMessage(`{"reason":"完成","workspace_key":"draft","workspace_version":1,"patches":[{"document":{"kind":"canon","id":"arrival"},"operation":"put","content":{"id":"arrival","kind":"event","subject_id":"hero","predicate":"event.arrival","new_value":"抵达山门","source_chapter_id":"chapter-1"}}]}`)}
+			llm := &recoveryRuntimeModel{now: time.Now(), proposalArgs: json.RawMessage(`{"reason":"完成","workspace_key":"draft","workspace_version":1,"facts":[{"subject":"主角","predicate":"event.arrival","value":"抵达山门"}]}`)}
 			r := boundRuntime(s, llm)
 			cause := errors.New("result persistence failed")
 			if failCommit {

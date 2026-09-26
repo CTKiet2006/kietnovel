@@ -2,7 +2,9 @@ package pack
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -33,8 +35,8 @@ type Loaded struct {
 	Digest     string             `json:"digest"`
 }
 
-func LoadDirectory(path string) (Loaded, error) {
-	root, err := filepath.Abs(path)
+func LoadDirectory(dir string) (Loaded, error) {
+	root, err := filepath.Abs(dir)
 	if err != nil {
 		return Loaded{}, fmt.Errorf("resolve pack directory: %w", err)
 	}
@@ -46,8 +48,32 @@ func LoadDirectory(path string) (Loaded, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
 		return Loaded{}, fmt.Errorf("pack path is not a directory: %w", model.ErrInvalid)
 	}
+	loaded, err := load(func(relative string) ([]byte, error) { return readAsset(root, relative) })
+	if err != nil {
+		return Loaded{}, err
+	}
+	loaded.Root = root
+	return loaded, nil
+}
 
-	manifestBytes, err := readAsset(root, ManifestName)
+// LoadFS 加载编译期嵌入的 Pack（官方内置包，D65），清单与校验同 LoadDirectory。
+func LoadFS(fsys fs.FS) (Loaded, error) {
+	return load(func(relative string) ([]byte, error) {
+		name := path.Clean(filepath.ToSlash(relative))
+		if strings.TrimSpace(relative) == "" || name == "." || !fs.ValidPath(name) {
+			return nil, fmt.Errorf("pack asset path %q is invalid: %w", relative, model.ErrInvalid)
+		}
+		content, err := fs.ReadFile(fsys, name)
+		if err != nil {
+			return nil, fmt.Errorf("read pack asset %q: %w", relative, err)
+		}
+		return content, nil
+	})
+}
+
+// load 按清单组装 Pack；read 负责按清单内的相对路径安全读取资产。
+func load(read func(relative string) ([]byte, error)) (Loaded, error) {
+	manifestBytes, err := read(ManifestName)
 	if err != nil {
 		return Loaded{}, err
 	}
@@ -63,7 +89,6 @@ func LoadDirectory(path string) (Loaded, error) {
 	}
 
 	loaded := Loaded{
-		Root: root,
 		Manifest: model.PackManifest{
 			ID: manifest.ID, Version: manifest.Version, Name: manifest.Name,
 			PromptOverlays: make(map[string]string, len(manifest.Prompts)),
@@ -82,14 +107,14 @@ func LoadDirectory(path string) (Loaded, error) {
 		if strings.TrimSpace(slot) == "" {
 			return Loaded{}, fmt.Errorf("prompt slot is required: %w", model.ErrInvalid)
 		}
-		content, err := readAsset(root, assetPath)
+		content, err := read(assetPath)
 		if err != nil {
 			return Loaded{}, fmt.Errorf("load prompt slot %q: %w", slot, err)
 		}
 		loaded.Manifest.PromptOverlays[slot] = string(content)
 	}
 	for _, assetPath := range manifest.Rules {
-		content, err := readAsset(root, assetPath)
+		content, err := read(assetPath)
 		if err != nil {
 			return Loaded{}, fmt.Errorf("load rule %q: %w", assetPath, err)
 		}
@@ -105,7 +130,7 @@ func LoadDirectory(path string) (Loaded, error) {
 		{manifest.Evals, loaded.Evals, "eval"},
 	} {
 		for _, assetPath := range entry.paths {
-			content, err := readAsset(root, assetPath)
+			content, err := read(assetPath)
 			if err != nil {
 				return Loaded{}, fmt.Errorf("load %s %q: %w", entry.kind, assetPath, err)
 			}

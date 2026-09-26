@@ -78,7 +78,7 @@ func writeTask(i int) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{"chapter_plan_id":%q,"chapter_number":%d}`, planID(i), i))
 }
 
-func keySet(context StoryContext) map[string]bool {
+func keySet(context selection) map[string]bool {
 	keys := make(map[string]bool, len(context.Documents))
 	for _, document := range context.Documents {
 		keys[document.Ref.Key()] = true
@@ -88,7 +88,7 @@ func keySet(context StoryContext) map[string]bool {
 
 // §6.5 固定段：目标、上一章正文、近 5 章计划与事件、后 3 章计划；更早的历史只计入 omitted。
 func TestWriteContextKeepsWindowAndOmitsHistory(t *testing.T) {
-	context, err := BuildStoryContext(longBook(60, 49), model.OperationWriteChapter, writeTask(50))
+	context, err := selectContext(longBook(60, 49), model.OperationWriteChapter, writeTask(50))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestWriteContextKeepsWindowAndOmitsHistory(t *testing.T) {
 // 与章数脱钩：配角状态随章数线性增长，写到第 200 章仍不超预算，固定段完整保留。
 func TestWriteContextStaysWithinBudgetAsBookGrows(t *testing.T) {
 	for _, chapter := range []int{50, 200} {
-		context, err := BuildStoryContext(longBook(250, chapter-1), model.OperationWriteChapter, writeTask(chapter))
+		context, err := selectContext(longBook(250, chapter-1), model.OperationWriteChapter, writeTask(chapter))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -154,7 +154,7 @@ func TestReviewContextIsBoundedToTheWindow(t *testing.T) {
 		task, _ := json.Marshal(model.ReviewRangeInput{ChapterIDs: ids, Basis: model.EvidenceBasis{Documents: []model.DocumentBasis{
 			{Ref: model.DocumentRef{Kind: model.DocumentManuscript, ID: ids[0]}, Revision: 2},
 		}}})
-		context, err := BuildStoryContext(content, model.OperationReviewRange, task)
+		context, err := selectContext(content, model.OperationReviewRange, task)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -185,7 +185,7 @@ func TestRankTrimsIrrelevantFactsFirstAndExposesRequiredOverflow(t *testing.T) {
 	content.Canon = append(content.Canon,
 		model.CanonFact{ID: "villain-lair", Kind: model.CanonState, SubjectID: "villain", Predicate: "state.lair", Value: json.RawMessage(`"` + strings.Repeat("远", 400) + `"`)},
 	)
-	full, err := BuildStoryContext(content, model.OperationWriteChapter, json.RawMessage(`{"chapter_plan_id":"chapter-plan-3","chapter_number":3}`))
+	full, err := selectContext(content, model.OperationWriteChapter, json.RawMessage(`{"chapter_plan_id":"chapter-plan-3","chapter_number":3}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestRewriteContextsCarrySourcedFacts(t *testing.T) {
 
 // 规划锚点是第一个未写的章节：近期窗口给方向，锚点起的全部章节计划是工作对象，不带正文。
 func TestPlanningContextAnchorsAtFirstUnwrittenChapter(t *testing.T) {
-	context, err := BuildStoryContext(longBook(13, 10), model.OperationRevisePlan,
+	context, err := selectContext(longBook(13, 10), model.OperationRevisePlan,
 		json.RawMessage(`{"intent":"长路","fixed_chapters":20,"existing_chapters":13,"requested_chapters":20}`))
 	if err != nil {
 		t.Fatal(err)
@@ -258,7 +258,7 @@ func TestPlanningContextAnchorsAtFirstUnwrittenChapter(t *testing.T) {
 // 输入顺序不影响结果：缓存键相同的上下文必须逐字节一致。
 func TestStoryContextIsDeterministicUnderInputOrder(t *testing.T) {
 	content := longBook(80, 70)
-	want, err := BuildStoryContext(content, model.OperationWriteChapter, writeTask(71))
+	want, err := selectContext(content, model.OperationWriteChapter, writeTask(71))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestStoryContextIsDeterministicUnderInputOrder(t *testing.T) {
 		random.Shuffle(len(shuffled.Manuscript), func(i, j int) {
 			shuffled.Manuscript[i], shuffled.Manuscript[j] = shuffled.Manuscript[j], shuffled.Manuscript[i]
 		})
-		got, err := BuildStoryContext(shuffled, model.OperationWriteChapter, writeTask(71))
+		got, err := selectContext(shuffled, model.OperationWriteChapter, writeTask(71))
 		if err != nil {
 			t.Fatal(err)
 		}

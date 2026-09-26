@@ -210,14 +210,18 @@ func lintSources(worker WorkerProfile, sources []Source) []Diagnostic {
 		}
 		for _, promptSlot := range source.Slots {
 			slot := string(promptSlot)
-			if _, active := activeSlots[slot]; !active {
+			// 一个 Pack 同时服务多个 Worker 是常态（官方包覆盖全部 Slot，D65）；
+			// 只有任何内置 Worker 都不用的 Slot（多半是拼错）才会静默失效。
+			if !validSlot(promptSlot) {
 				diagnostics = append(diagnostics, Diagnostic{
-					Code: "inactive_pack_overlay", Message: fmt.Sprintf("Pack %s 的 %s 不属于当前 Worker Profile", source.ID, slot),
+					Code: "unknown_pack_slot", Message: fmt.Sprintf("Pack %s 的 %s 不是任何内置 Worker 的 Slot，不会生效", source.ID, slot),
 					Sources: []string{source.ID},
 				})
 				continue
 			}
-			owners[slot] = append(owners[slot], source.ID)
+			if _, active := activeSlots[slot]; active {
+				owners[slot] = append(owners[slot], source.ID)
+			}
 		}
 	}
 	for slot, packs := range owners {

@@ -12,13 +12,19 @@ import (
 	"github.com/voocel/ainovel-cli/internal/infra/store"
 )
 
-type Repository struct {
-	store   *store.Store
-	changes *change.Engine
+// OfficialPack 提供新书默认启用的官方内置包（D65），实现方保证返回的版本与内置内容一致。
+type OfficialPack interface {
+	Ensure(ctx context.Context, userID string, at time.Time) (model.ProjectPackRef, error)
 }
 
-func New(s *store.Store, changes *change.Engine) *Repository {
-	return &Repository{store: s, changes: changes}
+type Repository struct {
+	store    *store.Store
+	changes  *change.Engine
+	official OfficialPack
+}
+
+func New(s *store.Store, changes *change.Engine, official OfficialPack) *Repository {
+	return &Repository{store: s, changes: changes, official: official}
 }
 
 type ProjectDraft struct {
@@ -94,7 +100,12 @@ func (s *Repository) DeleteProject(ctx context.Context, projectID string) error 
 
 func (s *Repository) CreateProject(ctx context.Context, command CreateProjectCommand) (Snapshot, error) {
 	target := model.AuthorityTarget{Kind: model.AuthorityProject, ID: command.ProjectID}
-	patches, err := projectDraftPatches(command.Draft)
+	// 新书默认启用官方内置包并固定当前版本（D65），与作品在同一次提交中创建。
+	official, err := s.official.Ensure(ctx, command.UserID, command.CreatedAt)
+	if err != nil {
+		return Snapshot{}, fmt.Errorf("enable official pack: %w", err)
+	}
+	patches, err := projectDraftPatches(command.Draft, model.ProjectAssetRefs{Packs: []model.ProjectPackRef{official}})
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -205,8 +216,8 @@ func (s *Repository) DerivedDocuments(
 	return s.store.ListDerivedDocuments(ctx, projectID, revision)
 }
 
-func projectDraftPatches(draft ProjectDraft) ([]model.Patch, error) {
-	patches := make([]model.Patch, 0, 1+len(draft.Plan)+len(draft.Canon)+len(draft.Ownership))
+func projectDraftPatches(draft ProjectDraft, assets model.ProjectAssetRefs) ([]model.Patch, error) {
+	patches := make([]model.Patch, 0, 2+len(draft.Plan)+len(draft.Canon)+len(draft.Ownership))
 	appendPut := func(ref model.DocumentRef, value any) error {
 		payload, err := json.Marshal(value)
 		if err != nil {
@@ -243,6 +254,12 @@ func projectDraftPatches(draft ProjectDraft) ([]model.Patch, error) {
 		if err := appendPut(model.DocumentRef{Kind: model.DocumentApproval, ID: "root"}, setting); err != nil {
 			return nil, err
 		}
+	}
+	if err := assets.Validate(); err != nil {
+		return nil, err
+	}
+	if err := appendPut(model.DocumentRef{Kind: model.DocumentAssets, ID: "root"}, assets); err != nil {
+		return nil, err
 	}
 	return patches, nil
 }

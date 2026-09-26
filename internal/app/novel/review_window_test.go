@@ -187,7 +187,7 @@ func TestExtendCarriesPendingRequirements(t *testing.T) {
 		kind: model.OperationRevisePlan, id: "run:book:1:plan:extend:3:r5:f5",
 		check: func(t *testing.T, work creation.WorkItem) {
 			got := work.Input.(model.RevisePlanInput).PendingRequirements
-			if !slices.Equal(got, []string{"主角登场", "弧九换视角（作用域 plan_node:arc-9）"}) {
+			if !slices.Equal(got, []string{"主角登场", "弧九换视角（作用域：大纲中尚不存在的节点）"}) {
 				t.Fatalf("pending requirements = %v", got)
 			}
 		},
