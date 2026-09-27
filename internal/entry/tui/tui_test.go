@@ -767,27 +767,25 @@ func TestProgressLabelFollowsLength(t *testing.T) {
 	}
 }
 
-// 决定卡把罗盘补丁说成人话：AI 上调篇幅上限时这正是等你裁决的内容。
+// 决定卡把罗盘变化说成人话：AI 上调篇幅上限时这正是等你裁决的内容；固定篇幅下罗盘
+// 只有终局方向，不出现「上限 0 章」。
 func TestCompassSummaryDescribesTheChange(t *testing.T) {
-	ref := domainmodel.DocumentRef{Kind: domainmodel.DocumentCompass, ID: domainmodel.SingletonDocumentID}
-	put := func(value domainmodel.Compass) domainmodel.Patch {
-		content, _ := json.Marshal(value)
-		return domainmodel.Patch{Document: ref, Operation: domainmodel.PatchPut, Content: content}
-	}
 	current := &domainmodel.Compass{ScaleMax: 60, Ending: "称帝"}
 	for _, c := range []struct {
 		current *domainmodel.Compass
-		patch   domainmodel.Patch
+		next    domainmodel.Compass
 		want    string
 	}{
-		{nil, put(domainmodel.Compass{ScaleMax: 60, Ending: "称帝"}), "篇幅上限 60 章 · 终局：称帝"},
-		{current, put(domainmodel.Compass{ScaleMax: 120, Ending: "称帝"}), "篇幅上限 60 → 120 章"},
-		{current, put(domainmodel.Compass{ScaleMax: 60, Ending: "称帝", Final: 48}), "收官 48 章"},
-		{current, domainmodel.Patch{Document: ref, Operation: domainmodel.PatchDelete}, "删除故事罗盘"},
-		{&domainmodel.Compass{ScaleMax: 60, Ending: "称帝", Final: 40}, put(domainmodel.Compass{ScaleMax: 60, Ending: "称帝"}), "撤回收官（原 40 章）"},
+		{nil, domainmodel.Compass{ScaleMax: 60, Ending: "称帝"}, "篇幅上限 60 章 · 终局：称帝"},
+		{nil, domainmodel.Compass{Ending: "称帝"}, "终局：称帝"},
+		{current, domainmodel.Compass{ScaleMax: 120, Ending: "称帝"}, "篇幅上限 60 → 120 章"},
+		{current, domainmodel.Compass{ScaleMax: 60, Ending: "称帝", Final: 48}, "收官 48 章"},
+		{current, domainmodel.Compass{Ending: "归隐"}, "取消篇幅上限（原 60 章） · 终局：归隐"},
+		{&domainmodel.Compass{ScaleMax: 60, Ending: "称帝", Final: 40}, domainmodel.Compass{ScaleMax: 60, Ending: "称帝"}, "撤回收官（原 40 章）"},
+		{current, *current, "故事罗盘未变"},
 	} {
-		if got, err := compassSummary(c.current, c.patch); err != nil || got != c.want {
-			t.Fatalf("compass summary = %q, %v; want %q", got, err, c.want)
+		if got := compassSummary(c.current, c.next); got != c.want {
+			t.Fatalf("compass summary = %q; want %q", got, c.want)
 		}
 	}
 }

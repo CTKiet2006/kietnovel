@@ -344,10 +344,7 @@ func (item novelItem) work(run model.CreationRun, premise string, length Length)
 		goal := "展开下一个故事弧的章节：已有章节保持不变，只在末尾追加并挂在所属故事弧下；下一弧已有骨架就按已发生的故事修订后展开，没有就新建（需要时新建卷），这一弧多少章由你按故事走向决定；结合审阅意见调整后续走向，为 pending_requirements 中尚未兑现的要求安排落点；" + length.planningGoal()
 		parts := []string{"plan", "extend", strconv.Itoa(item.covered), length.inputID()}
 		if item.concluded {
-			goal += fmt.Sprintf("；第 %d 章已作为全书结局写成，这是续写：在这个结局之后开启新的篇章、接住已完成的故事，不重复收尾", item.covered)
-			if length.Fixed == 0 {
-				goal += "，并在 compass.ending 写下续写部分的终局方向"
-			}
+			goal += fmt.Sprintf("；第 %d 章已作为全书结局写成，这是续写：在这个结局之后开启新的篇章、接住已完成的故事，不重复收尾，并在 compass.ending 写下续写部分的终局方向", item.covered)
 			parts = append(parts, "c")
 		}
 		work.ID = runQuickID(run.ID, parts...)

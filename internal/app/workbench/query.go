@@ -1,11 +1,14 @@
 package workbench
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
+	"strings"
 
 	"github.com/voocel/ainovel-cli/internal/app/decision"
 	"github.com/voocel/ainovel-cli/internal/app/novel"
@@ -48,6 +51,9 @@ type OutlineNode struct {
 	Number int            `json:"number,omitempty"` // 章节序号，仅 chapter
 	State  ChapterState   `json:"state,omitempty"`
 	Detail string         `json:"detail,omitempty"` // 进行中细分：正在落笔/正在按意见重写
+	// Proposed 表示节点来自等你确认的方案（新增或修订），尚未入库：大纲按方案生效后的
+	// 样子呈现，确认前可逐章浏览。
+	Proposed bool `json:"proposed,omitempty"`
 }
 
 // ChapterCandidate 是待确认的章节候选稿及其血统。
@@ -65,6 +71,8 @@ type PendingDecision struct {
 	Proposal    model.Proposal `json:"proposal"`
 	HasProposal bool           `json:"has_proposal"`
 	Stale       bool           `json:"stale,omitempty"`
+	// View 是稿件里正文以外变更的故事语言描述，有稿件时才有。
+	View ProposalView `json:"view,omitzero"`
 }
 
 type WorkbenchSnapshot struct {
@@ -118,7 +126,7 @@ func (s *Query) snapshotFromProject(ctx context.Context, project projectdoc.Snap
 	writingPlanID := ""
 	if hasRun {
 		snapshot.Run = &run
-		if snapshot.Candidates, snapshot.Decision, err = s.workbenchDecision(ctx, run); err != nil {
+		if snapshot.Candidates, snapshot.Decision, err = s.workbenchDecision(ctx, run, project); err != nil {
 			return WorkbenchSnapshot{}, err
 		}
 		if snapshot.CurrentPhase, writingPlanID, err = s.workbenchPhase(ctx, run, project); err != nil {
@@ -131,14 +139,27 @@ func (s *Query) snapshotFromProject(ctx context.Context, project projectdoc.Snap
 	for _, gap := range novel.CanonGaps(project) {
 		snapshot.PendingCanon = append(snapshot.PendingCanon, gap.Pending...)
 	}
-	snapshot.Outline = buildOutline(project, snapshot.Candidates, writingPlanID)
+	plan, proposed, err := proposedPlan(project.Plan, snapshot.Decision)
+	if err != nil {
+		return WorkbenchSnapshot{}, err
+	}
+	snapshot.Outline = buildOutline(plan, proposed, project.Manuscript, snapshot.Candidates, writingPlanID)
 	snapshot.Length = novel.LengthOf(project, snapshot.Run)
 	return snapshot, nil
 }
 
+// DescribeProposal 用故事语言描述运行之外的稿件（如导入草案）相对作品当前内容的变更。
+func (s *Query) DescribeProposal(ctx context.Context, projectID string, proposal model.Proposal) (ProposalView, error) {
+	project, err := s.projects.Project(ctx, projectID, model.InitialRevision)
+	if err != nil {
+		return ProposalView{}, err
+	}
+	return proposalView(project, proposal)
+}
+
 // workbenchDecision 提取待确认候选与决定卡：Run 等待用户时才有。
 func (s *Query) workbenchDecision(
-	ctx context.Context, run model.CreationRun,
+	ctx context.Context, run model.CreationRun, project projectdoc.Snapshot,
 ) ([]ChapterCandidate, *PendingDecision, error) {
 	if run.State != model.RunWaitingUser {
 		return nil, nil, nil
@@ -157,10 +178,15 @@ func (s *Query) workbenchDecision(
 	relocated, _, err := s.decisions.Relocate(ctx, proposal)
 	if errors.Is(err, model.ErrRevisionConflict) {
 		decision.Stale = true
-		return nil, decision, nil
-	}
-	if err != nil {
+	} else if err != nil {
 		return nil, nil, err
+	}
+	// 过期稿件也照实描述它提了什么，只是不再解出候选、不投到大纲。
+	if decision.View, err = proposalView(project, proposal); err != nil {
+		return nil, nil, err
+	}
+	if decision.Stale {
+		return nil, decision, nil
 	}
 	proposal = relocated
 	var candidates []ChapterCandidate
@@ -296,10 +322,14 @@ func (s *Query) validFindings(ctx context.Context, project projectdoc.Snapshot) 
 	return findings, effective, nil
 }
 
-// buildOutline 组装大纲树（先序，按 parent/order 排序）并推导章节呈现状态。
-func buildOutline(project projectdoc.Snapshot, candidates []ChapterCandidate, writingPlanID string) []OutlineNode {
-	confirmed := make(map[string]int, len(project.Manuscript)) // plan node id → 章节号
-	for _, chapter := range project.Manuscript {
+// buildOutline 组装大纲树（先序，按 parent、再按 order 与 ID 排序，与章号同一口径）并
+// 推导章节呈现状态；proposed 是来自等你确认的方案、尚未入库的节点。
+func buildOutline(
+	plan []model.PlanNode, proposed map[string]struct{}, manuscript []model.ManuscriptChapter,
+	candidates []ChapterCandidate, writingPlanID string,
+) []OutlineNode {
+	confirmed := make(map[string]int, len(manuscript)) // plan node id → 章节号
+	for _, chapter := range manuscript {
 		confirmed[chapter.PlanNodeID] = chapter.Number
 	}
 	pending := make(map[string]struct{}, len(candidates))
@@ -308,11 +338,13 @@ func buildOutline(project projectdoc.Snapshot, candidates []ChapterCandidate, wr
 	}
 
 	children := make(map[string][]model.PlanNode)
-	for _, node := range project.Plan {
+	for _, node := range plan {
 		children[node.ParentID] = append(children[node.ParentID], node)
 	}
 	for parent := range children {
-		slices.SortStableFunc(children[parent], func(a, b model.PlanNode) int { return a.Order - b.Order })
+		slices.SortFunc(children[parent], func(a, b model.PlanNode) int {
+			return cmp.Or(a.Order-b.Order, strings.Compare(a.ID, b.ID))
+		})
 	}
 
 	var outline []OutlineNode
@@ -320,7 +352,7 @@ func buildOutline(project projectdoc.Snapshot, candidates []ChapterCandidate, wr
 	var walk func(parentID string)
 	walk = func(parentID string) {
 		for _, node := range children[parentID] {
-			entry := OutlineNode{Node: node}
+			entry := OutlineNode{Node: node, Proposed: hasKey(proposed, node.ID)}
 			if node.Kind == model.PlanChapter {
 				chapterNumber++
 				entry.Number = chapterNumber
@@ -336,6 +368,9 @@ func buildOutline(project projectdoc.Snapshot, candidates []ChapterCandidate, wr
 				default:
 					entry.State = ChapterPlanned
 				}
+				if entry.Proposed && entry.State == ChapterPlanned {
+					entry.Detail = "方案待你确认"
+				}
 			}
 			outline = append(outline, entry)
 			walk(node.ID)
@@ -343,6 +378,34 @@ func buildOutline(project projectdoc.Snapshot, candidates []ChapterCandidate, wr
 	}
 	walk("")
 	return outline
+}
+
+// proposedPlan 把等你确认的方案里的大纲改动投到当前大纲上，确认前就能在大纲里逐章
+// 浏览；过期稿件不投。
+func proposedPlan(plan []model.PlanNode, decision *PendingDecision) ([]model.PlanNode, map[string]struct{}, error) {
+	proposed := make(map[string]struct{})
+	if decision == nil || !decision.HasProposal || decision.Stale {
+		return plan, proposed, nil
+	}
+	byID := make(map[string]model.PlanNode, len(plan))
+	for _, node := range plan {
+		byID[node.ID] = node
+	}
+	for _, patch := range decision.Proposal.Patches {
+		if patch.Document.Kind != model.DocumentPlan {
+			continue
+		}
+		if patch.Operation != model.PatchPut {
+			delete(byID, patch.Document.ID)
+			continue
+		}
+		var node model.PlanNode
+		if err := json.Unmarshal(patch.Content, &node); err != nil {
+			return nil, nil, fmt.Errorf("decode proposed plan node %q: %w", patch.Document.ID, err)
+		}
+		byID[node.ID], proposed[node.ID] = node, struct{}{}
+	}
+	return slices.Collect(maps.Values(byID)), proposed, nil
 }
 
 func hasKey(set map[string]struct{}, id string) bool {

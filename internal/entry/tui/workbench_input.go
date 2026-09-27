@@ -292,7 +292,7 @@ var benchCommands = []benchCommand{
 		m.switchView(viewActivity)
 		return m, nil
 	}},
-	{name: "review", label: "查看待确认稿件的完整变更", run: func(m model, _ string) (tea.Model, tea.Cmd) {
+	{name: "review", label: "查看等你确认的全部内容", run: func(m model, _ string) (tea.Model, tea.Cmd) {
 		return m.openReview(), nil
 	}},
 	{name: "follow", label: "回到最新", run: func(m model, _ string) (tea.Model, tea.Cmd) {

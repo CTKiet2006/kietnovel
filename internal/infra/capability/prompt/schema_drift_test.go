@@ -30,7 +30,6 @@ func TestToolSchemaFieldsAreDecodable(t *testing.T) {
 		{ToolWorkspacePutReview, "findings[]", jsonFields(narrative.Finding{})},
 		{ToolVerdictSubmit, "checks[]", jsonFields(model.RequirementCheck{})},
 		{ToolProposalSubmit, "", submission},
-		{ToolProposalSubmit, "intent", jsonFields(model.Intent{})},
 		{ToolProposalSubmit, "compass", jsonFields(model.Compass{})},
 		{ToolProposalSubmit, "volumes[]", jsonFields(narrative.VolumeEdit{})},
 		{ToolProposalSubmit, "arcs[]", jsonFields(narrative.ArcEdit{})},

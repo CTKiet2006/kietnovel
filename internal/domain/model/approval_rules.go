@@ -10,15 +10,13 @@ import (
 // Ownership 控制、审批策略、合规证据），哪些内容变化需要用户、什么算重大变化由这里回答。
 
 // RequiresUser 返回 AI 变更即使在 auto 档下也必须由用户裁决的原因，空串表示无需：
-//   - 初始化之后的 Intent（D25/D28）：唯一例外是项目的第一个 Revision；
+//   - Intent 只装用户的原话（D25/D70）：AI 的任何改动都等用户裁决；
 //   - 故事罗盘的篇幅护栏（D63）：删除罗盘、首次给出超过无人值守护栏的上限、上调上限。
 func RequiresUser(proposal Proposal, base DocumentSet) (string, error) {
 	for _, patch := range proposal.Patches {
 		switch patch.Document.Kind {
 		case DocumentIntent:
-			if proposal.BaseRevision != InitialRevision {
-				return "intent changes after initialization require user approval", nil
-			}
+			return "intent changes require user approval", nil
 		case DocumentCompass:
 			if reason, err := compassBeyondAutonomy(base, patch); reason != "" || err != nil {
 				return reason, err
@@ -36,13 +34,16 @@ func compassBeyondAutonomy(base DocumentSet, patch Patch) (string, error) {
 	if err := json.Unmarshal(patch.Content, &next); err != nil {
 		return "", fmt.Errorf("decode proposed compass: %w", err)
 	}
+	// 基线没有 AI 定的上限（没有罗盘，或篇幅由用户固定、罗盘只有终局）时按护栏判。
 	limit := CompassAutonomyCeiling
 	if current, ok := base[patch.Document.Key()]; ok {
 		var compass Compass
 		if err := json.Unmarshal(current.Content, &compass); err != nil {
 			return "", fmt.Errorf("decode base compass: %w", err)
 		}
-		limit = compass.ScaleMax
+		if compass.ScaleMax > 0 {
+			limit = compass.ScaleMax
+		}
 	}
 	if next.ScaleMax > limit {
 		return fmt.Sprintf("raising the compass scale_max to %d (above %d) requires user approval", next.ScaleMax, limit), nil

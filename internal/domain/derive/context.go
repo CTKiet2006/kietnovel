@@ -181,7 +181,7 @@ func buildStoryContext(content ProjectContent, kind model.OperationKind, task js
 		return selection{}, err
 	}
 	switch input := input.(type) {
-	case *model.InitializeProjectInput, *model.DevelopPlanInput, *model.RevisePlanInput:
+	case *model.DevelopPlanInput, *model.RevisePlanInput:
 		err = s.assemble(focus{anchor: s.firstUnwritten(), planning: true}, policy)
 	case *model.WriteChapterInput:
 		err = s.writing(input.ChapterPlanID, "", policy)

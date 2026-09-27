@@ -87,7 +87,6 @@ func BuiltinCapabilities() ([]CapabilityDefinition, error) {
 	definitions := []CapabilityDefinition{
 		{
 			OperationKinds: []model.OperationKind{
-				model.OperationInitializeProject,
 				model.OperationDevelopPlan,
 				model.OperationRevisePlan,
 				model.OperationReviseCanon,
@@ -308,22 +307,16 @@ func planEditSchema(number, parent, parentDescription string) map[string]any {
 	}}
 }
 
-const intentSchema = `{"type":"object","description":"完整的创作意图，整体替换","properties":{` +
-	`"premise":{"type":"string"},"audience":{"type":"string"},` +
-	`"desired_experience":{"type":"array","items":{"type":"string"}},` +
-	`"required":{"type":"array","items":{"type":"string"}},"forbidden":{"type":"array","items":{"type":"string"}},` +
-	`"ending_direction":{"type":"string"}},"required":["premise"],"additionalProperties":false}`
-
-const compassSchema = `{"type":"object","description":"故事罗盘，只有规划任务可写。scale_max 是全书篇幅上限（章），ending 是终局方向，` +
-	`final 是收官承诺（全书章数，未收官时省略）。任务有 fixed_chapters 时篇幅由用户固定，不要提交；篇幅交给 AI 时首次规划必须给出，` +
-	`之后只在有变化时提交；未收官时蓝图章节总数必须小于 scale_max，临近上限就声明 final 收官，确需更长再上调 scale_max（需用户同意）；` +
-	`给出 final 后蓝图不超过第 final 章，可分次规划到它",` +
+const compassSchema = `{"type":"object","description":"故事罗盘，只有规划任务可写。ending 是终局方向：故事最终要回答的问题或抵达的状态，` +
+	`首次规划必须给出，之后只在有变化时提交。scale_max 是全书篇幅上限（章），final 是收官承诺（全书章数，未收官时省略）：` +
+	`任务有 fixed_chapters 时篇幅由用户固定，二者都不写；篇幅交给 AI 时首次规划必须给出 scale_max，未收官时蓝图章节总数必须小于它，` +
+	`临近上限就声明 final 收官，确需更长再上调 scale_max（需用户同意）；给出 final 后蓝图不超过第 final 章，可分次规划到它",` +
 	`"properties":{"scale_max":{"type":"integer","minimum":1},"ending":{"type":"string"},"final":{"type":"integer","minimum":1}},` +
-	`"required":["scale_max","ending"],"additionalProperties":false}`
+	`"required":["ending"],"additionalProperties":false}`
 
 // proposalTool 按任务公开提交参数：没有合法用途的参数不出现，模型就不会误用。redeclare
 // 公开确认与删除，只给要重申报已有事实的任务——写新章时本章还没有事实；planning 公开
-// 意图、罗盘与卷弧章编辑。
+// 罗盘与卷弧章编辑。创作意图只装用户的原话，AI 不写（D70）。
 func proposalTool(draft draftSubmission, redeclare, planning bool) ToolSchema {
 	required := []string{"reason"}
 	facts := map[string]any{"type": "array", "items": factSchema(draft),
@@ -367,7 +360,6 @@ func proposalTool(draft draftSubmission, redeclare, planning bool) ToolSchema {
 		description += `重申报所改章节的全部既有事实：不变的列进 confirm_facts，要改的在 facts 里提交新值，不再成立的列进 remove_facts；其他章节的事实不要动。`
 	}
 	if planning {
-		properties["intent"] = json.RawMessage(intentSchema)
 		properties["compass"] = json.RawMessage(compassSchema)
 		properties["volumes"] = planEditSchema("volume", "", "")
 		properties["arcs"] = planEditSchema("arc", "volume", "所属卷序号，新增时必填")

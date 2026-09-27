@@ -44,12 +44,15 @@ func CommittedFinal(compass *model.Compass, planned int) int {
 	return compass.Final
 }
 
-// planningGoal 按篇幅阶段说明规划要对罗盘做什么。
+// planningGoal 按篇幅阶段说明规划要对罗盘做什么。终局方向总由规划写进罗盘（D70）：
+// 固定篇幅时罗盘只有终局，篇幅交给 AI 时还要有上限。
 func (l Length) planningGoal() string {
 	switch {
+	case l.Fixed > 0 && l.Compass == nil:
+		return fmt.Sprintf("全书固定 %d 章：本次必须给出故事罗盘 compass，只写终局方向 ending（篇幅已由用户固定，不写 scale_max 与 final）；规划到第 %d 章时收束主线，把未回收的伏笔分配进收官章节", l.Fixed, l.Fixed)
 	case l.Fixed > 0:
-		return fmt.Sprintf("全书固定 %d 章：规划到第 %d 章时收束主线，把未回收的伏笔分配进收官章节", l.Fixed, l.Fixed)
-	case l.Compass == nil:
+		return fmt.Sprintf("全书固定 %d 章：规划到第 %d 章时收束主线，把未回收的伏笔分配进收官章节；终局方向有变化时修订 compass.ending", l.Fixed, l.Fixed)
+	case l.Compass == nil || l.Compass.ScaleMax == 0:
 		return "篇幅由你决定：本次必须给出故事罗盘 compass（按题材与故事容量定篇幅上限 scale_max 与终局方向 ending）；规划已到故事终点时同时声明收官 final"
 	case l.Compass.Final > 0 && l.Final == 0:
 		return fmt.Sprintf("篇幅由你决定（当前上限 %d 章）：罗盘的收官承诺 %d 章已少于蓝图章数而失效，本次必须修订 compass.final（不少于已规划章数）或撤回收官（省略 final）", l.Compass.ScaleMax, l.Compass.Final)

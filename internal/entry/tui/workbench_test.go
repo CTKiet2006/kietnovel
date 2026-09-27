@@ -14,6 +14,7 @@ import (
 	"github.com/muesli/termenv"
 	"github.com/voocel/ainovel-cli/internal/app/workbench"
 	domainmodel "github.com/voocel/ainovel-cli/internal/domain/model"
+	"github.com/voocel/ainovel-cli/internal/domain/narrative"
 	"github.com/voocel/ainovel-cli/internal/infra/activity"
 )
 
@@ -292,13 +293,70 @@ func TestActivityTimelineMergesByTimeAndFreezesWhileHeld(t *testing.T) {
 	}
 }
 
+// 规划方案等你确认时：卡上说清规模、罗盘与怎么调整；方案按生效后的样子投在目录里（◇），
+// 选中即可读本章规划；/review 用故事语言写出全部内容，不露 JSON 与文档 ID。
+func TestBlueprintProposalReadsAsStoryAndPreviewsInOutline(t *testing.T) {
+	m := studioModel(t, 150, 40)
+	m.bench.writing = false
+	m.bench.snap.Run.State = domainmodel.RunWaitingUser
+	m.bench.snap.CurrentPhase = ""
+	m.bench.snap.Outline[4].State = workbench.ChapterPlanned
+	m.bench.snap.Outline = append(m.bench.snap.Outline,
+		workbench.OutlineNode{Node: domainmodel.PlanNode{ID: "plan-arc-2", Kind: domainmodel.PlanArc, ParentID: "v1", Title: "门后"}, Proposed: true},
+		workbench.OutlineNode{Node: domainmodel.PlanNode{ID: "plan-chapter-5", Kind: domainmodel.PlanChapter, ParentID: "plan-arc-2", Title: "旧友", Summary: "苏晚认出陈渡"},
+			Number: 5, State: workbench.ChapterPlanned, Proposed: true, Detail: "方案待你确认"},
+	)
+	patch := domainmodel.Patch{Document: domainmodel.DocumentRef{Kind: domainmodel.DocumentPlan, ID: "plan-chapter-5"}, Operation: domainmodel.PatchPut, Content: []byte(`{}`)}
+	m.bench.decision = &decisionState{
+		reason: "后续章节的蓝图已拟好，等你确认后继续", hasProposal: true, continueAfter: true,
+		proposal: domainmodel.Proposal{ID: "blueprint", Patches: []domainmodel.Patch{patch}},
+		view: workbench.ProposalView{
+			Summary: []string{"新增 1 个故事弧 · 1 章", "新增人物地点 1 个", "设定 1 条"},
+			Outline: []narrative.VolumeView{{Volume: 1, Title: "第一卷 · 未寄出的信", Arcs: []narrative.ArcView{{
+				Arc: 2, Title: "门后", Summary: "门后的人现身",
+				Chapters: []narrative.ChapterPlanView{{Chapter: 5, Title: "旧友", Summary: "苏晚认出陈渡"}},
+			}}}},
+			Entities: []narrative.EntityView{{Name: "苏晚", Kind: domainmodel.EntityCharacter, Aliases: []string{"晚晚"}}},
+			Facts:    []string{"「苏晚」身份：陈渡的旧友"},
+			Compass:  &domainmodel.Compass{Ending: "真相大白"},
+		},
+	}
+	requireContains(t, frame(m),
+		"◇ 创作方案 · 等待你确认", "新增 1 个故事弧 · 1 章 · 新增人物地点 1 个 · 设定 1 条 · 终局：真相大白",
+		"y 通过 · 写下修改意见后回车重新规划（意见留作全书要求） · /review 查看全部", "门后 ◇", "◇ 05  旧友",
+	)
+	m.bench.cursor = 6 // 行 5 是方案里的新故事弧，行 6 是它的第 5 章
+	requireContains(t, frame(m), "◇ 方案待你确认 · 尚未生效", "苏晚认出陈渡")
+	if scope, target := m.directiveScope(); scope != "chapter_range:5-5" || target != "第 5 章" || m.directiveScopeLabel(scope) != "第 5 章" {
+		t.Fatalf("proposed chapter scope = %q %q", scope, target)
+	}
+	m.bench.cursor = 5
+	if scope, _ := m.directiveScope(); scope != "from_chapter:4" {
+		t.Fatalf("proposed arc must not be referenced before it exists: %q", scope)
+	}
+	review, err := m.reviewContent()
+	if err != nil {
+		t.Fatal(err)
+	}
+	review = ansi.Strip(review)
+	requireContains(t, review,
+		"第 1 卷 · 第一卷 · 未寄出的信", "  第 2 个故事弧 · 门后", "    第 5 章 · 旧友", "      苏晚认出陈渡",
+		"苏晚（人物） 又名 晚晚", "「苏晚」身份：陈渡的旧友", "故事罗盘\n终局：真相大白", "重新规划（意见留作全书要求）",
+	)
+	for _, leak := range []string{"{", "plan-", "原始内容"} {
+		if strings.Contains(review, leak) {
+			t.Fatalf("review leaks %q:\n%s", leak, review)
+		}
+	}
+}
+
 func TestDecisionCardGuardsApprovalAndFeedback(t *testing.T) {
 	m := withCandidate(studioModel(t, 150, 40), false)
 	view := frame(m)
 	requireContains(t, view,
 		"◇ 等你决定", "◇ 04  门后的声音", "◇ 候选稿 · 等你确认 · 尚未入稿",
-		"◇ 第 4 章 · 门后的声音 · 等待你确认", "新稿 ", "说明：第四章初稿", "y 通过 · 写下修改意见后回车 · /review 查看完整变更",
-		"写下修改意见后回车，或输入 y 通过", "◇ 修改意见 · 第 4 章 · 门后的声音", "/review 查看完整变更",
+		"◇ 第 4 章 · 门后的声音 · 等待你确认", "新稿 ", "说明：第四章初稿", "y 通过 · 写下修改意见后回车重写 · /review 查看全部",
+		"写下修改意见后回车，或输入 y 通过", "◇ 修改意见 · 第 4 章 · 门后的声音", "/review 查看全部内容",
 	)
 	if l := m.benchLayout(); l.cardY < 0 || l.sceneY < 0 || l.cardY != l.sceneY+benchSceneRows {
 		t.Fatalf("decision card must sit between the scene strip and the footer: %+v", l)

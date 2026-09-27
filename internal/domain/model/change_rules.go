@@ -330,26 +330,29 @@ func validateTaskSubmission(task Operation, base, projected story, patches []Pat
 
 func validateBlueprint(input TaskInput, base, projected story, patches []Patch) error {
 	fixed, planning := planRequest(input)
+	existing, chapters, compass := countChapters(base.plans), countChapters(projected.plans), projected.compass
 	for _, patch := range patches {
 		switch {
 		case patch.Document.Kind == DocumentCompass && !planning:
 			return fmt.Errorf("only planning tasks may change the compass: %w", ErrInvalid)
-		case patch.Document.Kind == DocumentCompass && fixed > 0:
-			return fmt.Errorf("the user fixed the length at %d chapters; leave the compass unchanged: %w", fixed, ErrInvalid)
+		// 用户固定篇幅时罗盘只写终局（D70）：篇幅的数字属于用户。
+		case patch.Document.Kind == DocumentCompass && fixed > 0 && compass != nil && (compass.ScaleMax != 0 || compass.Final != 0):
+			return fmt.Errorf("the user fixed the length at %d chapters: the compass carries only the ending, omit scale_max and final: %w", fixed, ErrInvalid)
 		}
 	}
-	existing, chapters, compass := countChapters(base.plans), countChapters(projected.plans), projected.compass
 	switch {
 	case !planning:
 		if chapters != existing {
 			return fmt.Errorf("only planning tasks may add or remove chapter nodes (%d → %d): %w", existing, chapters, ErrInvalid)
 		}
+	case chapters < existing:
+		return fmt.Errorf("planning may not remove chapter nodes (%d → %d): %w", existing, chapters, ErrInvalid)
 	case fixed > 0:
 		if chapters <= existing || chapters > fixed {
 			return fmt.Errorf("plan has %d chapter nodes: append at least one chapter after the %d planned, up to the fixed %d: %w", chapters, existing, fixed, ErrInvalid)
 		}
-	case compass == nil:
-		return fmt.Errorf("the blueprint requires a compass when the AI decides the length: %w", ErrInvalid)
+	case compass == nil || compass.ScaleMax == 0:
+		return fmt.Errorf("the blueprint requires a compass with scale_max when the AI decides the length: %w", ErrInvalid)
 	case compass.Final > 0:
 		if compass.Final < existing {
 			return fmt.Errorf("compass final %d is below the %d planned chapters: %w", compass.Final, existing, ErrInvalid)

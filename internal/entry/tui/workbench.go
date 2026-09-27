@@ -158,12 +158,13 @@ func (b *workbenchState) situation() benchSituation {
 	return situationRunning
 }
 
-// decisionState 是决定卡：等待原因 + 可选的待裁决稿件。
+// decisionState 是决定卡：等待原因 + 可选的待裁决稿件及其故事语言描述。
 // continueAfter 标记裁决后是否自动续跑（创作运行的稿件续跑，导入草案不续）；
 // stale 表示稿件基线已过期（直接通过会撞版本冲突），只留重写路径。
 type decisionState struct {
 	reason        string
 	proposal      domainmodel.Proposal
+	view          workbench.ProposalView
 	hasProposal   bool
 	continueAfter bool
 	stale         bool
@@ -396,7 +397,7 @@ func (m model) applyWorkbench(message tea.Msg) (tea.Model, tea.Cmd) {
 		if !bench.writing && bench.decision == nil && message.snap.Decision != nil {
 			bench.presentDecision(&decisionState{
 				reason: message.snap.Decision.Reason, proposal: message.snap.Decision.Proposal,
-				hasProposal: message.snap.Decision.HasProposal, continueAfter: true,
+				view: message.snap.Decision.View, hasProposal: message.snap.Decision.HasProposal, continueAfter: true,
 				stale: message.snap.Decision.Stale,
 			})
 		}

@@ -43,10 +43,10 @@ func TestRunNextRecoversCommittedProposalWithoutExecutingAgain(t *testing.T) {
 		t.Fatalf("commit seed: %v", err)
 	}
 
-	// 通用执行机制用例：任务种类不带章节契约，提交卷节点即可。
-	input := json.RawMessage(`{"intent":"凡人修仙"}`)
+	// 通用执行机制用例：固定一章的规划任务，提交一章的最小蓝图即可。
+	input := json.RawMessage(`{"intent":"凡人修仙","fixed_chapters":1}`)
 	operation := model.Operation{
-		ID: "write-1", Kind: model.OperationInitializeProject, Target: target,
+		ID: "write-1", Kind: model.OperationDevelopPlan, Target: target,
 		State: model.OperationQueued, RunID: createEngineTestRun(t, ctx, authorityStore, target.ID, now),
 		Snapshot: engineSnapshot(input, 1, model.ApprovalAuto),
 		Input:    input, CreatedAt: now, UpdatedAt: now,
@@ -58,17 +58,12 @@ func TestRunNextRecoversCommittedProposalWithoutExecutingAgain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim operation: %v", err)
 	}
-	planContent, _ := json.Marshal(model.PlanNode{
-		ID: "vol-1", Kind: model.PlanVolume, Order: 0, Title: "第一卷", Summary: "凡人踏入修行",
-	})
 	proposal := model.Proposal{
 		ID: running.ID + "-proposal", OperationID: running.ID,
 		Target: target, BaseRevision: 1,
-		Author: model.Author{Kind: model.AuthorAI, ID: "writer.compose@1"},
-		Reason: "agent candidate", Patches: []model.Patch{{
-			Document:  model.DocumentRef{Kind: model.DocumentPlan, ID: "vol-1"},
-			Operation: model.PatchPut, Content: planContent,
-		}}, ApprovalState: model.ApprovalPending, CreatedAt: now.Add(2 * time.Second),
+		Author: model.Author{Kind: model.AuthorAI, ID: "architect.design@1"},
+		Reason: "agent candidate", Patches: blueprintPatches(),
+		ApprovalState: model.ApprovalPending, CreatedAt: now.Add(2 * time.Second),
 	}
 	proposal, err = changeEngine.PrepareExecution(ctx, proposal, running.Attempt)
 	if err != nil {
@@ -99,6 +94,21 @@ func TestRunNextRecoversCommittedProposalWithoutExecutingAgain(t *testing.T) {
 	if result.Operation.State != model.OperationSucceeded || result.ChangeSet == nil || result.ChangeSet.NewRevision != 2 {
 		t.Fatalf("result = %#v", result)
 	}
+}
+
+// blueprintPatches 是固定一章的最小蓝图：卷、弧与一章。
+func blueprintPatches() []model.Patch {
+	nodes := []model.PlanNode{
+		{ID: "vol-1", Kind: model.PlanVolume, Title: "第一卷", Summary: "凡人踏入修行"},
+		{ID: "arc-1", Kind: model.PlanArc, ParentID: "vol-1", Title: "入门", Summary: "拜入山门"},
+		{ID: "chapter-plan-1", Kind: model.PlanChapter, ParentID: "arc-1", Title: "山门", Summary: "少年叩响山门"},
+	}
+	patches := make([]model.Patch, 0, len(nodes))
+	for _, node := range nodes {
+		content, _ := json.Marshal(node)
+		patches = append(patches, model.Patch{Document: model.DocumentRef{Kind: model.DocumentPlan, ID: node.ID}, Operation: model.PatchPut, Content: content})
+	}
+	return patches
 }
 
 type neverExecutor struct {
@@ -518,10 +528,10 @@ func TestFinalizeRelocatesControlOnlyDrift(t *testing.T) {
 	commitUserChange(t, ctx, authorityStore, target, "seed", now, model.Patch{
 		Document: model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, Operation: model.PatchPut, Content: intent,
 	})
-	// 通用执行机制用例：任务种类不带章节契约，提交卷节点即可。
-	input := json.RawMessage(`{"intent":"凡人修仙"}`)
+	// 通用执行机制用例：固定一章的规划任务，提交一章的最小蓝图即可。
+	input := json.RawMessage(`{"intent":"凡人修仙","fixed_chapters":1}`)
 	operation := model.Operation{
-		ID: "write-1", Kind: model.OperationInitializeProject, Target: target,
+		ID: "write-1", Kind: model.OperationDevelopPlan, Target: target,
 		State: model.OperationQueued, RunID: createEngineTestRun(t, ctx, authorityStore, target.ID, now),
 		Snapshot: engineSnapshot(input, 1, model.ApprovalAuto),
 		Input:    input, CreatedAt: now, UpdatedAt: now,
@@ -533,11 +543,10 @@ func TestFinalizeRelocatesControlOnlyDrift(t *testing.T) {
 	if err != nil {
 		t.Fatalf("claim operation: %v", err)
 	}
-	planContent, _ := json.Marshal(model.PlanNode{ID: "vol-1", Kind: model.PlanVolume, Title: "第一卷", Summary: "凡人踏入修行"})
 	if _, err := change.New(authorityStore).Prepare(ctx, model.Proposal{
 		ID: running.ID + "-proposal", OperationID: running.ID, Target: target, BaseRevision: 1,
-		Author: model.Author{Kind: model.AuthorAI, ID: "writer.compose@1"}, Reason: "agent candidate",
-		Patches:       []model.Patch{{Document: model.DocumentRef{Kind: model.DocumentPlan, ID: "vol-1"}, Operation: model.PatchPut, Content: planContent}},
+		Author: model.Author{Kind: model.AuthorAI, ID: "architect.design@1"}, Reason: "agent candidate",
+		Patches:       blueprintPatches(),
 		ApprovalState: model.ApprovalPending, CreatedAt: now.Add(2 * time.Second),
 	}); err != nil {
 		t.Fatalf("prepare operation proposal: %v", err)

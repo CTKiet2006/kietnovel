@@ -53,7 +53,11 @@ func (m model) proseSource() proseSource {
 	if chapter, ok := chapterByNumber(snap.Manuscript, number); ok {
 		return proseSource{overline: overline, title: chapter.Title, state: "✓ 已入稿", text: chapterText(chapter)}
 	}
-	return proseSource{overline: overline, title: node.Node.Title, state: "○ 已规划 · 尚无正文", text: node.Node.Summary}
+	state := "○ 已规划 · 尚无正文"
+	if node.Proposed {
+		state = "◇ 方案待你确认 · 尚未生效"
+	}
+	return proseSource{overline: overline, title: node.Node.Title, state: state, text: node.Node.Summary}
 }
 
 // sectionSource 选中卷/弧头行时显示这一部分的规划摘要与进度。
@@ -62,10 +66,11 @@ func sectionSource(row outlineRow) proseSource {
 	if text == "" {
 		text = "这一部分还没有规划摘要。选择其中的章节阅读正文。"
 	}
-	return proseSource{
-		overline: "目录", title: row.node.Node.Title,
-		state: fmt.Sprintf("%d 章 · 已入稿 %d 章", row.chapters, row.confirmed), text: text,
+	state := fmt.Sprintf("%d 章 · 已入稿 %d 章", row.chapters, row.confirmed)
+	if row.node.Proposed {
+		state = fmt.Sprintf("◇ 方案待你确认 · %d 章 · 尚未生效", row.chapters)
 	}
+	return proseSource{overline: "目录", title: row.node.Node.Title, state: state, text: text}
 }
 
 // overviewSource 还没有可选章节时（刚开始、大纲未出）显示作品总览与当下进展。
@@ -92,7 +97,7 @@ func (m model) overviewSource() proseSource {
 func (m model) nextStepText() string {
 	switch m.bench.situation() {
 	case situationDecidingProposal:
-		return "有稿件待验收。进入 F3 审阅后，输入 y 回车通过，或提交修改意见。"
+		return "有稿件等你确认：/review 查看全部内容，输入 y 回车通过，或写下修改意见后回车。"
 	case situationDeciding:
 		return "创作在等你的决定：" + m.bench.decision.reason
 	case situationNoRun:

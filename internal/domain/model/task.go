@@ -34,8 +34,6 @@ type OperationKindSpec struct {
 }
 
 var operationKinds = []OperationKindSpec{
-	{Kind: OperationInitializeProject, Executor: ExecutorLLM, RequiresRun: true, Label: "正在整理创作设定",
-		NewInput: func() TaskInput { return &InitializeProjectInput{} }},
 	{Kind: OperationDevelopPlan, Executor: ExecutorLLM, RequiresRun: true, Label: "正在规划故事蓝图",
 		NewInput: func() TaskInput { return &DevelopPlanInput{} }},
 	{Kind: OperationRevisePlan, Executor: ExecutorLLM, RequiresRun: true, Label: "正在规划故事蓝图",
@@ -100,18 +98,6 @@ func TaskInputAs[T any, PT interface {
 		return zero, fmt.Errorf("operation %s input is %T, not %T: %w", operation.Kind, input, zero, ErrInvalid)
 	}
 	return *typed, nil
-}
-
-type InitializeProjectInput struct {
-	Intent string `json:"intent"`
-	Goal   string `json:"goal,omitempty"`
-}
-
-func (v InitializeProjectInput) Validate() error {
-	if strings.TrimSpace(v.Intent) == "" {
-		return fmt.Errorf("intent is required: %w", ErrInvalid)
-	}
-	return nil
 }
 
 // DevelopPlanInput / RevisePlanInput 不指定章数：这次展开或追加多少章由规划者决定，

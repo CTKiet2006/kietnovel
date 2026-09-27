@@ -27,7 +27,7 @@ func (s *Story) Humanize(err error) error {
 func (s *Story) labelPairs() []string {
 	var pairs []string
 	add := func(ref model.DocumentRef, bare string) {
-		if label, ok := s.label(ref); ok {
+		if label, ok := s.Label(ref); ok {
 			pairs = append(pairs, `"`+ref.ID+`"`, bare, `"`+ref.Key()+`"`, label)
 		}
 	}

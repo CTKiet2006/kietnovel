@@ -50,7 +50,7 @@ var allowedImports = map[string][]string{
 	"app/evidence":    {"domain/model", "infra/store", "domain/change", "domain/operation"},
 	"app/novel":       {"domain/model", "domain/narrative", "domain/derive", "infra/store", "domain/change", "domain/creation", "app/project", "app/resource", "app/task", "infra/export"},
 	"app/decision":    {"domain/model", "infra/store", "domain/change", "app/project", "app/resource", "app/task"},
-	"app/workbench":   {"infra/activity", "domain/model", "infra/store", "domain/creation", "app/decision", "app/novel", "app/project"},
+	"app/workbench":   {"infra/activity", "domain/model", "domain/narrative", "infra/store", "domain/creation", "app/decision", "app/novel", "app/project"},
 	// 模型绑定用例只认配置与模型适配器，不认任务与作品。
 	"app/binding":    {"infra/config", "infra/llm", "infra/llm/models", "infra/capability/prompt"},
 	"bootstrap":      {"assets", "app/binding", "app/diag", "domain/model", "infra/store", "domain/change", "domain/creation", "app/decision", "app/evidence", "app/novel", "domain/operation", "app/profile", "app/project", "app/resource", "app/task", "app/workbench", "infra/activity", "infra/capability"},
@@ -69,7 +69,8 @@ var allowedTestImports = map[string][]string{
 	"domain/creation":  {"infra/store"},
 	"bootstrap":        {"infra/capability/prompt", "domain/derive", "domain/narrative", "infra/config", "infra/llm/models"},
 	"entry/headless":   {"infra/store", "infra/config", "infra/llm/models"},
-	"entry/tui":        {"infra/store", "infra/llm/models"},
+	// 决定卡夹具要构造工作台交来的故事语言视图（D70）。
+	"entry/tui": {"infra/store", "infra/llm/models", "domain/narrative"},
 	// 官方包的覆盖守护要用内置 Worker 定义核对 Slot（D65）。
 	"assets": {"infra/capability/pack", "infra/capability/prompt"},
 	// 工具 Schema 的漂移守护按宿主解码的故事语言类型核对字段（D66）。

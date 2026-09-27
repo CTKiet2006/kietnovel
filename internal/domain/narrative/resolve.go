@@ -14,7 +14,6 @@ import (
 // Submission 是模型用故事语言写的提交（D66）：不含任何文档 ID。正文不在这里，
 // 由宿主按工作稿键与版本装配后随 drafts 传入。
 type Submission struct {
-	Intent   *model.Intent  `json:"intent,omitempty"`
 	Compass  *model.Compass `json:"compass,omitempty"`
 	Volumes  []VolumeEdit   `json:"volumes,omitempty"`
 	Arcs     []ArcEdit      `json:"arcs,omitempty"`
@@ -86,11 +85,6 @@ func (s *Story) Resolve(input model.TaskInput, submission Submission, drafts []m
 	}
 	if canon, ok := input.(*model.ReviseCanonInput); ok {
 		r.scope = append(r.scope, canon.ChapterID)
-	}
-	if submission.Intent != nil {
-		if err := r.put(model.DocumentIntent, model.SingletonDocumentID, submission.Intent); err != nil {
-			return nil, err
-		}
 	}
 	if submission.Compass != nil {
 		if err := r.put(model.DocumentCompass, model.SingletonDocumentID, submission.Compass); err != nil {

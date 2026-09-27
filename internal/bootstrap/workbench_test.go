@@ -3,6 +3,7 @@ package bootstrap_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,6 +127,24 @@ func TestWorkbenchSnapshotAcrossLifecycle(t *testing.T) {
 	result, err := api.Novels.QuickWrite(ctx, command)
 	if err != nil {
 		t.Fatalf("quick write: %v", err)
+	}
+	// 蓝图等你确认：卡上是故事语言的规模摘要，方案按生效后的样子投进大纲。
+	snapshot, err = api.Workbench.WorkbenchSnapshot(ctx, "bench-book")
+	if err != nil {
+		t.Fatalf("snapshot while blueprint pending: %v", err)
+	}
+	if snapshot.Decision == nil || !snapshot.Decision.HasProposal || len(snapshot.Candidates) != 0 ||
+		len(snapshot.Decision.View.Summary) == 0 || !strings.HasSuffix(snapshot.Decision.View.Summary[0], "2 章") {
+		t.Fatalf("blueprint decision = %#v", snapshot.Decision)
+	}
+	proposedChapters := 0
+	for _, entry := range snapshot.Outline {
+		if entry.Node.Kind == model.PlanChapter && entry.Proposed && entry.Detail == "方案待你确认" {
+			proposedChapters++
+		}
+	}
+	if proposedChapters != 2 {
+		t.Fatalf("blueprint outline preview = %#v", snapshot.Outline)
 	}
 	if _, err := api.Decisions.Approve(ctx, planID(result.RunID, command.Chapters)+"-proposal", "user-1", testTime().Add(time.Hour)); err != nil {
 		t.Fatalf("approve plan: %v", err)

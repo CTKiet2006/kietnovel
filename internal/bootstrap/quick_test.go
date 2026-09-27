@@ -1499,8 +1499,10 @@ func testFixingLengthSupersedesWaitingRaise(t *testing.T, paused bool) {
 	if rejected, err := api.Decisions.Reject(ctx, superseded.ID, "user-1", "不再需要", command.CreatedAt.Add(time.Minute)); err != nil || rejected.ApprovalState != model.ApprovalRejected {
 		t.Fatalf("rejecting a superseded raise = %+v, %v", rejected, err)
 	}
+	// 固定篇幅后篇幅只有用户一个口径（D70）：罗盘撤下 AI 的上限与收官，只留终局。
 	project, err := api.Projects.Project(ctx, command.ProjectID, 0)
-	if err != nil || project.Compass == nil || project.Compass.Final != 5 || project.Compass.ScaleMax != 5 || len(project.Manuscript) != 5 {
-		t.Fatalf("aligned compass = %+v chapters=%d, %v", project.Compass, len(project.Manuscript), err)
+	if err != nil || project.Compass == nil || project.Compass.Final != 0 || project.Compass.ScaleMax != 0 ||
+		project.Compass.Ending == "" || len(project.Manuscript) != 5 {
+		t.Fatalf("fixed-length compass = %+v chapters=%d, %v", project.Compass, len(project.Manuscript), err)
 	}
 }

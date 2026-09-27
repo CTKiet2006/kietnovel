@@ -2,13 +2,14 @@ package tui
 
 import (
 	"fmt"
-	projectdoc "github.com/voocel/ainovel-cli/internal/app/project"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	projectdoc "github.com/voocel/ainovel-cli/internal/app/project"
+	"github.com/voocel/ainovel-cli/internal/app/workbench"
 	domainmodel "github.com/voocel/ainovel-cli/internal/domain/model"
 	appconfig "github.com/voocel/ainovel-cli/internal/infra/config"
 	"github.com/voocel/ainovel-cli/internal/infra/jsonc"
@@ -83,6 +84,7 @@ type projectDeletedMsg struct {
 type importDoneMsg struct {
 	projectID string
 	proposal  domainmodel.Proposal
+	view      workbench.ProposalView
 	err       error
 }
 
@@ -181,7 +183,7 @@ func (m model) updateHome(message tea.Msg) (tea.Model, tea.Cmd) {
 		// 导入产出一份待批准草案：进入该作品工作台，用决定卡裁决。
 		watch := m.openBench(message.projectID)
 		m.bench.presentDecision(&decisionState{
-			reason: "导入的草案等你批准", proposal: message.proposal, hasProposal: true,
+			reason: "导入的草案等你批准", proposal: message.proposal, view: message.view, hasProposal: true,
 		})
 		return m, tea.Batch(m.refreshBenchCmd(), watch)
 	case tea.MouseMsg:
@@ -403,7 +405,11 @@ func (m model) importProjectCmd(path string) tea.Cmd {
 		if err != nil {
 			return importDoneMsg{err: err}
 		}
-		return importDoneMsg{projectID: projection.ProjectID, proposal: proposal}
+		view, err := api.Workbench.DescribeProposal(ctx, projection.ProjectID, proposal)
+		if err != nil {
+			return importDoneMsg{err: err}
+		}
+		return importDoneMsg{projectID: projection.ProjectID, proposal: proposal, view: view}
 	}
 }
 

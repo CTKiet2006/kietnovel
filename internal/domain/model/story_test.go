@@ -166,6 +166,17 @@ func TestValidateBlueprint(t *testing.T) {
 			func(t *testing.T) []Patch { return plans(t, 3) }, true},
 		{"fixed length leaves the compass to the user", fixedSix, base,
 			func(t *testing.T) []Patch { return append(plans(t, 4, 5, 6), compass(t, 6, 6)) }, false},
+		// 终局方向总由规划写（D70）：固定篇幅时罗盘只有终局，篇幅交给 AI 时还要有上限。
+		{"fixed length writes an ending-only compass", fixedSix, unbounded,
+			func(t *testing.T) []Patch { return append(plans(t, 4), compass(t, 0, 0)) }, true},
+		{"AI length rejects an ending-only compass", open, unbounded,
+			func(t *testing.T) []Patch { return append(plans(t, 4, 5), compass(t, 0, 0)) }, false},
+		{"an ending-only compass needs a scale_max once the AI decides", open, blueprint(&Compass{Ending: "称帝"}, chapters(1, 2, 3)...),
+			func(t *testing.T) []Patch { return plans(t, 4) }, false},
+		{"planning may not remove chapter nodes", open, base,
+			func(t *testing.T) []Patch {
+				return []Patch{{Document: DocumentRef{Kind: DocumentPlan, ID: "chapter-3"}, Operation: PatchDelete}, compass(t, 10, 5)}
+			}, false},
 		{"deleting the compass keeps a node named root", open,
 			blueprint(&Compass{ScaleMax: 10, Ending: "称帝"}, append(chapters(1, 2), PlanNode{ID: "root", Kind: PlanChapter, ParentID: "arc-1", Order: 3, Title: "章", Summary: "推进"})...),
 			func(t *testing.T) []Patch {
@@ -179,6 +190,8 @@ func TestValidateBlueprint(t *testing.T) {
 				switch {
 				case patch.Document.Kind == DocumentCompass && patch.Operation == PatchDelete:
 					projected.compass = nil
+				case patch.Operation == PatchDelete:
+					delete(projected.plans, patch.Document.ID)
 				case patch.Document.Kind == DocumentCompass:
 					projected.compass = new(Compass)
 					if err := json.Unmarshal(patch.Content, projected.compass); err != nil {
@@ -236,7 +249,10 @@ func TestCompassValidateAndNeverDependency(t *testing.T) {
 	}{
 		{Compass{ScaleMax: 60, Ending: "称帝"}, true},
 		{Compass{ScaleMax: 60, Ending: "称帝", Final: 60}, true},
-		{Compass{ScaleMax: 0, Ending: "称帝"}, false},
+		// 用户固定篇幅时罗盘只有终局（D70）：没有上限就不能有收官承诺。
+		{Compass{Ending: "称帝"}, true},
+		{Compass{Ending: "称帝", Final: 10}, false},
+		{Compass{ScaleMax: -1, Ending: "称帝"}, false},
 		{Compass{ScaleMax: 60}, false},
 		{Compass{ScaleMax: 60, Ending: "称帝", Final: 61}, false},
 		{Compass{ScaleMax: 60, Ending: "称帝", Final: -1}, false},

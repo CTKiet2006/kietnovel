@@ -15,7 +15,7 @@ import (
 // kindRole 由执行的 Operation Kind 定角色，不从模型文字猜身份。
 func kindRole(kind string) string {
 	switch domainmodel.OperationKind(kind) {
-	case domainmodel.OperationInitializeProject, domainmodel.OperationDevelopPlan, domainmodel.OperationRevisePlan:
+	case domainmodel.OperationDevelopPlan, domainmodel.OperationRevisePlan:
 		return "策划"
 	case domainmodel.OperationWriteChapter, domainmodel.OperationRewriteChapter, domainmodel.OperationRewriteAffected:
 		return "作者"
@@ -36,8 +36,6 @@ func taskName(task activity.Task) string {
 	chapters := fmt.Sprintf("%d 章", len(task.Scope.ChapterIDs))
 	var object string
 	switch domainmodel.OperationKind(task.Kind) {
-	case domainmodel.OperationInitializeProject:
-		object = "创作设定"
 	case domainmodel.OperationDevelopPlan:
 		object = "故事蓝图"
 	case domainmodel.OperationRevisePlan:

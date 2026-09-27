@@ -63,7 +63,7 @@ func outlineStats(outline []workbench.OutlineNode) map[string]outlineNodeStats {
 				if entry.State == workbench.ChapterConfirmed {
 					s.confirmed++
 				}
-				if entry.State == workbench.ChapterPending {
+				if entry.State == workbench.ChapterPending || entry.Proposed {
 					s.pending++
 				}
 				stats[id] = s
@@ -560,9 +560,9 @@ func (m model) outlineRowLine(row outlineRow, selected bool, width int) string {
 		summary, pending := "", ""
 		if row.collapsed {
 			summary = fmt.Sprintf(" · %d/%d 章", row.confirmed, row.chapters)
-			if row.pending > 0 {
-				pending = " ◇"
-			}
+		}
+		if row.node.Proposed || row.collapsed && row.pending > 0 {
+			pending = " ◇"
 		}
 		text := indent + fold + truncate(row.node.Node.Title, max(1, width-3-lipgloss.Width(indent+fold+summary+pending)))
 		if selected {
@@ -574,12 +574,12 @@ func (m model) outlineRowLine(row outlineRow, selected bool, width int) string {
 
 func (m model) outlineChapterLine(entry workbench.OutlineNode, selected bool, width int) string {
 	symbol, style, titleStyle := "○", benchTheme.Muted, benchTheme.Muted
-	switch entry.State {
-	case workbench.ChapterConfirmed:
+	switch {
+	case entry.State == workbench.ChapterConfirmed:
 		symbol, style, titleStyle = "✓", styleNotice, benchTheme.Text
-	case workbench.ChapterPending:
+	case entry.State == workbench.ChapterPending || entry.Proposed:
 		symbol, style, titleStyle = "◇", benchTheme.Warning, benchTheme.Text
-	case workbench.ChapterInProgress:
+	case entry.State == workbench.ChapterInProgress:
 		symbol, style, titleStyle = "◉", benchTheme.Accent, benchTheme.Text
 	}
 	digits := max(2, len(strconv.Itoa(max(m.bench.snap.Length.Final, chapterCount(m.bench.snap)))))

@@ -118,14 +118,13 @@ func TestBuiltinCapabilitiesAreValidAndComplete(t *testing.T) {
 		t.Fatalf("built-in capabilities: %v", err)
 	}
 	wantKinds := map[model.OperationKind]string{
-		model.OperationInitializeProject: "architect.design",
-		model.OperationDevelopPlan:       "architect.design",
-		model.OperationRevisePlan:        "architect.design",
-		model.OperationReviseCanon:       "architect.design",
-		model.OperationWriteChapter:      "writer.compose",
-		model.OperationRewriteChapter:    "writer.revise",
-		model.OperationRewriteAffected:   "writer.revise_affected",
-		model.OperationReviewRange:       "editor.review",
+		model.OperationDevelopPlan:     "architect.design",
+		model.OperationRevisePlan:      "architect.design",
+		model.OperationReviseCanon:     "architect.design",
+		model.OperationWriteChapter:    "writer.compose",
+		model.OperationRewriteChapter:  "writer.revise",
+		model.OperationRewriteAffected: "writer.revise_affected",
+		model.OperationReviewRange:     "editor.review",
 	}
 	for kind, workerID := range wantKinds {
 		definition, err := BuiltinCapability(kind)

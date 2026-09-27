@@ -186,55 +186,50 @@ func TestGuidedDocumentRequiresPassingCompliance(t *testing.T) {
 	}
 }
 
-func TestIntentChangesAfterInitializationRequireUserApproval(t *testing.T) {
+// Intent 只装用户的原话（D25/D70）：AI 对它的任何改动都等用户裁决，建书的第一个
+// Revision 也不例外；用户批准后才提交。
+func TestAIIntentChangesRequireUserApproval(t *testing.T) {
 	ctx := context.Background()
 	s := openStore(t)
 	target := model.AuthorityTarget{Kind: model.AuthorityProject, ID: "book-1"}
 	engine := New(s)
 	decidedAt := testTime().Add(time.Minute)
 	system := model.Author{Kind: model.AuthorSystem, ID: "approval-policy:auto"}
-
-	// 初始化事务：AI 在第一个 Revision 补全 Intent 可以自动批准（D28）。
-	initial := pendingChange("ai-init", target, 0, model.AuthorAI, model.Patch{
-		Document:  model.DocumentRef{Kind: model.DocumentIntent, ID: "root"},
-		Operation: model.PatchPut,
-		Content:   documentJSON(t, model.Intent{Premise: "凡人修仙", EndingDirection: "问鼎大道"}),
-	})
-	prepared, err := engine.Prepare(ctx, initial)
-	if err != nil {
-		t.Fatalf("prepare init: %v", err)
-	}
-	approved, err := Decide(prepared, model.ApprovalApproved, system, decidedAt)
-	if err != nil {
-		t.Fatalf("decide init: %v", err)
-	}
-	if _, err := engine.Commit(ctx, approved); err != nil {
-		t.Fatalf("AI intent completion in the initialization transaction must auto-commit: %v", err)
-	}
-
-	// 初始化之后：任何 Intent 变化都必须用户确认，包括补填空字段（D25/D28）。
-	update := pendingChange("ai-intent-drift", target, 1, model.AuthorAI, model.Patch{
-		Document:  model.DocumentRef{Kind: model.DocumentIntent, ID: "root"},
-		Operation: model.PatchPut,
-		Content:   documentJSON(t, model.Intent{Premise: "凡人修仙", EndingDirection: "陨落成魔", Audience: "成年读者"}),
-	})
-	prepared, err = engine.Prepare(ctx, update)
-	if err != nil {
-		t.Fatalf("prepare drift: %v", err)
-	}
-	autoApproved, err := Decide(prepared, model.ApprovalApproved, system, decidedAt.Add(time.Minute))
-	if err != nil {
-		t.Fatalf("decide drift: %v", err)
-	}
-	if _, err := engine.Commit(ctx, autoApproved); !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("post-init AI intent change commit error = %v, want ErrUnauthorized", err)
-	}
-	userApproved, err := Decide(prepared, model.ApprovalApproved, model.Author{Kind: model.AuthorUser, ID: "user-1"}, decidedAt.Add(time.Minute))
-	if err != nil {
-		t.Fatalf("user decide drift: %v", err)
-	}
-	if _, err := engine.Commit(ctx, userApproved); err != nil {
-		t.Fatalf("user-approved intent change: %v", err)
+	for _, base := range []model.Revision{0, 1} {
+		if base == 1 {
+			seed := pendingChange("user-intent", target, 0, model.AuthorUser, model.Patch{
+				Document: model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, Operation: model.PatchPut,
+				Content: documentJSON(t, model.Intent{Premise: "凡人修仙"}),
+			})
+			if _, err := engine.CommitUser(ctx, seed, decidedAt); err != nil {
+				t.Fatalf("user intent: %v", err)
+			}
+		}
+		change := pendingChange(fmt.Sprintf("ai-intent-%d", base), target, base, model.AuthorAI, model.Patch{
+			Document: model.DocumentRef{Kind: model.DocumentIntent, ID: "root"}, Operation: model.PatchPut,
+			Content: documentJSON(t, model.Intent{Premise: "凡人修仙", EndingDirection: "问鼎大道", Audience: "成年读者"}),
+		})
+		prepared, err := engine.Prepare(ctx, change)
+		if err != nil {
+			t.Fatalf("prepare at base %d: %v", base, err)
+		}
+		autoApproved, err := Decide(prepared, model.ApprovalApproved, system, decidedAt)
+		if err != nil {
+			t.Fatalf("decide at base %d: %v", base, err)
+		}
+		if _, err := engine.Commit(ctx, autoApproved); !errors.Is(err, ErrUnauthorized) {
+			t.Fatalf("AI intent change at base %d commit error = %v, want ErrUnauthorized", base, err)
+		}
+		if base == 0 {
+			continue
+		}
+		userApproved, err := Decide(prepared, model.ApprovalApproved, model.Author{Kind: model.AuthorUser, ID: "user-1"}, decidedAt)
+		if err != nil {
+			t.Fatalf("user decide: %v", err)
+		}
+		if _, err := engine.Commit(ctx, userApproved); err != nil {
+			t.Fatalf("user-approved intent change: %v", err)
+		}
 	}
 }
 
@@ -284,6 +279,11 @@ func TestCompassAutonomyRequiresUserForScaleRaises(t *testing.T) {
 	commit("finale", put(121, 90), false)
 	commit("delete", model.Patch{Document: ref, Operation: model.PatchDelete}, true)
 	commit("first-within-ceiling", put(model.CompassAutonomyCeiling, 0), false)
+	// 固定篇幅时罗盘只有终局（D70）：之后交回 AI 定篇幅，上限按护栏判，不按 0 判。
+	commit("ending-only", put(0, 0), false)
+	commit("scale-after-ending-only", put(model.CompassAutonomyCeiling, 0), false)
+	commit("back-to-ending-only", put(0, 0), false)
+	commit("first-above-ceiling-after-ending-only", put(model.CompassAutonomyCeiling+1, 0), true)
 }
 
 func TestApprovalPolicyChangesRequireUserApproval(t *testing.T) {

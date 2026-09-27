@@ -138,7 +138,7 @@ func progressLabel(done int, length novel.Length) string {
 		return fmt.Sprintf("已入稿 %d / %d 章 · 收官", done, length.Final)
 	case length.Final > 0:
 		return fmt.Sprintf("已入稿 %d / %d 章", done, length.Final)
-	case length.Compass != nil:
+	case length.Fixed == 0 && length.Compass != nil && length.Compass.ScaleMax > 0:
 		return fmt.Sprintf("已入稿 %d 章 · 上限 %d", done, length.Compass.ScaleMax)
 	default:
 		return fmt.Sprintf("已入稿 %d 章 · 篇幅待定", done)
@@ -152,7 +152,7 @@ func lengthStatus(length novel.Length) string {
 		return fmt.Sprintf("固定 %d 章", length.Fixed)
 	case length.Final > 0:
 		return fmt.Sprintf("AI 已承诺 %d 章收官", length.Final)
-	case length.Compass != nil:
+	case length.Compass != nil && length.Compass.ScaleMax > 0:
 		return fmt.Sprintf("AI 决定，上限 %d 章", length.Compass.ScaleMax)
 	default:
 		return "AI 决定"
@@ -260,10 +260,9 @@ func (m model) decisionCard(width int) []string {
 	if d.hasProposal {
 		title = "◇ " + m.reviewTarget() + " · 等待你确认"
 		summary = m.candidateSummary()
-		actions = "y 通过 · 写下修改意见后回车 · /review 查看完整变更"
+		actions = m.decisionActions() + " · /review 查看全部"
 		if d.stale {
 			summary = benchTheme.Warning.Render("基线已过期 · 稿件完成后书又有了新变化，不能直接通过")
-			actions = "写下修改意见后回车，让它基于最新内容重写 · /review 查看完整变更"
 		}
 	}
 	return []string{
@@ -398,7 +397,7 @@ func (m model) primaryAction() benchAction {
 	case situationWriting, situationPausing, situationCancelling:
 		return benchAction{"/pause", "暂停推进"}
 	case situationDecidingProposal:
-		return benchAction{"/review", "查看完整变更"}
+		return benchAction{"/review", "查看全部内容"}
 	case situationCompleted:
 		return benchAction{"/continue", "续写（AI 决定篇幅）"}
 	default:

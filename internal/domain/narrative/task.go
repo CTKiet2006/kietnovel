@@ -25,8 +25,6 @@ func (s *Story) Task(kind model.OperationKind, raw json.RawMessage) (json.RawMes
 	}
 	var view any
 	switch input := input.(type) {
-	case *model.InitializeProjectInput:
-		view = input
 	case *model.DevelopPlanInput:
 		view = input
 	case *model.RevisePlanInput:
@@ -120,7 +118,7 @@ func (s *Story) Ownership(rules []model.OwnershipRule) ([]RuleView, error) {
 		if err := rule.Validate(); err != nil {
 			return nil, err
 		}
-		if label, ok := s.label(rule.Target); ok {
+		if label, ok := s.Label(rule.Target); ok {
 			views = append(views, RuleView{Target: label, Control: rule.Control, Guidance: rule.Guidance})
 		}
 	}

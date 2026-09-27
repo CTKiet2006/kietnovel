@@ -10,7 +10,7 @@ import (
 // 每章都去确认前文全部事实；工作稿版本可选，模型就把整章正文抄进提交。每个 Worker 只公开
 // 有合法用途的参数，正文只经工作稿版本提交，参数里没有任何文档 ID（D66）。
 func TestSubmissionSchemaExposesOnlyUsableParameters(t *testing.T) {
-	planning := []string{"intent", "compass", "volumes", "arcs", "chapters"}
+	planning := []string{"compass", "volumes", "arcs", "chapters"}
 	redeclare := []string{"confirm_facts", "remove_facts"}
 	cases := map[string]struct {
 		required, present, absent []string
@@ -18,7 +18,8 @@ func TestSubmissionSchemaExposesOnlyUsableParameters(t *testing.T) {
 	}{
 		"architect.design": {
 			required: []string{"reason"}, present: append(append([]string{"entities", "facts"}, planning...), redeclare...),
-			absent: []string{"workspace_key", "workspace_version", "workspace_versions"},
+			// 创作意图只装用户的原话（D70），任何 Worker 都不能提交它。
+			absent: []string{"intent", "workspace_key", "workspace_version", "workspace_versions"},
 		},
 		"writer.compose": {
 			required: []string{"reason", "workspace_key", "workspace_version", "facts"}, present: []string{"entities"},

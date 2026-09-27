@@ -24,11 +24,12 @@ func (v Intent) Validate() error {
 	return validateDistinctStrings("intent required", v.Required)
 }
 
-// Compass 是故事罗盘（D63）：AI 在蓝图里给出的篇幅与终局，随滚动规划修订，只有
-// 规划任务能写。Final 是收官承诺（全书章数），0 表示尚未收官。
+// Compass 是故事罗盘（D63）：AI 在蓝图里给出的终局与篇幅，随滚动规划修订，只有
+// 规划任务能写。终局方向总由 AI 定；篇幅只在交给 AI 时才有（D70）：ScaleMax 是
+// 自主上限，Final 是收官承诺（全书章数，0 表示尚未收官）；用户固定篇幅时二者为 0。
 type Compass struct {
-	ScaleMax int    `json:"scale_max"` // 自主篇幅上限：AI 上调需用户裁决
-	Ending   string `json:"ending"`    // 终局方向
+	ScaleMax int    `json:"scale_max,omitempty"` // 自主篇幅上限：AI 上调需用户裁决
+	Ending   string `json:"ending"`              // 终局方向
 	Final    int    `json:"final,omitempty"`
 }
 
@@ -36,8 +37,8 @@ type Compass struct {
 const CompassAutonomyCeiling = 300
 
 func (v Compass) Validate() error {
-	if v.ScaleMax < 1 || strings.TrimSpace(v.Ending) == "" {
-		return fmt.Errorf("compass requires a positive scale_max and an ending: %w", ErrInvalid)
+	if strings.TrimSpace(v.Ending) == "" {
+		return fmt.Errorf("compass requires an ending: %w", ErrInvalid)
 	}
 	if v.Final < 0 || v.Final > v.ScaleMax {
 		return fmt.Errorf("compass final %d must be within scale_max %d: %w", v.Final, v.ScaleMax, ErrInvalid)

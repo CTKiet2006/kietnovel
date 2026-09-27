@@ -18,21 +18,26 @@ func (m model) reviewing() bool {
 }
 
 // directiveScope 按目录选中行定要求的作用域（§4.9）：章行只管该章，卷/弧行管整个子树，
-// 占位行或尚无目录时从下一章起生效。target 是给人看的短语。
+// 占位行或尚无目录时从下一章起生效。方案里尚未生效的节点不能被引用：章行按章号，
+// 卷/弧行从下一章起。target 是给人看的短语。
 func (m model) directiveScope() (scope, target string) {
+	next := len(m.bench.snap.Manuscript) + 1
 	rows := m.outlineRows()
 	if cursor := m.bench.cursor; cursor >= 0 && cursor < len(rows) {
 		row := rows[cursor]
 		switch {
 		case row.placeholder:
 			return fmt.Sprintf("from_chapter:%d", row.chapter), fmt.Sprintf("第 %d 章起", row.chapter)
+		case row.node.Proposed && row.isChapter():
+			return fmt.Sprintf("chapter_range:%d-%d", row.chapter, row.chapter), fmt.Sprintf("第 %d 章", row.chapter)
+		case row.node.Proposed:
+			return fmt.Sprintf("from_chapter:%d", next), fmt.Sprintf("第 %d 章起", next)
 		case row.isChapter():
 			return domainmodel.DirectiveScopePlanNode(row.node.Node.ID), fmt.Sprintf("第 %d 章", row.chapter)
 		default:
 			return domainmodel.DirectiveScopePlanNode(row.node.Node.ID), "「" + row.node.Node.Title + "」"
 		}
 	}
-	next := len(m.bench.snap.Manuscript) + 1
 	return fmt.Sprintf("from_chapter:%d", next), fmt.Sprintf("第 %d 章起", next)
 }
 
@@ -52,6 +57,9 @@ func (m model) directiveScopeLabel(scope string) string {
 		return "第 " + chapter + " 章起"
 	}
 	if chapters, ok := strings.CutPrefix(scope, "chapter_range:"); ok {
+		if from, to, _ := strings.Cut(chapters, "-"); from == to {
+			return "第 " + from + " 章"
+		}
 		return "第 " + chapters + " 章"
 	}
 	for _, entry := range m.bench.snap.Outline {
@@ -91,7 +99,7 @@ func (m model) reviewTarget() string {
 	if len(chapters) > 1 {
 		return fmt.Sprintf("%d 章候选稿", len(chapters))
 	}
-	return "当前创作方案"
+	return "创作方案"
 }
 
 func chapterWords(chapter domainmodel.ManuscriptChapter) int {
@@ -102,8 +110,9 @@ func chapterWords(chapter domainmodel.ManuscriptChapter) int {
 	return words
 }
 
-// candidateSummary 决定卡上的一行变更摘要：只比对具体正文，不推测语义差异。
+// candidateSummary 决定卡上的一行变更摘要：正文比对字数与标题，其余变更给规模。
 func (m model) candidateSummary() string {
+	d := m.bench.decision
 	chapters, err := m.reviewChapters()
 	if err != nil {
 		return benchTheme.Warning.Render("候选稿读取异常 · " + err.Error())
@@ -120,27 +129,18 @@ func (m model) candidateSummary() string {
 			parts = append(parts, "标题已调整")
 		}
 	}
-	attached := len(m.bench.decision.proposal.Patches) - len(chapters)
-	for _, patch := range m.bench.decision.proposal.Patches {
-		if patch.Document.Kind != domainmodel.DocumentCompass {
-			continue
-		}
-		text, err := compassSummary(m.bench.snap.Length.Compass, patch)
-		if err != nil {
-			return benchTheme.Warning.Render(err.Error())
-		}
-		parts, attached = append(parts, text), attached-1
+	parts = append(parts, d.view.Summary...)
+	if d.view.Compass != nil {
+		parts = append(parts, compassSummary(m.bench.snap.Length.Compass, *d.view.Compass))
 	}
-	if attached > 0 {
-		parts = append(parts, fmt.Sprintf("另有 %d 项附带变更", attached))
-	}
-	if reason := strings.TrimSpace(m.bench.decision.proposal.Reason); reason != "" {
+	if reason := strings.TrimSpace(d.proposal.Reason); reason != "" {
 		parts = append(parts, "说明："+oneLine(reason))
 	}
 	return strings.Join(parts, " · ")
 }
 
-// reviewContent 完整审阅文本（/review 全屏）：原因、变更、候选正文与全部附带变更。
+// reviewContent 完整审阅文本（/review 全屏）：全部变更用故事语言写出——大纲按卷弧章成树，
+// 人物用名称，设定写成主体+谓词+内容，候选正文全文；不露文档 ID 与原始内容。
 func (m model) reviewContent() (string, error) {
 	d := m.bench.decision
 	if d == nil || !d.hasProposal {
@@ -151,74 +151,119 @@ func (m model) reviewContent() (string, error) {
 		return "", err
 	}
 	var body strings.Builder
-	body.WriteString("审阅 · " + m.reviewTarget() + "\n\n" + d.reason + "\n")
+	section := func(title string) { body.WriteString("\n" + styleTitle.Render(title) + "\n") }
+	body.WriteString(styleTitle.Render("审阅 · "+m.reviewTarget()) + "\n\n" + d.reason + "\n")
 	if d.stale {
-		body.WriteString("\n此稿基于旧版本，只可提出修改意见重写。\n")
+		body.WriteString("\n" + styleWarn.Render("此稿基于旧版本，只可提出修改意见重写。") + "\n")
 	}
-	body.WriteString("\n本次变更（对比当前已入稿正文）\n" + m.candidateSummary() + "\n")
+	section("概要")
+	body.WriteString(m.candidateSummary() + "\n")
+	view := d.view
+	if len(view.Outline) > 0 {
+		section("大纲")
+		for _, volume := range view.Outline {
+			writeOutlineItem(&body, 0, fmt.Sprintf("第 %d 卷 · %s", volume.Volume, volume.Title), volume.Summary)
+			for _, arc := range volume.Arcs {
+				writeOutlineItem(&body, 1, fmt.Sprintf("第 %d 个故事弧 · %s", arc.Arc, arc.Title), arc.Summary)
+				for _, chapter := range arc.Chapters {
+					writeOutlineItem(&body, 2, fmt.Sprintf("第 %d 章 · %s", chapter.Chapter, chapter.Title), chapter.Summary)
+				}
+			}
+		}
+	}
+	if len(view.Entities) > 0 {
+		section("人物与地点")
+		for _, entity := range view.Entities {
+			line := entity.Name + styleHint.Render("（"+entityNoun[entity.Kind]+"）")
+			if len(entity.Aliases) > 0 {
+				line += styleHint.Render(" 又名 ") + strings.Join(entity.Aliases, "、")
+			}
+			body.WriteString(styleHint.Render("· ") + line + "\n")
+		}
+	}
+	for _, list := range []struct {
+		title string
+		items []string
+	}{{"设定", view.Facts}, {"删除", view.Removed}, {"其他变更", view.Other}} {
+		if len(list.items) == 0 {
+			continue
+		}
+		section(list.title)
+		for _, item := range list.items {
+			body.WriteString(styleHint.Render("· ") + item + "\n")
+		}
+	}
+	if view.Compass != nil {
+		section("故事罗盘")
+		body.WriteString(compassSummary(m.bench.snap.Length.Compass, *view.Compass) + "\n")
+	}
 	for _, chapter := range chapters {
-		body.WriteString(fmt.Sprintf("\n第 %d 章 · %s\n候选稿 · 尚未入稿\n\n%s\n", chapter.Number, chapter.Title, chapterText(chapter)))
+		section(fmt.Sprintf("第 %d 章 · %s", chapter.Number, chapter.Title))
+		body.WriteString(styleHint.Render("候选稿 · 尚未入稿") + "\n\n" + chapterText(chapter) + "\n")
 	}
-	for _, patch := range d.proposal.Patches {
-		if patch.Document.Kind == domainmodel.DocumentManuscript && patch.Operation == domainmodel.PatchPut {
-			continue
-		}
-		if patch.Document.Kind == domainmodel.DocumentPlan && patch.Operation == domainmodel.PatchPut {
-			var node domainmodel.PlanNode
-			if err := json.Unmarshal(patch.Content, &node); err != nil {
-				return "", fmt.Errorf("无法读取待确认大纲：%w", err)
-			}
-			body.WriteString("\n大纲 · " + node.Title + "\n" + node.Summary + "\n")
-			continue
-		}
-		if patch.Document.Kind == domainmodel.DocumentCompass {
-			text, err := compassSummary(m.bench.snap.Length.Compass, patch)
-			if err != nil {
-				return "", err
-			}
-			body.WriteString("\n故事罗盘 · " + text + "\n")
-			continue
-		}
-		// 少见的文档类型也原样保留，审阅不能漏掉任何附带变更。
-		body.WriteString(fmt.Sprintf("\n附带变更（原始内容） · %s · %s\n%s\n", patch.Document.ID, patch.Operation, patch.Content))
-	}
-	if d.stale {
-		body.WriteString("\n写下修改意见后回车，让它基于最新内容重写。")
-	} else {
-		body.WriteString("\n输入 y 通过，或写下修改意见。/note 内容 可独立提出创作要求。")
-	}
+	body.WriteString("\n" + styleHint.Render(m.decisionActions()))
 	return body.String(), nil
 }
 
-// compassSummary 把罗盘补丁说成人话（D63）：AI 上调篇幅上限时，这正是等你裁决的内容。
-func compassSummary(current *domainmodel.Compass, patch domainmodel.Patch) (string, error) {
-	if patch.Operation != domainmodel.PatchPut {
-		return "删除故事罗盘", nil
+func writeOutlineItem(body *strings.Builder, depth int, title, summary string) {
+	indent := strings.Repeat("  ", depth)
+	body.WriteString(indent + title + "\n")
+	if summary = strings.TrimSpace(summary); summary != "" {
+		body.WriteString(styleHint.Render(indent+"  "+oneLine(summary)) + "\n")
 	}
-	var next domainmodel.Compass
-	if err := json.Unmarshal(patch.Content, &next); err != nil {
-		return "", fmt.Errorf("无法读取待确认的故事罗盘：%w", err)
+}
+
+var entityNoun = map[domainmodel.EntityKind]string{
+	domainmodel.EntityCharacter: "人物", domainmodel.EntityLocation: "地点",
+	domainmodel.EntityItem: "物品", domainmodel.EntityOrganization: "组织",
+}
+
+// decisionActions 说清怎么通过、怎么调整：修改意见让 AI 按意见重做这份稿件；规划的
+// 意见同时作为全书创作要求留下（§4.9），之后的规划与写作都会遵守。
+func (m model) decisionActions() string {
+	d := m.bench.decision
+	manuscript := func(patch domainmodel.Patch) bool { return patch.Document.Kind == domainmodel.DocumentManuscript }
+	switch {
+	case d.stale:
+		return "写下修改意见后回车，让它基于最新内容重写"
+	case slices.ContainsFunc(d.proposal.Patches, manuscript):
+		return "y 通过 · 写下修改意见后回车重写"
+	default:
+		return "y 通过 · 写下修改意见后回车重新规划（意见留作全书要求）"
+	}
+}
+
+// compassSummary 把罗盘变化说成人话（D63）：AI 上调篇幅上限时，这正是等你裁决的内容；
+// 固定篇幅下罗盘只有终局方向，没有上限与收官。
+func compassSummary(current *domainmodel.Compass, next domainmodel.Compass) string {
+	var before domainmodel.Compass
+	if current != nil {
+		before = *current
 	}
 	var parts []string
 	switch {
-	case current == nil:
+	case before.ScaleMax == next.ScaleMax:
+	case next.ScaleMax == 0:
+		parts = append(parts, fmt.Sprintf("取消篇幅上限（原 %d 章）", before.ScaleMax))
+	case before.ScaleMax == 0:
 		parts = append(parts, fmt.Sprintf("篇幅上限 %d 章", next.ScaleMax))
-	case current.ScaleMax != next.ScaleMax:
-		parts = append(parts, fmt.Sprintf("篇幅上限 %d → %d 章", current.ScaleMax, next.ScaleMax))
+	default:
+		parts = append(parts, fmt.Sprintf("篇幅上限 %d → %d 章", before.ScaleMax, next.ScaleMax))
 	}
 	switch {
-	case next.Final > 0 && (current == nil || current.Final != next.Final):
+	case before.Final == next.Final:
+	case next.Final == 0:
+		parts = append(parts, fmt.Sprintf("撤回收官（原 %d 章）", before.Final))
+	default:
 		parts = append(parts, fmt.Sprintf("收官 %d 章", next.Final))
-	case next.Final == 0 && current != nil && current.Final > 0:
-		parts = append(parts, fmt.Sprintf("撤回收官（原 %d 章）", current.Final))
 	}
-	if current == nil || current.Ending != next.Ending {
+	if before.Ending != next.Ending {
 		parts = append(parts, "终局："+oneLine(next.Ending))
 	}
 	if len(parts) == 0 {
-		return "故事罗盘未变", nil
+		return "故事罗盘未变"
 	}
-	return strings.Join(parts, " · "), nil
+	return strings.Join(parts, " · ")
 }
 
 func (m model) openReview() model {

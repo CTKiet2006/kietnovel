@@ -11,16 +11,15 @@ import (
 type OperationKind string
 
 const (
-	OperationInitializeProject OperationKind = "initialize_project"
-	OperationDevelopPlan       OperationKind = "develop_plan"
-	OperationWriteChapter      OperationKind = "write_chapter"
-	OperationRevisePlan        OperationKind = "revise_plan"
-	OperationReviseCanon       OperationKind = "revise_canon"
-	OperationRewriteChapter    OperationKind = "rewrite_chapter"
-	OperationRewriteAffected   OperationKind = "rewrite_affected"
-	OperationReviewRange       OperationKind = "review_range"
-	OperationGenerateAsset     OperationKind = "generate_asset"
-	OperationInspectAsset      OperationKind = "inspect_asset"
+	OperationDevelopPlan     OperationKind = "develop_plan"
+	OperationWriteChapter    OperationKind = "write_chapter"
+	OperationRevisePlan      OperationKind = "revise_plan"
+	OperationReviseCanon     OperationKind = "revise_canon"
+	OperationRewriteChapter  OperationKind = "rewrite_chapter"
+	OperationRewriteAffected OperationKind = "rewrite_affected"
+	OperationReviewRange     OperationKind = "review_range"
+	OperationGenerateAsset   OperationKind = "generate_asset"
+	OperationInspectAsset    OperationKind = "inspect_asset"
 )
 
 type OperationState string

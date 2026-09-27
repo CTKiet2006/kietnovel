@@ -305,7 +305,7 @@ func kindName(kind model.PlanNodeKind) string {
 }
 
 // Label 用故事语言指称一份文档；故事里不存在的文档返回 false。
-func (s *Story) label(ref model.DocumentRef) (string, bool) {
+func (s *Story) Label(ref model.DocumentRef) (string, bool) {
 	if s == nil {
 		return "", false
 	}
@@ -334,7 +334,7 @@ func (s *Story) label(ref model.DocumentRef) (string, bool) {
 			return s.factLabel(fact), true
 		}
 	}
-	return s.parent.label(ref)
+	return s.parent.Label(ref)
 }
 
 func (s *Story) planLabel(node model.PlanNode) string {
