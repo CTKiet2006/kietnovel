@@ -38,7 +38,7 @@ func TestDriveCreationRunSettlesByStepKind(t *testing.T) {
 	planWork := func(runID string) *runs.WorkItem {
 		return &runs.WorkItem{
 			ID: runQuickID(runID, "plan"), Kind: model.OperationDevelopPlan,
-			Input:   model.DevelopPlanInput{Intent: "故事", FixedChapters: 1, RequestedChapters: 1},
+			Input:   model.DevelopPlanInput{Intent: "故事", FixedChapters: 1},
 			Reasons: runs.WorkReasons{Waiting: "等你确认", Failure: "没写完", Stuck: "规划已结束但没有推进"},
 		}
 	}
@@ -68,7 +68,7 @@ func TestDriveCreationRunSettlesByStepKind(t *testing.T) {
 			}
 			runID := "run:" + projectID + ":1"
 			api = newTestApp(api.store, bootstrap.Options{Executors: tasks.ExecutorSet{LLM: executor}, Now: testTime, Goals: map[model.GoalKind]runs.Goal{"stub": &stubDeriver{store: api.store, steps: tc.steps(runID)}}})
-			strategy := model.CreationRunStrategy{PlanWindowChapters: 1, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 1}
+			strategy := model.CreationRunStrategy{ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 1}
 			preset, err := model.NewCreationRunPreset("test", model.ApprovalAuto, strategy)
 			if err != nil {
 				t.Fatalf("preset: %v", err)

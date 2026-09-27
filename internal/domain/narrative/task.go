@@ -66,11 +66,17 @@ func (s *Story) Task(kind model.OperationKind, raw json.RawMessage) (json.RawMes
 			Reason   string `json:"reason"`
 		}{s.chapterNumbers(input.ChapterIDs), input.Reason}
 	case *model.ReviewRangeInput:
+		prior := make([]Finding, 0, len(input.PriorFindings))
+		for _, finding := range input.PriorFindings {
+			prior = append(prior, Finding{Chapter: s.chapterNumberOf(finding.ChapterID), Severity: finding.Severity, Note: finding.Note, Requirement: finding.Requirement})
+		}
 		view = struct {
-			Chapters     []int               `json:"chapters"`
-			Requirements []model.Requirement `json:"requirements,omitempty"`
-			Goal         string              `json:"goal,omitempty"`
-		}{s.chapterNumbers(input.ChapterIDs), input.Requirements, input.Goal}
+			Chapters      []int               `json:"chapters"`
+			Reviewed      []int               `json:"reviewed,omitempty"`
+			PriorFindings []Finding           `json:"prior_findings,omitempty"`
+			Requirements  []model.Requirement `json:"requirements,omitempty"`
+			Goal          string              `json:"goal,omitempty"`
+		}{s.chapterNumbers(input.ChapterIDs), s.chapterNumbers(input.Reviewed), prior, input.Requirements, input.Goal}
 	default:
 		return nil, fmt.Errorf("operation %s has no story-language task view: %w", kind, model.ErrInvalid)
 	}
@@ -176,9 +182,11 @@ func (s *Story) Findings(input model.ReviewRangeInput, findings []Finding) ([]mo
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, model.ReviewFinding{
-			ChapterID: chapter.ID, Severity: finding.Severity, Note: finding.Note, Requirement: finding.Requirement,
-		})
+		landed := model.ReviewFinding{ChapterID: chapter.ID, Severity: finding.Severity, Note: finding.Note, Requirement: finding.Requirement}
+		if err := input.AdmitsFinding(landed); err != nil {
+			return nil, err
+		}
+		result = append(result, landed)
 	}
 	return result, nil
 }

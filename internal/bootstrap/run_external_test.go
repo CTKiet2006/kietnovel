@@ -178,7 +178,7 @@ func newExternalTestService(t *testing.T) (*testApp, *externalGenerationExecutor
 	}); err != nil {
 		t.Fatalf("create project: %v", err)
 	}
-	strategy := model.CreationRunStrategy{PlanWindowChapters: 1, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 1}
+	strategy := model.CreationRunStrategy{ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 1}
 	preset, err := model.NewCreationRunPreset("test", model.ApprovalAuto, strategy)
 	if err != nil {
 		t.Fatalf("preset: %v", err)

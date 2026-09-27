@@ -53,7 +53,7 @@ func TestExecuteUsesRoleBindingAndRecordsRunStart(t *testing.T) {
 		return json.RawMessage(`{"reason":"规划","volumes":[{"volume":1,"title":"卷","summary":"卷"}],` +
 			`"arcs":[{"arc":1,"volume":1,"title":"弧","summary":"弧"}],"chapters":[{"chapter":1,"arc":1,"title":"第一章","summary":"开篇"}]}`)
 	}
-	task := json.RawMessage(`{"intent":"规划开篇","fixed_chapters":3,"requested_chapters":1}`)
+	task := json.RawMessage(`{"intent":"规划开篇","fixed_chapters":3}`)
 	runID := createRuntimeTestRun(t, ctx, authorityStore, "book-plan", now)
 	profile := seedRuntimeProfile(t, ctx, authorityStore, "book-plan", worker, task, 1)
 

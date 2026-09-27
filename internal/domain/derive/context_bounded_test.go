@@ -178,6 +178,37 @@ func TestReviewContextIsBoundedToTheWindow(t *testing.T) {
 	}
 }
 
+// 审阅窗口按容量切（D67）：窗口正文填满 ReviewTextBudget、连同衔接章与各章基线，世界
+// 规则与主线伏笔仍装得下，且不越过预算——容量取值必须给这些约束留出余地。
+func TestReviewTextBudgetLeavesRoomForConstraints(t *testing.T) {
+	const first, runes = 48, 1500 // longBook 每章正文 1500 字
+	count := ReviewTextBudget / runes
+	content := longBook(250, first+count-1)
+	var ids []string
+	var basis []model.DocumentBasis
+	for number := first; number < first+count; number++ {
+		ids = append(ids, chapterID(number))
+		basis = append(basis,
+			model.DocumentBasis{Ref: model.DocumentRef{Kind: model.DocumentManuscript, ID: chapterID(number)}, Revision: model.Revision(number + 1)},
+			model.DocumentBasis{Ref: model.DocumentRef{Kind: model.DocumentPlan, ID: planID(number)}, Revision: 1},
+		)
+	}
+	task, _ := json.Marshal(model.ReviewRangeInput{ChapterIDs: ids, Basis: model.EvidenceBasis{Documents: basis}})
+	context, err := selectContext(content, model.OperationReviewRange, task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := keySet(context)
+	for _, want := range []string{"manuscript:" + ids[0], "manuscript:" + ids[count-1], "manuscript:" + chapterID(first-1), "canon:rule-origin", "canon:hook-main"} {
+		if !keys[want] {
+			t.Fatalf("a full review window lost %q", want)
+		}
+	}
+	if context.Budget.Used > context.Budget.Limit {
+		t.Fatalf("a full review window overflows the context: used %d > limit %d", context.Budget.Used, context.Budget.Limit)
+	}
+}
+
 // 排序段只在一处截断：相关实体、世界规则、伏笔优先，无关事实先被裁掉；必选内容照装，
 // 超出预算时 Used > Limit 本身就是可见的冲突信号。
 func TestRankTrimsIrrelevantFactsFirstAndExposesRequiredOverflow(t *testing.T) {
@@ -238,7 +269,7 @@ func TestRewriteContextsCarrySourcedFacts(t *testing.T) {
 // 规划锚点是第一个未写的章节：近期窗口给方向，锚点起的全部章节计划是工作对象，不带正文。
 func TestPlanningContextAnchorsAtFirstUnwrittenChapter(t *testing.T) {
 	context, err := selectContext(longBook(13, 10), model.OperationRevisePlan,
-		json.RawMessage(`{"intent":"长路","fixed_chapters":20,"existing_chapters":13,"requested_chapters":20}`))
+		json.RawMessage(`{"intent":"长路","fixed_chapters":20,"existing_chapters":13}`))
 	if err != nil {
 		t.Fatal(err)
 	}

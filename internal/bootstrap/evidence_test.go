@@ -21,7 +21,7 @@ func basisKeys(basis model.EvidenceBasis) []string {
 	return keys
 }
 
-func TestBasisForIncludesDependencyClosureAndScopes(t *testing.T) {
+func TestReviewBasisPinsJudgedInputsAndScopes(t *testing.T) {
 	ctx := context.Background()
 	executor := &scriptedQuickExecutor{now: testTime()}
 	api := newQuickTestApp(t, executor)
@@ -40,12 +40,9 @@ func TestBasisForIncludesDependencyClosureAndScopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("review basis: %v", err)
 	}
-	// 目标正文 + 结构依赖闭包（章节计划及其祖先、随章实体）+ Intent，各取最后变化 revision。
-	// 不钉 Canon（D62）：事实原地更新，账本一致性归事实核验。
-	want := []string{
-		"entity:hero@2", "intent:root@1", "manuscript:chapter-chapter-plan-1@3",
-		"plan:arc-1@2", "plan:chapter-plan-1@2", "plan:volume-1@2",
-	}
+	// 只钉裁定所依据的输入（D69）：正文、本章计划节点与 Intent，各取最后变化 revision。
+	// 随章实体与卷弧祖先不钉：它们只是审阅上下文，原地更新不该废掉旧窗口。
+	want := []string{"intent:root@1", "manuscript:chapter-chapter-plan-1@3", "plan:chapter-plan-1@2"}
 	if got := basisKeys(basis); !slices.Equal(got, want) {
 		t.Fatalf("basis documents = %v, want %v", got, want)
 	}
@@ -110,7 +107,7 @@ func TestEvidenceValidityDetectsDocumentScopeAndArtifactDrift(t *testing.T) {
 		t.Fatalf("related directive valid = %v, %v", valid, err)
 	}
 
-	// 依赖闭包内的文档改版（章节计划）使证据失效。
+	// 基线内的文档改版（本章计划节点）使证据失效。
 	node, _ := json.Marshal(model.PlanNode{
 		ID: "chapter-plan-1", Kind: model.PlanChapter, ParentID: "arc-1", Order: 1, Title: "第1章", Summary: "改写后的章节摘要",
 	})

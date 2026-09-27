@@ -2,9 +2,15 @@ package models
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/voocel/agentcore"
+	"github.com/voocel/litellm"
 )
 
 func TestVerifyUsesSelectedOpenAIEndpoint(t *testing.T) {
@@ -30,5 +36,35 @@ func TestVerifyUsesSelectedOpenAIEndpoint(t *testing.T) {
 				t.Fatalf("path=%q want=%q err=%v", path, expected, err)
 			}
 		})
+	}
+}
+
+func TestNewNormalizesInvalidToolUseIDsInPairs(t *testing.T) {
+	const raw = "call_3543acedc27c4404bfe7317c#235532d85de245bda8ff64f6a683623a"
+	bodies := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		bodies <- string(body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"stub","object":"chat.completion","choices":[{"index":0,"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}]}`))
+	}))
+	defer server.Close()
+	chat, err := New(Config{Provider: "openai", Model: "custom", APIKey: "k", BaseURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	messages := []agentcore.Message{
+		agentcore.UserMsg("hi"),
+		{Role: agentcore.RoleAssistant, Content: []agentcore.ContentBlock{
+			agentcore.ToolCallBlock(agentcore.ToolCall{ID: raw, Name: "read", Args: json.RawMessage(`{}`)}),
+		}},
+		agentcore.ToolResultMsg(raw, json.RawMessage(`"ok"`), false),
+	}
+	if _, err := chat.Generate(context.Background(), messages, nil); err != nil {
+		t.Fatalf("request rejected before reaching provider: %v", err)
+	}
+	body := <-bodies
+	if strings.Contains(body, raw) || strings.Count(body, litellm.NormalizeToolUseID(raw)) != 2 {
+		t.Fatalf("tool_use and tool_result ids must be normalized in pairs: %s", body)
 	}
 }

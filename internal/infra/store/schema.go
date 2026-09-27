@@ -6,8 +6,9 @@ import (
 )
 
 // schemaVersion 是当前唯一支持的库结构版本。v1 没有历史数据，结构演进直接改
-// schema 并升版本号；不保留迁移阶梯，版本不符即拒绝打开。
-const schemaVersion = 5
+// schema 并升版本号；不保留迁移阶梯，版本不符即拒绝打开。存储的 JSON 载荷格式变化同样
+// 升版本（v6：D67 删除规划请求章数与运行策略的窗口字段，旧库的任务输入不再可读）。
+const schemaVersion = 6
 
 // unsupportedSchema 说明库结构版本不符以及怎样重新开始：v1 不迁移旧库（D38），旧库改名
 // 保留备查，程序在原位置新建空库。

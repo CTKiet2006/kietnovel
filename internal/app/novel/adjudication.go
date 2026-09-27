@@ -50,7 +50,7 @@ func (s *Reviews) AddAdjudication(ctx context.Context, command AddAdjudicationCo
 	if err != nil {
 		return AdjudicationResult{}, err
 	}
-	verdicts, err := s.rawVerdicts(ctx, project)
+	verdicts, _, err := s.rawVerdicts(ctx, project)
 	if err != nil {
 		return AdjudicationResult{}, err
 	}

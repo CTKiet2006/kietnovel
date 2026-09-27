@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -113,21 +114,23 @@ func (v InitializeProjectInput) Validate() error {
 	return nil
 }
 
-// DevelopPlanInput / RevisePlanInput 的 RequestedChapters 是滚动规划的窗口目标：
-// 提交边界按它与故事罗盘校验 chapter 节点数量（§6.3 D63）。FixedChapters 为 0 表示
-// 篇幅交给 AI，正数表示用户固定的全书章数。
+// DevelopPlanInput / RevisePlanInput 不指定章数：这次展开或追加多少章由规划者决定，
+// 提交边界只守篇幅上界与进展（§6.3 D67）。FixedChapters 为 0 表示篇幅交给 AI，正数
+// 表示用户固定的全书章数。
 type DevelopPlanInput struct {
-	Intent            string `json:"intent"`
-	FixedChapters     int    `json:"fixed_chapters,omitempty"`
-	RequestedChapters int    `json:"requested_chapters"`
-	Goal              string `json:"goal,omitempty"`
+	Intent        string `json:"intent"`
+	FixedChapters int    `json:"fixed_chapters,omitempty"`
+	Goal          string `json:"goal,omitempty"`
 }
 
 func (v DevelopPlanInput) Validate() error {
 	if strings.TrimSpace(v.Intent) == "" {
 		return fmt.Errorf("intent is required: %w", ErrInvalid)
 	}
-	return validatePlanRequest(v.FixedChapters, 0, v.RequestedChapters)
+	if v.FixedChapters < 0 {
+		return fmt.Errorf("fixed chapters %d must not be negative: %w", v.FixedChapters, ErrInvalid)
+	}
+	return nil
 }
 
 // RevisePlanInput 的 Basis 是扩窗所依据的窗口审阅裁定基线（D51）：相干要求或正文
@@ -137,7 +140,6 @@ type RevisePlanInput struct {
 	Intent              string        `json:"intent"`
 	FixedChapters       int           `json:"fixed_chapters,omitempty"`
 	ExistingChapters    int           `json:"existing_chapters"`
-	RequestedChapters   int           `json:"requested_chapters"`
 	ReviewNotes         []string      `json:"review_notes,omitempty"`
 	PendingRequirements []string      `json:"pending_requirements,omitempty"`
 	Basis               EvidenceBasis `json:"basis,omitzero"`
@@ -148,18 +150,10 @@ func (v RevisePlanInput) Validate() error {
 	if strings.TrimSpace(v.Intent) == "" {
 		return fmt.Errorf("intent is required: %w", ErrInvalid)
 	}
-	if err := validatePlanRequest(v.FixedChapters, v.ExistingChapters, v.RequestedChapters); err != nil {
-		return err
+	if v.FixedChapters < 0 || v.ExistingChapters < 1 || (v.FixedChapters > 0 && v.ExistingChapters >= v.FixedChapters) {
+		return fmt.Errorf("extending %d existing chapters requires room below fixed %d: %w", v.ExistingChapters, v.FixedChapters, ErrInvalid)
 	}
 	return v.Basis.Validate()
-}
-
-// validatePlanRequest：请求必须越过已有章数，固定篇幅时不超过全书章数。
-func validatePlanRequest(fixed, existing, requested int) error {
-	if fixed < 0 || existing < 0 || requested <= existing || (fixed > 0 && requested > fixed) {
-		return fmt.Errorf("requested chapters %d must exceed existing %d and stay within fixed %d: %w", requested, existing, fixed, ErrInvalid)
-	}
-	return nil
 }
 
 // ReviseCanonInput 核验来源于某章的事实（§4.4 D41 / §4.5）：FactIDs 是正文改动后待核验
@@ -235,11 +229,15 @@ func (v RewriteAffectedInput) Validate() error {
 
 // ReviewRangeInput 的 Basis 由装配层构造：裁定继承它，有效性按基线判定（D48）。
 // Requirements 是本窗口要逐项核验的要求（D62），裁定必须恰好逐项声明。
+// Reviewed 是上一轮已审且正文未变的章（D68），只作上下文；PriorFindings 是其余章
+// 上一轮的阻塞意见，复审逐条核对是否解决。
 type ReviewRangeInput struct {
-	ChapterIDs   []string      `json:"chapter_ids"`
-	Requirements []Requirement `json:"requirements,omitempty"`
-	Basis        EvidenceBasis `json:"basis"`
-	Goal         string        `json:"goal,omitempty"`
+	ChapterIDs    []string        `json:"chapter_ids"`
+	Requirements  []Requirement   `json:"requirements,omitempty"`
+	Reviewed      []string        `json:"reviewed,omitempty"`
+	PriorFindings []ReviewFinding `json:"prior_findings,omitempty"`
+	Basis         EvidenceBasis   `json:"basis"`
+	Goal          string          `json:"goal,omitempty"`
 }
 
 // Requirement 是审阅要核验的一项要求：用户要求或意图条目（D62）。Settle 表示本窗口
@@ -267,7 +265,35 @@ func (v ReviewRangeInput) Validate() error {
 		}
 		seen[requirement.ID] = struct{}{}
 	}
+	if err := validateDistinctStrings("reviewed chapters", v.Reviewed); err != nil {
+		return err
+	}
+	for _, id := range v.Reviewed {
+		if !slices.Contains(v.ChapterIDs, id) {
+			return fmt.Errorf("reviewed chapter %q is outside the review range: %w", id, ErrInvalid)
+		}
+	}
+	for i, finding := range v.PriorFindings {
+		if finding.Severity != FindingBlocking || strings.TrimSpace(finding.Note) == "" ||
+			!slices.Contains(v.ChapterIDs, finding.ChapterID) || slices.Contains(v.Reviewed, finding.ChapterID) {
+			return fmt.Errorf("prior finding %d must be a blocking note on a chapter under review: %w", i, ErrInvalid)
+		}
+	}
 	return validateEvidenceBasis("review", v.Basis)
+}
+
+// AdmitsFinding 是审阅发现的落点规则：只能落在审阅范围内；已审且正文未变的章（D68）
+// 只作上下文，阻塞发现必须链接它违反的要求。
+func (v ReviewRangeInput) AdmitsFinding(finding ReviewFinding) error {
+	if !slices.Contains(v.ChapterIDs, finding.ChapterID) {
+		return fmt.Errorf("finding chapter %q is outside the requested range; attach cross-chapter issues to the most relevant chapter in range: %w",
+			finding.ChapterID, ErrInvalid)
+	}
+	if finding.Severity == FindingBlocking && finding.Requirement == "" && slices.Contains(v.Reviewed, finding.ChapterID) {
+		return fmt.Errorf("chapter %q was already reviewed and is unchanged, so this review reads it as context only: "+
+			"record the issue with severity %q, or link the requirement it violates: %w", finding.ChapterID, FindingNote, ErrInvalid)
+	}
+	return nil
 }
 
 // GenerateAssetInput 是外部生成任务的输入：为 Target 生成 Role 角色的衍生工件，

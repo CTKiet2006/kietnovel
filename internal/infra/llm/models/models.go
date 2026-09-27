@@ -9,6 +9,7 @@ import (
 	"github.com/voocel/agentcore"
 	agentllm "github.com/voocel/agentcore/llm"
 	"github.com/voocel/ainovel-cli/internal/domain/model"
+	"github.com/voocel/litellm"
 )
 
 type Config struct {
@@ -64,7 +65,11 @@ func New(config Config) (agentcore.ChatModel, error) {
 	if strings.TrimSpace(config.Provider) == "" || strings.TrimSpace(config.Model) == "" {
 		return nil, fmt.Errorf("model provider and name are required: %w", model.ErrInvalid)
 	}
-	options := make([]agentllm.ModelOption, 0, 4)
+	// 部分上游的 tool_use id 带 '#'、':' 等字符，发出前的校验只接受 [A-Za-z0-9_-]；
+	// 归一化后 tool_result 按同一映射成对改写。
+	options := []agentllm.ModelOption{
+		agentllm.WithClientOptions(litellm.WithMessageRepair(litellm.RepairNormalizeToolUseIDs)),
+	}
 	if config.API != "" {
 		options = append(options, agentllm.WithProviderExtra(map[string]any{"api": config.API}))
 	}

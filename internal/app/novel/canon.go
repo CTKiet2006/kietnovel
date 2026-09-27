@@ -29,7 +29,7 @@ func CanonGaps(project projectdoc.Snapshot) []CanonGap {
 	}
 	var gaps []CanonGap
 	for _, chapter := range project.Manuscript {
-		revision := project.Index[(model.DocumentRef{Kind: model.DocumentManuscript, ID: chapter.ID}).Key()].Revision
+		revision := project.Index[manuscriptRef(chapter.ID).Key()].Revision
 		gap := CanonGap{ChapterID: chapter.ID, Number: chapter.Number, Revision: revision}
 		facts := bySource[chapter.ID]
 		gap.Unrecorded = len(facts) == 0 && project.CanonRecorded[chapter.ID] < revision

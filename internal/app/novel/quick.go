@@ -170,7 +170,7 @@ func (s *Application) finishQuickResult(
 		}
 		version, err := s.store.GetDocument(ctx,
 			model.AuthorityTarget{Kind: model.AuthorityProject, ID: run.ProjectID},
-			model.DocumentRef{Kind: model.DocumentManuscript, ID: chapter.ID}, project.Revision,
+			manuscriptRef(chapter.ID), project.Revision,
 		)
 		if err != nil {
 			return result, err
@@ -324,11 +324,7 @@ func (s *Application) ensureCreationRun(
 	if err != nil {
 		return model.CreationRun{}, err
 	}
-	strategy := model.CreationRunStrategy{
-		PlanWindowChapters: 3,
-		ReviewCadence:      model.ReviewPerPlanWindow,
-		AutoRepairBudget:   DefaultRepairBudget,
-	}
+	strategy := model.CreationRunStrategy{ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: DefaultRepairBudget}
 	preset, err := model.NewCreationRunPreset("quick", approval, strategy)
 	if err != nil {
 		return model.CreationRun{}, err

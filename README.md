@@ -76,7 +76,7 @@ pack install|export|eval
 profile save|show|learn|candidates|confirm
 ```
 
-精细创作先用 `creation start` 展开 Goal 与 RunStrategy，再在内容类 `operation start` 上通过 `--run` 归属同一运行；`quick write` 只是自动完成这两步并持续驱动相同 Coordinator。`creation strategy` 可在运行中途调整窗口与每章自动修订预算（只影响之后创建的 Operation），某章预算用尽落 waiting_user 后调高预算即可从落点继续。
+精细创作先用 `creation start` 展开 Goal 与 RunStrategy，再在内容类 `operation start` 上通过 `--run` 归属同一运行；`quick write` 只是自动完成这两步并持续驱动相同 Coordinator。`creation strategy` 可在运行中途调整每章自动修订预算（只影响之后创建的 Operation），某章预算用尽落 waiting_user 后调高预算即可从落点继续；每次规划展开多少章由规划模型自己决定。
 
 典型的可编辑故事循环：
 

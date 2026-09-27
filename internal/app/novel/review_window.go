@@ -6,13 +6,17 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	projectdoc "github.com/voocel/ainovel-cli/internal/app/project"
+	"github.com/voocel/ainovel-cli/internal/domain/derive"
 	"github.com/voocel/ainovel-cli/internal/domain/model"
 )
 
 // 窗口审阅（D62）：审阅按窗口推进，每章由包含它的最新有效裁定覆盖；要求按作用域
-// 三态核验，未到期如实 pending，由作用域末章所在窗口兑现。
+// 三态核验，未到期如实 pending，由作用域末章所在窗口兑现。窗口以故事弧为单位（D67）：
+// 不跨弧，弧太长时按审阅容量拆分，不随规划章数。复审只对改动章下结论（D68）：上一轮
+// 已审且正文未变的章只作上下文，已知的阻塞先全部重写再复审。
 
 // requirement 是一项要核验的要求：用户要求、意图条目或收官要求。
 type requirement struct {
@@ -139,11 +143,17 @@ func CurrentVerdicts(verdicts []StoredVerdict) map[string]*StoredVerdict {
 // reviewLedger 是审阅闸门的推导视图：已写章节前缀、每章当前裁定与要求集合。
 type reviewLedger struct {
 	chapters  []model.ManuscriptChapter // 按计划顺序连续已写的章节，下标+1 即章号
+	arcs      []string                  // 按计划顺序每章所属的故事弧，含未写章节
 	numbers   map[string]int
 	current   map[string]*StoredVerdict
 	effective map[string]model.ReviewVerdict // 裁定 Key → 生效形态
 	reqs      []requirement
 	dropped   []model.Directive // 作用域落在全书之外的用户要求
+	// 上一轮（基线已失效）的裁定（D68）：每章最近一份及其生效形态，与已写正文的当前
+	// revision 对照，判断该章正文是否未变。
+	prior          map[string]*StoredVerdict
+	priorEffective map[string]model.ReviewVerdict
+	revisions      map[string]model.Revision
 }
 
 func newReviewLedger(project projectdoc.Snapshot, final int, verdicts []StoredVerdict) reviewLedger {
@@ -158,6 +168,7 @@ func newReviewLedger(project projectdoc.Snapshot, final int, verdicts []StoredVe
 	written := manuscriptsByPlanNode(project.Manuscript)
 	prefix := true
 	for index, plan := range model.ChapterPlansInOrder(project.Plan) {
+		ledger.arcs = append(ledger.arcs, plan.ParentID)
 		chapter, ok := written[plan.ID]
 		if !ok {
 			prefix = false
@@ -168,37 +179,159 @@ func newReviewLedger(project projectdoc.Snapshot, final int, verdicts []StoredVe
 			ledger.chapters = append(ledger.chapters, chapter)
 		}
 	}
+	ledger.revisions = make(map[string]model.Revision, len(ledger.chapters))
+	for _, chapter := range ledger.chapters {
+		ledger.revisions[chapter.ID] = project.Index[manuscriptRef(chapter.ID).Key()].Revision
+	}
 	return ledger
 }
 
-// gate 推导第 1..through 章的审阅闸门：按章节顺序，未覆盖的章节起一个窗口（至多
-// window 章）送审，当前裁定 blocked 则返回它待重写；全部通过后，作用域已在其中收尾
-// 却未兑现的要求，交给覆盖其末章的窗口再审一次（此时必须给出结论）。都没有表示闸门已过。
-func (l reviewLedger) gate(through, window int) (review []string, blocked *model.ReviewVerdict) {
+// withPrior 挂上上一轮裁定（D68）。
+func (l reviewLedger) withPrior(prior []StoredVerdict) reviewLedger {
+	l.prior = CurrentVerdicts(prior)
+	l.priorEffective = make(map[string]model.ReviewVerdict, len(prior))
+	for _, stored := range prior {
+		l.priorEffective[stored.Key] = stored.Effective()
+	}
+	return l
+}
+
+// gateStep 是审阅闸门的结论：送审 review（reviewed 只作上下文，prior 是焦点章上一轮
+// 的阻塞意见），或按 blocked 重写（chapter 为空时取它的第一个阻塞章）。都为空表示闸门已过。
+type gateStep struct {
+	review   []string
+	reviewed []string
+	prior    []model.ReviewFinding
+	blocked  *model.ReviewVerdict
+	chapter  string
+}
+
+// gate 推导第 1..through 章的审阅闸门：按章节顺序，未覆盖的章节起一块（见 chunk、
+// recheck），当前裁定 blocked 则返回它待重写；全部通过后，作用域已在其中收尾却未兑现
+// 的要求，交给覆盖其末章的窗口再审一次（此时必须给出结论，窗口正文都已审过）。
+// canRepair 表示某章还有自动修订预算。
+func (l reviewLedger) gate(through int, canRepair func(chapterID string) bool) gateStep {
 	chapters := l.chapters[:min(through, len(l.chapters))]
 	for i, chapter := range chapters {
 		stored := l.current[chapter.ID]
 		if stored == nil {
-			for _, next := range chapters[i:min(i+window, len(chapters))] {
-				if l.current[next.ID] != nil {
-					break
-				}
-				review = append(review, next.ID)
-			}
-			return review, nil
+			ids, _ := l.chunk(i, len(chapters))
+			return l.recheck(i, ids, canRepair)
 		}
 		if verdict := l.effective[stored.Key]; verdict.Status != model.ReviewPass {
-			return nil, &verdict
+			return gateStep{blocked: &verdict}
 		}
 	}
 	due := slices.Clone(l.reqs)
 	slices.SortFunc(due, func(a, b requirement) int { return cmp.Or(cmp.Compare(a.end, b.end), strings.Compare(a.ID, b.ID)) })
 	for _, r := range due {
 		if r.end != 0 && r.end <= len(chapters) && !l.satisfied(r) {
-			return l.current[chapters[r.end-1].ID].Verdict.ChapterIDs, nil
+			ids := l.current[chapters[r.end-1].ID].Verdict.ChapterIDs
+			return gateStep{review: ids, reviewed: ids}
 		}
 	}
-	return nil, nil
+	return gateStep{}
+}
+
+// recheck 决定从第 start+1 章起的未覆盖分块 ids 怎么处理（D68）：块内第一个正文未变、
+// 上一轮仍有阻塞的章，预算未尽先重写；否则送审——上一轮已审、正文未变且没有阻塞的章
+// 只作上下文，其余章带上一轮的阻塞意见复核。
+func (l reviewLedger) recheck(start int, ids []string, canRepair func(chapterID string) bool) gateStep {
+	for j, id := range ids {
+		if blocking := l.priorBlocking(id); len(blocking) > 0 && l.unchanged(start+j) {
+			if !canRepair(id) {
+				break // 预算已尽：留在焦点复审，由新的有效裁定走等待用户
+			}
+			verdict := l.priorEffective[l.prior[id].Key]
+			verdict.Findings = blocking
+			return gateStep{blocked: &verdict, chapter: id}
+		}
+	}
+	step := gateStep{review: ids}
+	for j, id := range ids {
+		if blocking := l.priorBlocking(id); len(blocking) == 0 && l.judged(start+j, start) {
+			step.reviewed = append(step.reviewed, id)
+		} else {
+			step.prior = append(step.prior, blocking...)
+		}
+	}
+	return step
+}
+
+// unchanged：第 i+1 章在它最近的上一轮裁定里正文未变。
+func (l reviewLedger) unchanged(i int) bool {
+	id := l.chapters[i].ID
+	stored := l.prior[id]
+	return stored != nil && l.pinned(stored, id)
+}
+
+// judged：第 i+1 章正文未变；它是分块首章时，上一轮钉住的衔接章也要未变——衔接章在
+// 块外改过，本章要重新看衔接。
+func (l reviewLedger) judged(i, start int) bool {
+	return l.unchanged(i) && (i != start || i == 0 || l.pinned(l.prior[l.chapters[i].ID], l.chapters[i-1].ID))
+}
+
+func (l reviewLedger) pinned(stored *StoredVerdict, chapterID string) bool {
+	ref := manuscriptRef(chapterID)
+	for _, document := range stored.Verdict.Basis.Documents {
+		if document.Ref == ref {
+			return document.Revision == l.revisions[chapterID]
+		}
+	}
+	return false
+}
+
+// priorBlocking 是某章最近一份上一轮裁定里仍然成立的阻塞发现：用户已接受的不算，
+// 链接的要求已不在当前要求集（如已退役）的也不算。
+func (l reviewLedger) priorBlocking(chapterID string) []model.ReviewFinding {
+	stored := l.prior[chapterID]
+	if stored == nil {
+		return nil
+	}
+	var findings []model.ReviewFinding
+	for _, finding := range l.priorEffective[stored.Key].Findings {
+		if finding.ChapterID != chapterID || finding.Severity != model.FindingBlocking {
+			continue
+		}
+		if finding.Requirement == "" || slices.ContainsFunc(l.reqs, func(r requirement) bool { return r.ID == finding.Requirement }) {
+			findings = append(findings, finding)
+		}
+	}
+	return findings
+}
+
+// chunk 是从第 i+1 章起的一个审阅窗口（D67）：前 limit 章里与它同弧、连续未覆盖的
+// 章节，正文合计不超过审阅容量（至少一章）。closed 表示窗口已封口：因已覆盖章节、
+// 弧的边界或容量而止，或已到 limit 且下一章属于别的弧（本弧写完）、再添一章（按窗口
+// 内最长章估计）就放不下——写下一章之前先审它。
+func (l reviewLedger) chunk(i, limit int) (ids []string, closed bool) {
+	total, longest := 0, 0
+	for j, chapter := range l.chapters[i:limit] {
+		runes := chapter.Runes()
+		if len(ids) > 0 && (l.current[chapter.ID] != nil || l.arcs[i+j] != l.arcs[i] || total+runes > derive.ReviewTextBudget) {
+			return ids, true
+		}
+		ids = append(ids, chapter.ID)
+		total, longest = total+runes, max(longest, runes)
+	}
+	arcEnds := limit < len(l.arcs) && l.arcs[limit] != l.arcs[i]
+	return ids, arcEnds || total+longest > derive.ReviewTextBudget
+}
+
+// settledThrough 是写第 limit+1 章前必须审完的章数：首个未覆盖章节所在窗口已封口
+// 则审到 limit，否则只审到它之前——未封口的尾窗等写满或扩窗、完成前再审。
+func (l reviewLedger) settledThrough(limit int) int {
+	limit = min(limit, len(l.chapters))
+	for i, chapter := range l.chapters[:limit] {
+		if l.current[chapter.ID] != nil {
+			continue
+		}
+		if _, closed := l.chunk(i, limit); closed {
+			return limit
+		}
+		return i
+	}
+	return limit
 }
 
 // window 装配一个窗口的审阅要求：窗口内任一章在作用域内即投递。禁止项每窗必须下结论；
@@ -256,6 +389,33 @@ func (l reviewLedger) concluded(number int) bool {
 	return false
 }
 
+// notes 是扩窗携带的审阅意见（D67）：刚写完的那一弧可能分成多个审阅窗口，从第
+// covered 章向前逐窗取当前裁定的意见，止于弧的起点，合计不超过 PlanNotesBudget；
+// 最后一窗的意见总是带上。更早各弧的意见在展开它们的下一弧时已经带过。
+func (l reviewLedger) notes(covered int) []string {
+	var notes []string
+	seen := make(map[string]bool)
+	total := 0
+	last := min(covered, len(l.chapters)) - 1
+	for i := last; i >= 0 && l.arcs[i] == l.arcs[last]; i-- {
+		stored := l.current[l.chapters[i].ID]
+		if stored == nil || seen[stored.Key] {
+			continue
+		}
+		window := verdictNotes(l.effective[stored.Key])
+		size := 0
+		for _, note := range window {
+			size += utf8.RuneCountInString(note)
+		}
+		if len(seen) > 0 && total+size > derive.PlanNotesBudget {
+			break
+		}
+		seen[stored.Key] = true
+		notes, total = append(window, notes...), total+size
+	}
+	return notes
+}
+
 // pending 列出扩窗时仍待兑现的要求：未满足、作用域越过已覆盖章节；禁止项与收官要求
 // 除外（收官由罗盘与上下文里的未回收伏笔引导，不重复占用预算）。用户要求附带作用域，
 // 规划据此安排落点、定收官章数时不让它落空。
@@ -274,15 +434,22 @@ func (l reviewLedger) pending(covered int) []string {
 	return texts
 }
 
-// reviewOperationID 让任务 ID 完整标识输入：窗口、Revision 与要求（含是否必须下结论）。
-// 同 ID 即同一任务，重复派发由内核判为卡住，而不会复用旧输入。
-func reviewOperationID(runID string, chapters []string, revision model.Revision, requirements []model.Requirement) string {
+// reviewOperationID 让任务 ID 完整标识输入：窗口、Revision、要求（含是否必须下结论）
+// 与复审焦点（D68，非空才进摘要，首审 ID 不变）。同 ID 即同一任务，重复派发由内核
+// 判为卡住，而不会复用旧输入。
+func reviewOperationID(runID string, revision model.Revision, input model.ReviewRangeInput) string {
 	var identity strings.Builder
-	for _, id := range chapters {
+	for _, id := range input.ChapterIDs {
 		fmt.Fprintf(&identity, "%s\x00", id)
 	}
-	for _, r := range requirements {
+	for _, r := range input.Requirements {
 		fmt.Fprintf(&identity, "%s\x00%t\x00", r.ID, r.Settle)
 	}
-	return runQuickID(runID, "review", chapters[0], "r"+strconv.FormatInt(int64(revision), 10), model.Digest([]byte(identity.String()))[:8])
+	for _, id := range input.Reviewed {
+		fmt.Fprintf(&identity, "reviewed\x00%s\x00", id)
+	}
+	for _, finding := range input.PriorFindings {
+		fmt.Fprintf(&identity, "prior\x00%s\x00%s\x00", finding.ChapterID, finding.Note)
+	}
+	return runQuickID(runID, "review", input.ChapterIDs[0], "r"+strconv.FormatInt(int64(revision), 10), model.Digest([]byte(identity.String()))[:8])
 }

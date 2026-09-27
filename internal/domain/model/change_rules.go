@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"unicode/utf8"
 )
 
 // 创作领域的变更规则（§0.5 / D64）：跨文档不变量与任务提交契约只住在这里。Change
@@ -283,8 +282,9 @@ func validateMachineAuthorship(base, projected story, proposal Proposal) error {
 
 // validateTaskSubmission 是任务提交契约：提案只能完成它所属任务要求的事。
 //   - 篇幅只由规划任务改变（§6.3 D63）：非规划任务不得改罗盘、不得增删章节节点；固定
-//     篇幅时 AI 不得改罗盘；规划任务必须恰好产出请求的章节数，AI 定篇幅时罗盘必填，
-//     收官后按收官章数封顶，未收官时不得触及篇幅上限。
+//     篇幅时 AI 不得改罗盘。规划任务展开多少章由它决定（D67），边界只守进展与上界：
+//     至少追加一章（或以现有章数收官），固定篇幅不超过全书章数，AI 定篇幅时罗盘必填、
+//     收官后不超过收官章数、未收官时不得触及篇幅上限。
 //   - 章节任务只写它的目标章节，正文满足任务携带要求的字数约束（S13）。
 //   - 事实核验任务只动 Canon，确认或删除全部待核验事实（D41）。
 func validateTaskSubmission(task Operation, base, projected story, patches []Patch) error {
@@ -329,7 +329,7 @@ func validateTaskSubmission(task Operation, base, projected story, patches []Pat
 }
 
 func validateBlueprint(input TaskInput, base, projected story, patches []Patch) error {
-	fixed, requested, planning := planRequest(input)
+	fixed, planning := planRequest(input)
 	for _, patch := range patches {
 		switch {
 		case patch.Document.Kind == DocumentCompass && !planning:
@@ -345,8 +345,8 @@ func validateBlueprint(input TaskInput, base, projected story, patches []Patch) 
 			return fmt.Errorf("only planning tasks may add or remove chapter nodes (%d → %d): %w", existing, chapters, ErrInvalid)
 		}
 	case fixed > 0:
-		if chapters != requested {
-			return fmt.Errorf("plan has %d chapter nodes, requested exactly %d: %w", chapters, requested, ErrInvalid)
+		if chapters <= existing || chapters > fixed {
+			return fmt.Errorf("plan has %d chapter nodes: append at least one chapter after the %d planned, up to the fixed %d: %w", chapters, existing, fixed, ErrInvalid)
 		}
 	case compass == nil:
 		return fmt.Errorf("the blueprint requires a compass when the AI decides the length: %w", ErrInvalid)
@@ -354,29 +354,36 @@ func validateBlueprint(input TaskInput, base, projected story, patches []Patch) 
 		if compass.Final < existing {
 			return fmt.Errorf("compass final %d is below the %d planned chapters: %w", compass.Final, existing, ErrInvalid)
 		}
-		if want := min(requested, compass.Final); chapters != want {
-			return fmt.Errorf("plan has %d chapter nodes, requested exactly %d before the final chapter %d: %w", chapters, want, compass.Final, ErrInvalid)
+		if chapters > compass.Final {
+			return fmt.Errorf("plan has %d chapter nodes, beyond the final chapter %d: %w", chapters, compass.Final, ErrInvalid)
 		}
-	case chapters != requested:
-		return fmt.Errorf("plan has %d chapter nodes, requested exactly %d: %w", chapters, requested, ErrInvalid)
-	case chapters >= compass.ScaleMax:
+		if chapters == existing && chapters != compass.Final {
+			return noProgress(existing)
+		}
+	case max(chapters, existing+1) >= compass.ScaleMax:
 		if existing > compass.ScaleMax {
 			return fmt.Errorf("the %d planned chapters already exceed the compass scale_max %d: raise scale_max for user approval: %w", existing, compass.ScaleMax, ErrInvalid)
 		}
 		return fmt.Errorf("plan reaches the compass scale_max %d: declare the final chapter count (not below the %d planned chapters), or raise scale_max for user approval: %w", compass.ScaleMax, existing, ErrInvalid)
+	case chapters <= existing:
+		return noProgress(existing)
 	}
 	return nil
 }
 
-// planRequest 取规划任务的篇幅请求：fixed > 0 表示用户固定全书章数；非规划任务 planning=false。
-func planRequest(input TaskInput) (fixed, requested int, planning bool) {
+func noProgress(existing int) error {
+	return fmt.Errorf("plan adds no chapter: append at least one chapter, or declare the final chapter count as the %d planned: %w", existing, ErrInvalid)
+}
+
+// planRequest 取规划任务的篇幅约束：fixed > 0 表示用户固定全书章数；非规划任务 planning=false。
+func planRequest(input TaskInput) (fixed int, planning bool) {
 	switch input := input.(type) {
 	case *DevelopPlanInput:
-		return input.FixedChapters, input.RequestedChapters, true
+		return input.FixedChapters, true
 	case *RevisePlanInput:
-		return input.FixedChapters, input.RequestedChapters, true
+		return input.FixedChapters, true
 	default:
-		return 0, 0, false
+		return 0, false
 	}
 }
 
@@ -428,10 +435,7 @@ func sameKeys(set map[string]struct{}, ids ...string) bool {
 // checkWordCounts 是量化要求的确定性校验（§4.9 / S13）：字数按各 block 正文字符数
 // 累加、不含标题；越界连同实际值与区间原样回给模型自纠。
 func checkWordCounts(directives []Directive, chapter ManuscriptChapter) error {
-	words := 0
-	for _, block := range chapter.Blocks {
-		words += utf8.RuneCountInString(block.Text)
-	}
+	words := chapter.Runes()
 	for _, directive := range directives {
 		low, high, ok := directive.Constraints.Bounds()
 		if !ok {

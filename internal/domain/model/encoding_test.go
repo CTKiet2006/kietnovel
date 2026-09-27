@@ -34,7 +34,7 @@ func TestDigestIsStableSHA256Hex(t *testing.T) {
 }
 
 func TestNewCreationRunPresetDigestFollowsStrategy(t *testing.T) {
-	strategy := CreationRunStrategy{PlanWindowChapters: 3, ReviewCadence: ReviewPerPlanWindow, AutoRepairBudget: 2}
+	strategy := CreationRunStrategy{ReviewCadence: ReviewPerPlanWindow, AutoRepairBudget: 2}
 	preset, err := NewCreationRunPreset("quick", ApprovalAuto, strategy)
 	if err != nil || preset.Source != "quick" || preset.Approval != ApprovalAuto || preset.Digest == "" {
 		t.Fatalf("preset = %#v, %v", preset, err)

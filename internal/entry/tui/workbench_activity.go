@@ -211,7 +211,7 @@ func (m model) currentTaskLabel(feed activity.Snapshot, ok bool) string {
 	return ""
 }
 
-// activityHead 与正文视图同构的三行头：本轮创作 / 当前任务（或阶段、运行状态）。
+// activityHead 与正文视图同构的单行头：本轮创作 + 当前任务（或阶段、运行状态）。
 func (m model) activityHead(feed activity.Snapshot, ok bool, width int) []string {
 	title := m.currentTaskLabel(feed, ok)
 	switch {
@@ -223,7 +223,7 @@ func (m model) activityHead(feed activity.Snapshot, ok bool, width int) []string
 	default:
 		title = "还没有开始创作"
 	}
-	return []string{benchTheme.Muted.Render("本轮创作"), benchTheme.Title.Render(fitLine(title, width)), ""}
+	return []string{viewHead("本轮创作", title, "", width)}
 }
 
 // activityView 活动视图：跟随最新；上滚后持有快照，↓ 到底或 /follow 恢复。

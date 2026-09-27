@@ -48,7 +48,7 @@ var allowedImports = map[string][]string{
 	// novel policies, presentation queries, or application assembly.
 	"domain/creation": {"domain/model"},
 	"app/evidence":    {"domain/model", "infra/store", "domain/change", "domain/operation"},
-	"app/novel":       {"domain/model", "domain/narrative", "infra/store", "domain/change", "domain/creation", "app/project", "app/resource", "app/task", "infra/export"},
+	"app/novel":       {"domain/model", "domain/narrative", "domain/derive", "infra/store", "domain/change", "domain/creation", "app/project", "app/resource", "app/task", "infra/export"},
 	"app/decision":    {"domain/model", "infra/store", "domain/change", "app/project", "app/resource", "app/task"},
 	"app/workbench":   {"infra/activity", "domain/model", "infra/store", "domain/creation", "app/decision", "app/novel", "app/project"},
 	// 模型绑定用例只认配置与模型适配器，不认任务与作品。

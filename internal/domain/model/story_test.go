@@ -58,8 +58,9 @@ func TestDocumentDependenciesIncludeStableParentAndPlan(t *testing.T) {
 	}
 }
 
-// 蓝图不变量（§6.3 D63）：规划任务恰好产出请求的章节数；AI 定篇幅时罗盘必填，收官后
-// 按收官章数封顶，未收官不得触及篇幅上限；罗盘只能由规划任务修改。
+// 蓝图不变量（§6.3 D63/D67）：规划任务至少追加一章（或以现有章数收官），固定篇幅不超过
+// 全书章数；AI 定篇幅时罗盘必填，收官后按收官章数封顶，未收官不得触及篇幅上限；罗盘
+// 只能由规划任务修改。
 func TestValidateBlueprint(t *testing.T) {
 	chapters := func(ids ...int) []PlanNode {
 		var nodes []PlanNode
@@ -86,12 +87,19 @@ func TestValidateBlueprint(t *testing.T) {
 	compass := func(t *testing.T, scaleMax, final int) Patch {
 		return put(t, DocumentRef{Kind: DocumentCompass, ID: SingletonDocumentID}, Compass{ScaleMax: scaleMax, Ending: "称帝", Final: final})
 	}
-	extend := func(t *testing.T, fixed, existing, requested int) Operation {
-		input, err := json.Marshal(RevisePlanInput{Intent: "逆袭", FixedChapters: fixed, ExistingChapters: existing, RequestedChapters: requested})
+	extend := func(t *testing.T, fixed, existing int) Operation {
+		input, err := json.Marshal(RevisePlanInput{Intent: "逆袭", FixedChapters: fixed, ExistingChapters: existing})
 		if err != nil {
 			t.Fatal(err)
 		}
 		return Operation{Kind: OperationRevisePlan, Input: input}
+	}
+	develop := func(t *testing.T, fixed int) Operation {
+		input, err := json.Marshal(DevelopPlanInput{Intent: "逆袭", FixedChapters: fixed})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return Operation{Kind: OperationDevelopPlan, Input: input}
 	}
 	blueprint := func(compass *Compass, nodes ...PlanNode) story {
 		s := story{plans: make(map[string]PlanNode), compass: compass}
@@ -101,6 +109,10 @@ func TestValidateBlueprint(t *testing.T) {
 		return s
 	}
 	base := blueprint(&Compass{ScaleMax: 10, Ending: "称帝"}, chapters(1, 2, 3)...)
+	nearCap := blueprint(&Compass{ScaleMax: 4, Ending: "称帝"}, chapters(1, 2, 3)...)
+	unbounded := blueprint(nil, chapters(1, 2, 3)...)
+	open := func(t *testing.T) Operation { return extend(t, 0, 3) }
+	fixedSix := func(t *testing.T) Operation { return extend(t, 6, 3) }
 	chapterOp, _ := json.Marshal(WriteChapterInput{ChapterPlanID: "chapter-1", ChapterNumber: 1})
 	for _, c := range []struct {
 		name      string
@@ -109,37 +121,52 @@ func TestValidateBlueprint(t *testing.T) {
 		patches   func(*testing.T) []Patch
 		ok        bool
 	}{
-		{"open phase adds exactly one window", func(t *testing.T) Operation { return extend(t, 0, 3, 6) }, base,
-			func(t *testing.T) []Patch { return plans(t, 4, 5, 6) }, true},
-		{"open phase cannot overshoot the request", func(t *testing.T) Operation { return extend(t, 0, 3, 6) }, base,
-			func(t *testing.T) []Patch { return plans(t, 4, 5, 6, 7) }, false},
-		{"reaching scale_max without a final is rejected", func(t *testing.T) Operation { return extend(t, 0, 3, 10) }, base,
+		// 章数由规划者决定（D67）：边界只守进展与上界。
+		{"open phase appends as many as it sees fit", open, base,
+			func(t *testing.T) []Patch { return plans(t, 4, 5, 6, 7, 8, 9) }, true},
+		{"open phase may append a single chapter", open, base,
+			func(t *testing.T) []Patch { return plans(t, 4) }, true},
+		{"open phase must append at least one chapter", open, base,
+			func(t *testing.T) []Patch { return plans(t, 3) }, false},
+		{"reaching scale_max without a final is rejected", open, base,
 			func(t *testing.T) []Patch { return plans(t, 4, 5, 6, 7, 8, 9, 10) }, false},
-		{"raising scale_max unblocks the window", func(t *testing.T) Operation { return extend(t, 0, 3, 10) }, base,
+		{"raising scale_max unblocks the plan", open, base,
 			func(t *testing.T) []Patch { return append(plans(t, 4, 5, 6, 7, 8, 9, 10), compass(t, 20, 0)) }, true},
-		{"final may cut the last window short", func(t *testing.T) Operation { return extend(t, 0, 3, 6) }, base,
-			func(t *testing.T) []Patch { return append(plans(t, 4, 5), compass(t, 10, 5)) }, true},
-		{"final may close on the existing chapters", func(t *testing.T) Operation { return extend(t, 0, 3, 6) }, base,
+		{"one short of scale_max needs a final or a raise", open, nearCap,
+			func(t *testing.T) []Patch { return plans(t, 4) }, false},
+		{"one short of scale_max closes with a final", open, nearCap,
+			func(t *testing.T) []Patch { return append(plans(t, 4), compass(t, 4, 4)) }, true},
+		{"final may roll below it", open, base,
+			func(t *testing.T) []Patch { return append(plans(t, 4, 5), compass(t, 10, 8)) }, true},
+		{"final may close on the existing chapters", open, base,
 			func(t *testing.T) []Patch { return []Patch{compass(t, 10, 3)} }, true},
-		{"final must be covered exactly", func(t *testing.T) Operation { return extend(t, 0, 3, 6) }, base,
-			func(t *testing.T) []Patch { return append(plans(t, 4), compass(t, 10, 5)) }, false},
-		{"final below the planned chapters is rejected", func(t *testing.T) Operation { return extend(t, 0, 3, 6) }, base,
+		{"final cannot be passed", open, base,
+			func(t *testing.T) []Patch { return append(plans(t, 4, 5, 6), compass(t, 10, 5)) }, false},
+		{"final ahead still needs progress", open, base,
+			func(t *testing.T) []Patch { return []Patch{compass(t, 10, 5)} }, false},
+		{"final below the planned chapters is rejected", open, base,
 			func(t *testing.T) []Patch { return []Patch{compass(t, 10, 2)} }, false},
-		{"AI length requires a compass", func(t *testing.T) Operation { return extend(t, 0, 3, 6) }, blueprint(nil, chapters(1, 2, 3)...),
+		{"first plan may declare a final beyond its chapters", func(t *testing.T) Operation { return develop(t, 0) }, blueprint(nil),
+			func(t *testing.T) []Patch { return append(plans(t, 1, 2), compass(t, 10, 5)) }, true},
+		{"AI length requires a compass", open, unbounded,
 			func(t *testing.T) []Patch { return plans(t, 4, 5, 6) }, false},
-		{"fixed length ignores the compass", func(t *testing.T) Operation { return extend(t, 6, 3, 6) }, blueprint(nil, chapters(1, 2, 3)...),
+		{"fixed length allows any count up to it", fixedSix, unbounded,
+			func(t *testing.T) []Patch { return plans(t, 4) }, true},
+		{"fixed length may be laid out at once", fixedSix, unbounded,
 			func(t *testing.T) []Patch { return plans(t, 4, 5, 6) }, true},
-		{"fixed length requires exact coverage", func(t *testing.T) Operation { return extend(t, 6, 3, 6) }, blueprint(nil, chapters(1, 2, 3)...),
-			func(t *testing.T) []Patch { return plans(t, 4, 5) }, false},
+		{"fixed length cannot be passed", fixedSix, unbounded,
+			func(t *testing.T) []Patch { return plans(t, 4, 5, 6, 7) }, false},
+		{"fixed length must append a chapter", fixedSix, unbounded,
+			func(t *testing.T) []Patch { return plans(t, 3) }, false},
 		{"only planning tasks may change the compass", func(*testing.T) Operation { return Operation{Kind: OperationWriteChapter, Input: chapterOp} }, base,
 			func(t *testing.T) []Patch { return []Patch{compass(t, 20, 0)} }, false},
 		{"non-planning tasks cannot add chapter nodes", func(*testing.T) Operation { return Operation{Kind: OperationWriteChapter, Input: chapterOp} }, base,
 			func(t *testing.T) []Patch { return plans(t, 4) }, false},
 		{"non-planning tasks may edit existing nodes", func(*testing.T) Operation { return Operation{Kind: OperationWriteChapter, Input: chapterOp} }, base,
 			func(t *testing.T) []Patch { return plans(t, 3) }, true},
-		{"fixed length leaves the compass to the user", func(t *testing.T) Operation { return extend(t, 6, 3, 6) }, base,
+		{"fixed length leaves the compass to the user", fixedSix, base,
 			func(t *testing.T) []Patch { return append(plans(t, 4, 5, 6), compass(t, 6, 6)) }, false},
-		{"deleting the compass keeps a node named root", func(t *testing.T) Operation { return extend(t, 0, 3, 6) },
+		{"deleting the compass keeps a node named root", open,
 			blueprint(&Compass{ScaleMax: 10, Ending: "称帝"}, append(chapters(1, 2), PlanNode{ID: "root", Kind: PlanChapter, ParentID: "arc-1", Order: 3, Title: "章", Summary: "推进"})...),
 			func(t *testing.T) []Patch {
 				return append(plans(t, 4, 5, 6), Patch{Document: DocumentRef{Kind: DocumentCompass, ID: SingletonDocumentID}, Operation: PatchDelete}, compass(t, 10, 0))
@@ -181,18 +208,20 @@ func TestValidateBlueprint(t *testing.T) {
 	}
 }
 
-// 规划请求：必须越过已有章数，固定篇幅时不超过全书章数；交给 AI 时不设上界（由罗盘约束）。
+// 规划输入不带章数（D67）：扩窗要有已写基础，固定篇幅时还得留有余地。
 func TestPlanInputsValidateRequest(t *testing.T) {
 	for _, c := range []struct {
 		input TaskInput
 		ok    bool
 	}{
-		{DevelopPlanInput{Intent: "逆袭", RequestedChapters: 3}, true},
-		{DevelopPlanInput{Intent: "逆袭", FixedChapters: 2, RequestedChapters: 3}, false},
-		{DevelopPlanInput{Intent: "逆袭"}, false},
-		{RevisePlanInput{Intent: "逆袭", ExistingChapters: 3, RequestedChapters: 4}, true},
-		{RevisePlanInput{Intent: "逆袭", ExistingChapters: 3, RequestedChapters: 3}, false},
-		{RevisePlanInput{Intent: "逆袭", FixedChapters: 5, ExistingChapters: 3, RequestedChapters: 6}, false},
+		{DevelopPlanInput{Intent: "逆袭"}, true},
+		{DevelopPlanInput{Intent: "逆袭", FixedChapters: 2}, true},
+		{DevelopPlanInput{Intent: "逆袭", FixedChapters: -1}, false},
+		{DevelopPlanInput{Intent: " "}, false},
+		{RevisePlanInput{Intent: "逆袭", ExistingChapters: 3}, true},
+		{RevisePlanInput{Intent: "逆袭", FixedChapters: 5, ExistingChapters: 3}, true},
+		{RevisePlanInput{Intent: "逆袭"}, false},
+		{RevisePlanInput{Intent: "逆袭", FixedChapters: 3, ExistingChapters: 3}, false},
 	} {
 		if err := c.input.Validate(); (err == nil) != c.ok {
 			t.Fatalf("%+v validate = %v, want ok %v", c.input, err, c.ok)

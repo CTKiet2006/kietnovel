@@ -108,7 +108,7 @@ func TestNovelItemWorkCarriesDirectivesAndRewriteBase(t *testing.T) {
 		t.Fatalf("review work: %v", err)
 	}
 	reviewInput, ok := work.Input.(model.ReviewRangeInput)
-	if !ok || work.ID != reviewOperationID("run-1", chapters, 7, review.requirements) || !strings.HasPrefix(work.ID, "run-1:review:chapter-1:r7:") {
+	if !ok || work.ID != reviewOperationID("run-1", 7, model.ReviewRangeInput{ChapterIDs: chapters, Requirements: review.requirements}) || !strings.HasPrefix(work.ID, "run-1:review:chapter-1:r7:") {
 		t.Fatalf("review work = %#v", work)
 	}
 	if got := reviewInput.Requirements; len(got) != 2 || got[0].ID != "directive:d-all" || got[1].ID != "directive:d-arc" || got[0].Settle {

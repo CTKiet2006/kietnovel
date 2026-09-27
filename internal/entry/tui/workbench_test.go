@@ -81,20 +81,19 @@ func TestWorkbenchFramesFitSizesThemesAndStates(t *testing.T) {
 	}
 }
 
-func TestProsePageFillsNarrowAndCentersWide(t *testing.T) {
-	narrow := studioModel(t, 150, 40)
-	if l := narrow.benchLayout(); l.proseX != 0 || l.proseWidth != l.inner {
-		t.Fatalf("150 columns must give the prose the whole main column: %+v", l)
-	}
-	// 右栏吸收余量后正文仍铺满；余量超过右栏上限时，正文页才在中栏内居中。
-	wide := studioModel(t, 240, 60)
-	l := wide.benchLayout()
-	if l.railWidth != railMaxWidth || l.proseWidth != proseMaxWidth || l.proseX == 0 || l.inner-l.proseX-l.proseWidth < l.proseX {
-		t.Fatalf("240 columns must center a capped prose page beside a max-width rail: %+v", l)
-	}
-	title := strings.Split(frame(wide), "\n")[l.contentY+1]
-	if at := strings.Index(title, "门后的声音"); at < 0 || lipgloss.Width(title[:at]) != l.mainX+benchPad+l.proseX {
-		t.Fatalf("title must sit at the prose page origin:\n%s", title)
+// 正文页与活动、现场条同宽：任何宽度下都从主栏留白处起笔，不在主栏内居中。
+func TestProsePageFillsMainColumn(t *testing.T) {
+	for _, width := range []int{150, 170, 240} {
+		m := studioModel(t, width, 60)
+		l := m.benchLayout()
+		rows := strings.Split(frame(m), "\n")
+		head, first := rows[l.contentY], rows[l.contentY+1]
+		if at := strings.Index(head, "第 4 章"); at < 0 || lipgloss.Width(head[:at]) != l.mainX+benchPad || !strings.Contains(head, "门后的声音") {
+			t.Fatalf("%d columns: chapter number and title must share one head row at the main column origin:\n%s", width, head)
+		}
+		if !strings.Contains(first, "雨停了") {
+			t.Fatalf("%d columns: prose must start right below the head row:\n%s", width, first)
+		}
 	}
 }
 
@@ -105,8 +104,8 @@ func TestRunRailShowsLiveModelsAgentsAndTotalsOnWideTerminals(t *testing.T) {
 	}
 	wide := studioModel(t, 200, 50)
 	l := wide.benchLayout()
-	if l.railWidth != 42 || l.inner != proseMaxWidth || l.proseX != 0 || l.railX+l.railWidth != 200 {
-		t.Fatalf("200 columns must give the rail the slack beyond the prose page: %+v", l)
+	if l.railWidth != 42 || l.inner != mainTargetWidth || l.railX+l.railWidth != 200 {
+		t.Fatalf("200 columns must give the rail the slack beyond the main target width: %+v", l)
 	}
 	view := frame(wide)
 	requireContains(t, view,
@@ -118,9 +117,12 @@ func TestRunRailShowsLiveModelsAgentsAndTotalsOnWideTerminals(t *testing.T) {
 		"本轮合计", "2 个任务", "↑233K ↓58K · 缓存 80%", "$0.42 · 已用 4m", "工具调用 13 · 重试 1",
 		"/view 本章详情 · /diag 诊断",
 	)
-	// 最窄的右栏（180 列，32 列宽）每一行都放得下，不出现截断省略号。
-	narrowRail := studioModel(t, 180, 45)
+	// 最窄的右栏（170 列，32 列宽）每一行都放得下，不出现截断省略号。
+	narrowRail := studioModel(t, 170, 45)
 	nl := narrowRail.benchLayout()
+	if nl.railWidth != railMinWidth || studioModel(t, 169, 45).benchLayout().railWidth != 0 {
+		t.Fatalf("rail must appear at exactly %d columns with the minimum width: %+v", railThreshold, nl)
+	}
 	for i, row := range strings.Split(frame(narrowRail), "\n")[nl.bodyY:nl.footerY] {
 		if cell := ansi.Cut(row, nl.railX, nl.railX+nl.railWidth); strings.Contains(cell, "…") {
 			t.Fatalf("rail row %d truncated at 32 columns: %q", i, cell)
@@ -150,7 +152,7 @@ func TestProseViewStreamsLiveChapterAndSceneShowsThinking(t *testing.T) {
 	m := studioModel(t, 150, 40)
 	view := frame(m)
 	requireContains(t, view,
-		"◉ 正在创作 · 第 4 章", "已入稿 3 / 8 章",
+		"◉ 正在落笔第 4 章", "已入稿 3 / 8 章",
 		"实时预览 · 最终以入稿版本为准", "◌ 生成中的草稿 · 未入稿", "门后却传来一个声音：“你今天来晚了。”▍",
 		"AI 创作现场 · 第 4 章写作", "✓ 查阅设定与前情", "落笔章节工作稿 · 已接收 2.0K", "思考 ▏ 保留上一章的雨声作为过渡",
 		"681 字 · 2 条要求", "自动推进",
@@ -612,5 +614,14 @@ func BenchmarkLongWorkbenchStreaming(b *testing.B) {
 		m.bench.activity.Output[1].Text = []byte(prefix + fmt.Sprint(i))
 		m.bench.activity.Output[1].Version = uint64(i + 2)
 		_ = m.View()
+	}
+}
+
+// 顶栏取正在执行的任务：审阅、重写已入稿章节时不能停在大纲推出的章号上。
+func TestStateBadgeFollowsRunningTask(t *testing.T) {
+	m := studioModel(t, 150, 40)
+	m.bench.snap.CurrentPhase = "正在审阅第 1–3 章"
+	if header := strings.Split(frame(m), "\n")[0]; !strings.Contains(header, "◉ 正在审阅第 1–3 章") || strings.Contains(header, "第 4 章") {
+		t.Fatalf("badge must name the running task:\n%s", header)
 	}
 }

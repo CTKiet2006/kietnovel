@@ -25,6 +25,8 @@ func NewReviews(s *store.Store, changes *change.Engine, projects *projectdoc.Rep
 
 type Evidence struct {
 	Verdicts []StoredVerdict
+	// Prior 是基线已失效的上一轮裁定（D68）：章节正文未变时沿用其结论。
+	Prior []StoredVerdict
 	// Repairs 是本轮各章已派发的自动修订次数，预算按章计（D63）。
 	Repairs map[string]int
 }
@@ -40,7 +42,7 @@ func (g *Goal) Next(ctx context.Context, run model.CreationRun) (creation.Decisi
 		return creation.Decision{}, err
 	}
 	decision := creation.Decision{Revision: p.Revision}
-	verdicts, err := g.reader.ListVerdicts(ctx, p)
+	verdicts, prior, err := g.reader.listVerdicts(ctx, p)
 	if err != nil {
 		decision.Step.Fail = "审阅结果缺失或损坏，需要人工检查"
 		return decision, err
@@ -49,7 +51,7 @@ func (g *Goal) Next(ctx context.Context, run model.CreationRun) (creation.Decisi
 	if err != nil {
 		return decision, err
 	}
-	decision.Step, err = (Policy{}).Next(p, run, Evidence{Verdicts: verdicts, Repairs: repairs})
+	decision.Step, err = (Policy{}).Next(p, run, Evidence{Verdicts: verdicts, Prior: prior, Repairs: repairs})
 	return decision, err
 }
 

@@ -206,7 +206,7 @@ func newRenderingApp(t *testing.T, approval model.ApprovalPolicy) (*testApp, *ex
 
 func startRenderingRun(t *testing.T, api *testApp, sequence int, at time.Time) model.CreationRun {
 	t.Helper()
-	strategy := model.CreationRunStrategy{PlanWindowChapters: 1, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 0}
+	strategy := model.CreationRunStrategy{ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 0}
 	preset, err := model.NewCreationRunPreset("rendering", model.ApprovalAuto, strategy)
 	if err != nil {
 		t.Fatalf("preset: %v", err)

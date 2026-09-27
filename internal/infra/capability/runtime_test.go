@@ -495,7 +495,7 @@ func createRuntimeTestRun(
 		ID: "run:" + projectID, ProjectID: projectID,
 		Goal: domainmodel.NovelGoal{Premise: "测试创作", TargetChapters: 3}.Goal(),
 		Strategy: domainmodel.CreationRunStrategy{
-			PlanWindowChapters: 3, ReviewCadence: domainmodel.ReviewPerPlanWindow, AutoRepairBudget: 3,
+			ReviewCadence: domainmodel.ReviewPerPlanWindow, AutoRepairBudget: 3,
 		},
 		Preset: domainmodel.CreationRunPreset{
 			Source: "test", Digest: "test-preset", Approval: domainmodel.ApprovalAuto,
@@ -920,9 +920,10 @@ func TestAffectedRewriteSubmissionCoversEveryWorkspaceChapter(t *testing.T) {
 	// （model.ValidateChange，工具边界经 changes.Validate 执行）。
 }
 
-func TestRuntimePlanSubmissionEnforcesRequestedChapters(t *testing.T) {
-	// §6.3 数量不变量前移到工具边界：滚动规划多产章节在 proposal_submit 当场
-	// 被拒，模型在同一会话内纠正后重新提交，而不是收尾时把整个 Operation 打死。
+func TestRuntimePlanSubmissionEnforcesLengthBound(t *testing.T) {
+	// §6.3 篇幅上界前移到工具边界（D67 章数由规划者决定，上界仍是硬边界）：越过固定
+	// 篇幅在 proposal_submit 当场被拒，模型在同一会话内纠正后重新提交，而不是收尾时
+	// 把整个 Operation 打死。
 	ctx := context.Background()
 	now := time.Date(2026, 8, 29, 14, 0, 0, 0, time.UTC)
 	authorityStore, err := store.Open(ctx, filepath.Join(t.TempDir(), "ainovel.db"))
@@ -934,7 +935,7 @@ func TestRuntimePlanSubmissionEnforcesRequestedChapters(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load architect capability: %v", err)
 	}
-	task := json.RawMessage(`{"intent":"规划开篇","fixed_chapters":3,"requested_chapters":1}`)
+	task := json.RawMessage(`{"intent":"规划开篇","fixed_chapters":1}`)
 	operation := domainmodel.Operation{
 		ID: "plan-1", Kind: domainmodel.OperationDevelopPlan,
 		Target: domainmodel.AuthorityTarget{Kind: domainmodel.AuthorityProject, ID: "book-plan"},
@@ -962,10 +963,10 @@ func TestRuntimePlanSubmissionEnforcesRequestedChapters(t *testing.T) {
 		raw, _ := json.Marshal(args)
 		return raw
 	}
-	overshoot := submission("多规划一章",
+	overshoot := submission("越过固定篇幅",
 		map[string]any{"chapter": 1, "arc": 1, "title": "第一章", "summary": "出发"},
 		map[string]any{"chapter": 2, "arc": 1, "title": "第二章", "summary": "多余"})
-	exact := submission("按请求规划一章", map[string]any{"chapter": 1, "arc": 1, "title": "第一章", "summary": "出发"})
+	exact := submission("按固定篇幅规划一章", map[string]any{"chapter": 1, "arc": 1, "title": "第一章", "summary": "出发"})
 	model := &planRuntimeModel{steps: []json.RawMessage{overshoot, exact}, now: now.Add(2 * time.Second)}
 	runtime := boundRuntime(authorityStore, model)
 	runtime.now = func() time.Time { return now.Add(3 * time.Second) }

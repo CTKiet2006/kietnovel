@@ -226,6 +226,24 @@ func operationPhase(operation model.Operation, project projectdoc.Snapshot) (str
 				return fmt.Sprintf("正在按意见重写第 %d 章", chapter.Number), chapter.PlanNodeID
 			}
 		}
+	case *model.ReviewRangeInput:
+		var numbers []int
+		for _, chapter := range project.Manuscript {
+			if slices.Contains(input.ChapterIDs, chapter.ID) {
+				numbers = append(numbers, chapter.Number)
+			}
+		}
+		verb := "审阅"
+		if len(input.Reviewed) > 0 || len(input.PriorFindings) > 0 {
+			verb = "复审" // D68：上一轮审过，这次核对改动
+		}
+		switch len(numbers) {
+		case 0:
+		case 1:
+			return fmt.Sprintf("正在%s第 %d 章", verb, numbers[0]), ""
+		default:
+			return fmt.Sprintf("正在%s第 %d–%d 章", verb, slices.Min(numbers), slices.Max(numbers)), ""
+		}
 	}
 	return spec.Label, ""
 }

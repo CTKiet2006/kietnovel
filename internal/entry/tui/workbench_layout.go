@@ -17,16 +17,18 @@ const (
 	benchHeaderRows   = 2   // 标题/状态 + 进度分隔线
 	benchFooterRows   = 3   // 分隔线（含反馈）+ 输入 + 提示
 	benchTabRows      = 2   // 标签 + 分隔线
-	benchSceneRows    = 8   // 创作现场：空行、标题线、输出尾部三行、前两步、当前步
-	sceneTailRows     = 3   // 现场条里最新输出块的尾部行数
+	sceneTailRows     = 5   // 现场条里最新输出块的尾部行数
 	sceneStepRows     = 3   // 现场条里的步骤行数（最后一行是当前步或等待计时）
 	benchCardRows     = 4   // 决定卡：标题线、原因、变更摘要、操作
 	directoryNoteRows = 3   // 目录底部：空行 + 字数/要求数 + 推进方式
 	benchPad          = 2   // 主栏左右留白
-	proseMaxWidth     = 120 // 正文页最宽（一行 60 个汉字）；更宽的终端把正文页在主栏内居中
-	railThreshold     = 180 // 从这个宽度起显示右栏「本轮运行」
+	mainTargetWidth   = 120 // 有右栏时主栏内宽先保到这里，余量给右栏
+	railThreshold     = 170 // 从这个宽度起显示右栏「本轮运行」
 	railMinWidth      = 32
 	railMaxWidth      = 48
+
+	// 创作现场：空行、标题线、输出尾部、步骤。
+	benchSceneRows = 2 + sceneTailRows + sceneStepRows
 )
 
 type benchLayout struct {
@@ -37,7 +39,6 @@ type benchLayout struct {
 	outlineY, outlineRows              int // 目录可见行起点与行数（标题行与截断指示行之外）
 	tabsY, contentY, contentRows       int
 	sceneY, cardY                      int // -1 表示该区本帧不存在
-	proseX, proseWidth                 int // 正文页在主栏内的起点与宽度
 }
 
 func (m model) benchLayout() benchLayout {
@@ -48,8 +49,8 @@ func (m model) benchLayout() benchLayout {
 	l.mainX = l.leftWidth + 1
 	l.mainWidth = l.width - l.mainX
 	if m.width >= railThreshold {
-		// 右栏吸收正文页之外的余量，让正文正好铺满中栏；余量不够时右栏取最小宽度。
-		l.railWidth = min(railMaxWidth, max(railMinWidth, l.mainWidth-1-proseMaxWidth-2*benchPad))
+		// 右栏吸收主栏目标内宽之外的余量；余量不够时右栏取最小宽度。
+		l.railWidth = min(railMaxWidth, max(railMinWidth, l.mainWidth-1-mainTargetWidth-2*benchPad))
 		l.mainWidth -= l.railWidth + 1
 		l.railX = l.mainX + l.mainWidth + 1
 	}
@@ -71,8 +72,6 @@ func (m model) benchLayout() benchLayout {
 		l.sceneY = bottom
 	}
 	l.contentRows = bottom - l.contentY
-	l.proseWidth = min(l.inner, proseMaxWidth)
-	l.proseX = (l.inner - l.proseWidth) / 2
 	return l
 }
 
@@ -249,13 +248,7 @@ func (m model) contentLines(l benchLayout) []string {
 	if m.bench.view == viewActivity {
 		return padMain(m.activityView(l.inner, l.contentRows), l, l.contentRows)
 	}
-	lines := m.proseView(l)
-	if indent := strings.Repeat(" ", l.proseX); indent != "" {
-		for i := range lines {
-			lines[i] = indent + lines[i]
-		}
-	}
-	return padMain(lines, l, l.contentRows)
+	return padMain(m.proseView(l), l, l.contentRows)
 }
 
 // decisionCard 只在等待用户决定时出现：琥珀标题线、原因、变更摘要、可做的事。

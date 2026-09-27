@@ -50,13 +50,9 @@ func newTestAppWithExecutors(s *store.Store, e task.ExecutorSet, contracts ...op
 // Slot IDs are asserted by integration tests because recovery preserves them.
 func runQuickID(runID string, parts ...string) string { return runID + ":" + strings.Join(parts, ":") }
 
-// planID 是首次规划的槽位 ID：带请求章数与固定篇幅（D63），窗口为 3。
+// planID 是首次规划的槽位 ID：编码篇幅输入（D67），首次规划时还没有罗盘。
 func planID(runID string, fixed int) string {
-	requested := 3
-	if fixed > 0 {
-		requested = min(3, fixed)
-	}
-	return runQuickID(runID, "plan", fmt.Sprintf("r%d:f%d", requested, fixed))
+	return runQuickID(runID, "plan", fmt.Sprintf("f%d:s0:e0", fixed))
 }
 
 // reviewAt 报告任务是否为本轮在 revision 上派发的审阅：审阅 ID 还含窗口与要求摘要（D62），

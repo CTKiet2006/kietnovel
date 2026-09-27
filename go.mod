@@ -11,6 +11,7 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	github.com/tailscale/hujson v0.0.0-20260302212456-ecc657c15afd
 	github.com/voocel/agentcore v1.8.3
+	github.com/voocel/litellm v1.8.10
 	modernc.org/sqlite v1.56.0
 )
 
@@ -34,7 +35,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/voocel/litellm v1.8.10 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.3.8 // indirect

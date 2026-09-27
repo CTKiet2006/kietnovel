@@ -154,7 +154,12 @@ func chapterText(chapter domainmodel.ManuscriptChapter) string {
 	return strings.Join(paragraphs, "\n\n")
 }
 
-const viewHeadRows = 3 // 正文/活动视图共用的头：上标与状态、标题、空行
+const viewHeadRows = 1
+
+// viewHead 正文/活动视图共用的单行头：上标、标题，右侧状态；放不下时截断标题。
+func viewHead(overline, title, right string, width int) string {
+	return alignRight(benchTheme.Muted.Render(overline)+"  "+benchTheme.Title.Render(title), right, width)
+}
 
 func proseStateStyle(state string) lipgloss.Style {
 	switch {
@@ -197,15 +202,11 @@ func (m model) proseOffset(total, capacity int, live bool) int {
 	return min(m.bench.proseOffset, last)
 }
 
-// proseView 正文页：章号与状态、标题、正文，同一页宽；直播跟随尾部，上滚后停在读者所在处。
+// proseView 正文页：章号、标题与状态一行，其下即正文，铺满主栏；直播跟随尾部，上滚后停在读者所在处。
 func (m model) proseView(l benchLayout) []string {
 	src := m.proseSource()
-	lines := []string{
-		alignRight(benchTheme.Muted.Render(src.overline), proseStateStyle(src.state).Render(src.state), l.proseWidth),
-		benchTheme.Title.Render(fitLine(src.title, l.proseWidth)),
-		"",
-	}
-	body := m.proseBody(src, l.proseWidth)
+	lines := []string{viewHead(src.overline, src.title, proseStateStyle(src.state).Render(src.state), l.inner)}
+	body := m.proseBody(src, l.inner)
 	capacity := max(1, l.contentRows-viewHeadRows)
 	offset := m.proseOffset(len(body), capacity, src.live)
 	for _, line := range body[offset:min(len(body), offset+capacity)] {
@@ -217,7 +218,7 @@ func (m model) proseView(l benchLayout) []string {
 func (m model) scrollProse(delta int) model {
 	l := m.benchLayout()
 	src := m.proseSource()
-	total := len(m.proseBody(src, l.proseWidth))
+	total := len(m.proseBody(src, l.inner))
 	capacity := max(1, l.contentRows-viewHeadRows)
 	last := max(0, total-capacity)
 	next := min(last, max(0, m.proseOffset(total, capacity, src.live)+delta))

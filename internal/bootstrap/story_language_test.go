@@ -79,7 +79,7 @@ func TestCompiledPromptsCarryNoDocumentIDs(t *testing.T) {
 		model.OperationRewriteAffected: `{"chapter_ids":["ms-x1"],"base_revision":` + revision + `,"resolution_proposal_id":"p-ms-x1","reason":"门规改变"}`,
 		model.OperationReviewRange:     `{"chapter_ids":["ms-x1","ms-x2"],"basis":` + basis + `}`,
 		model.OperationReviseCanon:     `{"chapter_id":"ms-x1","fact_ids":["fact-e1"],"reason":"正文改动后核验"}`,
-		model.OperationRevisePlan:      `{"intent":"少年入山修行","existing_chapters":3,"requested_chapters":5}`,
+		model.OperationRevisePlan:      `{"intent":"少年入山修行","existing_chapters":3}`,
 	}
 	ids := []string{"vol-x", "arc-x", "ch-x1", "ch-x2", "ch-x3", "ent-hero", "ent-mentor", "fact-rule", "fact-e1", "fact-f1", "fact-s2", "ms-x1", "ms-x2"}
 	index := 0

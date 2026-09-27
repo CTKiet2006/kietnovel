@@ -43,7 +43,7 @@ func canonEvidencePatch(t *testing.T, fact model.CanonFact) model.Patch {
 	return model.Patch{Document: model.DocumentRef{Kind: model.DocumentCanon, ID: fact.ID}, Operation: model.PatchPut, Content: raw}
 }
 
-// D62：窗口审阅的证据只钉正文、结构依赖与要求作用域。事实只进审阅上下文：状态原地
+// D62/D69：窗口审阅的证据只钉正文、本章计划、Intent 与要求作用域。事实只进审阅上下文：状态原地
 // 更新到后续章节、用户修订事实都不废掉旧窗口；窗口正文或衔接章正文变化才失效。
 func TestWindowReviewEvidencePinsManuscriptsNotCanon(t *testing.T) {
 	ctx := context.Background()
@@ -138,6 +138,65 @@ func TestQuickWriteKeepsReviewAfterCanonOnlyChange(t *testing.T) {
 	result, err := api.Novels.QuickWrite(ctx, command)
 	if err != nil || result.RunState != model.RunCompleted || executor.calls != before {
 		t.Fatalf("result = %+v, calls %d -> %d, err %v", result, before, executor.calls, err)
+	}
+}
+
+// D69：实体与卷弧只是审阅上下文。给角色追加别名、修订卷弧摘要都不废掉窗口裁定，完成的
+// 书续跑直接确认完成、不再调用模型；改章节自己的计划节点（章的位置）才失效。
+func TestQuickWriteKeepsReviewAfterEntityAndArcChange(t *testing.T) {
+	ctx := context.Background()
+	executor := &scriptedQuickExecutor{now: testTime()}
+	api := newQuickTestApp(t, executor)
+	command := novelapp.QuickWriteCommand{ProjectID: "context-rereview", UserID: "user-1", Premise: "邮差送信", Chapters: 2, WorkerID: "worker", LeaseDuration: time.Minute, CreatedAt: testTime()}
+	if _, err := api.Novels.QuickWrite(ctx, command); err != nil {
+		t.Fatal(err)
+	}
+	project, err := api.Projects.Project(ctx, command.ProjectID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewed, err := api.Reviews.ListVerdicts(ctx, project)
+	if err != nil || len(reviewed) == 0 {
+		t.Fatalf("completed book must have verdicts: %v, %v", reviewed, err)
+	}
+	put := func(kind model.DocumentKind, id string, value any) model.Patch {
+		raw, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return model.Patch{Document: model.DocumentRef{Kind: kind, ID: id}, Operation: model.PatchPut, Content: raw}
+	}
+	hero := project.Entities[slices.IndexFunc(project.Entities, func(entity model.Entity) bool { return entity.ID == "hero" })]
+	hero.Aliases = append(hero.Aliases, "送信人")
+	patches := []model.Patch{put(model.DocumentEntity, hero.ID, hero)}
+	var chapterPlan model.PlanNode
+	for _, node := range project.Plan {
+		if node.Kind == model.PlanChapter {
+			chapterPlan = node
+			continue
+		}
+		node.Summary += "（按已发生的故事修订）"
+		patches = append(patches, put(model.DocumentPlan, node.ID, node))
+	}
+	project = editCanonEvidence(t, api, project, "context-edit", patches...)
+	verdicts, err := api.Reviews.ListVerdicts(ctx, project)
+	if err != nil || len(verdicts) != len(reviewed) {
+		t.Fatalf("entity and arc edits must keep verdicts: %d -> %d, %v", len(reviewed), len(verdicts), err)
+	}
+	before := executor.calls
+	result, err := api.Novels.QuickWrite(ctx, command)
+	if err != nil || result.RunState != model.RunCompleted || executor.calls != before {
+		t.Fatalf("result = %+v, calls %d -> %d, err %v", result, before, executor.calls, err)
+	}
+
+	chapter := project.Manuscript[slices.IndexFunc(project.Manuscript, func(chapter model.ManuscriptChapter) bool { return chapter.PlanNodeID == chapterPlan.ID })]
+	untouched := slices.DeleteFunc(slices.Clone(verdicts), func(stored novelapp.StoredVerdict) bool {
+		return slices.Contains(stored.Verdict.ChapterIDs, chapter.ID)
+	})
+	chapterPlan.Summary += "（改了这一章的计划）"
+	project = editCanonEvidence(t, api, project, "chapter-plan-edit", put(model.DocumentPlan, chapterPlan.ID, chapterPlan))
+	if verdicts, err = api.Reviews.ListVerdicts(ctx, project); err != nil || len(verdicts) != len(untouched) || len(untouched) == len(reviewed) {
+		t.Fatalf("chapter plan edit must invalidate exactly the windows holding it: %d -> %d (want %d), %v", len(reviewed), len(verdicts), len(untouched), err)
 	}
 }
 

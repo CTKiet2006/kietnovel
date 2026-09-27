@@ -181,13 +181,20 @@ func TestBuildStoryContextSelectsDocumentsByOperation(t *testing.T) {
 			want: withManuscript("chapter-1", "chapter-2"),
 		},
 		{
+			// 重写要与后文衔接（D68）：已写的下一章正文一并装入。
+			name: "rewrite_chapter includes the next written manuscript",
+			kind: model.OperationRewriteChapter,
+			task: `{"chapter_id":"chapter-1","chapter_plan_id":"chapter-plan-1","chapter_number":1,"findings":["左右手写反"]}`,
+			want: withManuscript("chapter-1", "chapter-2"),
+		},
+		{
 			name: "revise_canon includes the verified chapter manuscript",
 			kind: model.OperationReviseCanon, task: `{"chapter_id":"chapter-1","reason":"核验事实"}`,
 			want: withManuscript("chapter-1"),
 		},
 		{
 			name: "develop_plan includes structural documents only",
-			kind: model.OperationDevelopPlan, task: `{"intent":"凡人远行","fixed_chapters":3,"requested_chapters":3}`,
+			kind: model.OperationDevelopPlan, task: `{"intent":"凡人远行","fixed_chapters":3}`,
 			want: withManuscript(),
 		},
 	}
@@ -215,7 +222,7 @@ func TestStoryContextCarriesTheCompass(t *testing.T) {
 	content.Compass = &model.Compass{ScaleMax: 60, Ending: "问鼎大道"}
 	compass := model.DocumentRef{Kind: model.DocumentCompass, ID: model.SingletonDocumentID}.Key()
 	for kind, task := range map[model.OperationKind]string{
-		model.OperationDevelopPlan:    `{"intent":"凡人远行","requested_chapters":3}`,
+		model.OperationDevelopPlan:    `{"intent":"凡人远行"}`,
 		model.OperationWriteChapter:   `{"chapter_plan_id":"chapter-plan-2","chapter_number":2}`,
 		model.OperationReviseCanon:    `{"chapter_id":"chapter-1","reason":"核验事实"}`,
 		model.OperationRewriteChapter: `{"chapter_id":"chapter-2","chapter_plan_id":"chapter-plan-2","chapter_number":2,"findings":["节奏慢"]}`,
@@ -347,14 +354,14 @@ func TestBuildStoryContextRejectsInvalidInput(t *testing.T) {
 		task string
 		want string
 	}{
-		{name: "missing project id", edit: func(c *ProjectContent) { c.ID = " " }, kind: model.OperationDevelopPlan, task: `{"intent":"x","fixed_chapters":1,"requested_chapters":1}`, want: "positive revision and task are required"},
-		{name: "initial revision", edit: func(c *ProjectContent) { c.Revision = 0 }, kind: model.OperationDevelopPlan, task: `{"intent":"x","fixed_chapters":1,"requested_chapters":1}`, want: "positive revision and task are required"},
+		{name: "missing project id", edit: func(c *ProjectContent) { c.ID = " " }, kind: model.OperationDevelopPlan, task: `{"intent":"x","fixed_chapters":1}`, want: "positive revision and task are required"},
+		{name: "initial revision", edit: func(c *ProjectContent) { c.Revision = 0 }, kind: model.OperationDevelopPlan, task: `{"intent":"x","fixed_chapters":1}`, want: "positive revision and task are required"},
 		{name: "empty task", kind: model.OperationDevelopPlan, task: ``, want: "positive revision and task are required"},
 		{name: "malformed task", kind: model.OperationDevelopPlan, task: `{"intent":`, want: "positive revision and task are required"},
 		{name: "invalid task input", kind: model.OperationWriteChapter, task: `{"chapter_plan_id":"chapter-plan-1","chapter_number":0}`, want: "write_chapter task input"},
 		{name: "invalid ownership rule", edit: func(c *ProjectContent) {
 			c.Ownership = []model.OwnershipRule{{Target: model.DocumentRef{Kind: model.DocumentEntity, ID: "hero"}, Control: model.ControlGuided}}
-		}, kind: model.OperationDevelopPlan, task: `{"intent":"x","fixed_chapters":1,"requested_chapters":1}`, want: "guided ownership requires guidance"},
+		}, kind: model.OperationDevelopPlan, task: `{"intent":"x","fixed_chapters":1}`, want: "guided ownership requires guidance"},
 		{name: "operation without context contract", kind: model.OperationGenerateAsset, task: `{"role":"cover","target":{"kind":"intent","id":"root"},"basis":{"documents":[{"ref":{"kind":"intent","id":"root"},"revision":1}]}}`, want: "no story context contract"},
 		{name: "unknown operation kind", kind: "paint", task: `{}`, want: `unknown operation kind "paint"`},
 	}

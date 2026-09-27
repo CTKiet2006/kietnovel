@@ -46,7 +46,7 @@ const reviewFindingSchema = `{
 		"chapter": {"type": "integer", "minimum": 1,
 			"description": "章号，必须是本次审阅范围（任务的 chapters）之一；跨章问题挂到最相关的那一章"},
 		"severity": {"type": "string", "enum": ["blocking", "note"],
-			"description": "blocking=必须修改的问题（被违反的要求用 requirement 指出是哪一项）；note=仅供参考的观察，禁止带 requirement"},
+			"description": "blocking=必须修改的问题（被违反的要求用 requirement 指出是哪一项）；note=仅供参考的观察，禁止带 requirement。任务 reviewed 列出的章只作上下文，只有违反 requirements 才能记 blocking"},
 		"note": {"type": "string", "description": "结论与依据"},
 		"requirement": {"type": "string", "description": "仅 blocking 可用：逐字取自任务输入 requirements 的 id，且该项在裁定 checks 中声明为 violated"}
 	},
@@ -317,7 +317,7 @@ const intentSchema = `{"type":"object","description":"完整的创作意图，�
 const compassSchema = `{"type":"object","description":"故事罗盘，只有规划任务可写。scale_max 是全书篇幅上限（章），ending 是终局方向，` +
 	`final 是收官承诺（全书章数，未收官时省略）。任务有 fixed_chapters 时篇幅由用户固定，不要提交；篇幅交给 AI 时首次规划必须给出，` +
 	`之后只在有变化时提交；未收官时蓝图章节总数必须小于 scale_max，临近上限就声明 final 收官，确需更长再上调 scale_max（需用户同意）；` +
-	`给出 final 后蓝图恰好规划到第 final 章",` +
+	`给出 final 后蓝图不超过第 final 章，可分次规划到它",` +
 	`"properties":{"scale_max":{"type":"integer","minimum":1},"ending":{"type":"string"},"final":{"type":"integer","minimum":1}},` +
 	`"required":["scale_max","ending"],"additionalProperties":false}`
 
@@ -372,7 +372,7 @@ func proposalTool(draft draftSubmission, redeclare, planning bool) ToolSchema {
 		properties["volumes"] = planEditSchema("volume", "", "")
 		properties["arcs"] = planEditSchema("arc", "volume", "所属卷序号，新增时必填")
 		chapters := planEditSchema("chapter", "arc", "所属故事弧序号，新增时必填")
-		chapters["description"] = "章节大纲。只有规划任务能新增章节，新增后蓝图章节总数必须恰好等于任务的 requested_chapters"
+		chapters["description"] = "章节大纲。只有规划任务能新增章节，追加多少章由你按故事走向决定：至少一章，除非以现有章数声明收官；篇幅上界见 fixed_chapters 与 compass"
 		properties["chapters"] = chapters
 		description += `卷（volumes）、故事弧（arcs）、章（chapters）按序号编辑：已有序号是修改，省略的字段保持原值；` +
 			`新增的紧接 story_context.totals 的现有总数连续编号，并给出 title、summary 与上级序号；只能在末尾追加，不能插入或删除。`

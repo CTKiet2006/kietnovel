@@ -44,34 +44,13 @@ func CommittedFinal(compass *model.Compass, planned int) int {
 	return compass.Final
 }
 
-// extendTo 是扩窗请求的章节总数：全书章数已知时到末章为止；开放期按窗口扩展并以
-// 篇幅上限封顶——已越过上限时仍请求多一章，由提交边界逼 AI 收官或申请上调上限。
-func (l Length) extendTo(covered, window int) int {
-	switch {
-	case l.Final > 0:
-		return min(covered+window, l.Final)
-	case l.Compass == nil:
-		return covered + window
-	default:
-		return max(covered+1, min(covered+window, l.Compass.ScaleMax))
-	}
-}
-
-// developTo 是首次规划请求的章节数：全书章数已知时不超过它。
-func (l Length) developTo(window int) int {
-	if l.Final > 0 {
-		return min(window, l.Final)
-	}
-	return window
-}
-
 // planningGoal 按篇幅阶段说明规划要对罗盘做什么。
 func (l Length) planningGoal() string {
 	switch {
 	case l.Fixed > 0:
 		return fmt.Sprintf("全书固定 %d 章：规划到第 %d 章时收束主线，把未回收的伏笔分配进收官章节", l.Fixed, l.Fixed)
 	case l.Compass == nil:
-		return "篇幅由你决定：本次必须给出故事罗盘 compass（按题材与故事容量定篇幅上限 scale_max 与终局方向 ending）；故事撑不满请求数量时可直接声明收官 final"
+		return "篇幅由你决定：本次必须给出故事罗盘 compass（按题材与故事容量定篇幅上限 scale_max 与终局方向 ending）；规划已到故事终点时同时声明收官 final"
 	case l.Compass.Final > 0 && l.Final == 0:
 		return fmt.Sprintf("篇幅由你决定（当前上限 %d 章）：罗盘的收官承诺 %d 章已少于蓝图章数而失效，本次必须修订 compass.final（不少于已规划章数）或撤回收官（省略 final）", l.Compass.ScaleMax, l.Compass.Final)
 	case l.Final > 0:
@@ -81,7 +60,12 @@ func (l Length) planningGoal() string {
 	}
 }
 
-// planInputID 是规划任务 ID 中标识篇幅输入的一段。
-func planInputID(requested, fixed int) string {
-	return fmt.Sprintf("r%d:f%d", requested, fixed)
+// inputID 是规划任务 ID 中标识篇幅输入的一段（D67）：固定章数、罗盘上限与收官承诺
+// 原值决定目标文案与提交边界，任一变化即是新任务。
+func (l Length) inputID() string {
+	scale, final := 0, 0
+	if l.Compass != nil {
+		scale, final = l.Compass.ScaleMax, l.Compass.Final
+	}
+	return fmt.Sprintf("f%d:s%d:e%d", l.Fixed, scale, final)
 }

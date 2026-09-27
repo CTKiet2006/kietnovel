@@ -654,9 +654,10 @@ func (m model) benchStateBadge() string {
 	case situationCancelling:
 		return styleWarn.Render("已结束本轮 · 当前任务收尾中")
 	case situationWriting:
+		// 取正在执行的任务：审阅、重写时不能停在最后一章。
 		label := "◉ 正在创作"
-		if number := m.currentChapter(); number > 0 {
-			label += fmt.Sprintf(" · 第 %d 章", number)
+		if phase := bench.snap.CurrentPhase; phase != "" {
+			label = "◉ " + phase
 		}
 		return styleFocus.Render(label + " " + spinnerFrames[bench.spin%len(spinnerFrames)])
 	case situationDecidingProposal, situationDeciding:

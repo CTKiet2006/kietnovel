@@ -25,7 +25,7 @@ func studioModel(t *testing.T, width, height int) model {
 	m.bench.snap = workbench.WorkbenchSnapshot{
 		ProjectID: "letters", Intent: domainmodel.Intent{Premise: "亡者来信"}, Length: novel.Length{Fixed: 8, Final: 8},
 		Run:          &domainmodel.CreationRun{ID: "run", State: domainmodel.RunRunning},
-		CurrentPhase: "撰写第 4 章",
+		CurrentPhase: "正在落笔第 4 章",
 		Directives: []domainmodel.Directive{
 			{ID: "d1", Scope: "project", Text: "保持悬疑氛围，不要过早揭示门后人的身份", Status: domainmodel.DirectiveActive},
 			{ID: "d2", Scope: "chapter_range:4-4", Text: "用声音与一个具体动作承接悬念", Status: domainmodel.DirectiveActive},

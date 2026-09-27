@@ -217,9 +217,11 @@ func TestModelFacingViewsCarryNoInternalIDs(t *testing.T) {
 	tasks := map[model.OperationKind]any{
 		model.OperationRewriteChapter: model.RewriteChapterInput{ChapterID: "c2", ChapterPlanID: "c2", ChapterNumber: 2, Findings: []string{"拖沓"}, Directives: []model.Directive{directive}},
 		model.OperationReviseCanon:    model.ReviseCanonInput{ChapterID: "c2", FactIDs: []string{"f2"}, Reason: "核验"},
-		model.OperationReviewRange: model.ReviewRangeInput{ChapterIDs: []string{"c2", "c1"}, Basis: model.EvidenceBasis{Documents: []model.DocumentBasis{
-			{Ref: model.DocumentRef{Kind: model.DocumentManuscript, ID: "c1"}, Revision: 2},
-		}}},
+		model.OperationReviewRange: model.ReviewRangeInput{ChapterIDs: []string{"c2", "c1"}, Reviewed: []string{"c1"},
+			PriorFindings: []model.ReviewFinding{{ChapterID: "c2", Severity: model.FindingBlocking, Note: "拖沓"}},
+			Basis: model.EvidenceBasis{Documents: []model.DocumentBasis{
+				{Ref: model.DocumentRef{Kind: model.DocumentManuscript, ID: "c1"}, Revision: 2},
+			}}},
 		model.OperationRewriteAffected: model.RewriteAffectedInput{ChapterIDs: []string{"c1"}, BaseRevision: 3, ResolutionProposalID: "p-c1", Reason: "设定变更"},
 	}
 	var rendered []string
@@ -228,6 +230,10 @@ func TestModelFacingViewsCarryNoInternalIDs(t *testing.T) {
 		view, err := story.Task(kind, raw)
 		if err != nil {
 			t.Fatalf("%s: %v", kind, err)
+		}
+		if kind == model.OperationReviewRange &&
+			!strings.Contains(string(view), `"reviewed":[1],"prior_findings":[{"chapter":2,"severity":"blocking","note":"拖沓"}]`) {
+			t.Fatalf("review view = %s", view)
 		}
 		rendered = append(rendered, string(view))
 	}
@@ -286,5 +292,20 @@ func TestFindingsLandOnChaptersInRange(t *testing.T) {
 	}
 	if _, err := story.Findings(input, []Finding{{Chapter: 1, Severity: "note", Note: "越界"}}); !errors.Is(err, model.ErrInvalid) {
 		t.Fatalf("out of range finding: %v", err)
+	}
+	// 已审且正文未变的章只作上下文（D68）：阻塞必须链接被违反的要求，报错用故事语言。
+	recheck := model.ReviewRangeInput{ChapterIDs: []string{"c1", "c2"}, Reviewed: []string{"c1"}}
+	_, err = story.Findings(recheck, []Finding{{Chapter: 1, Severity: "blocking", Note: "旧问题"}})
+	if humanized := story.Humanize(err); !errors.Is(err, model.ErrInvalid) || internalID.MatchString(humanized.Error()) || !strings.Contains(humanized.Error(), "第 1 章") {
+		t.Fatalf("blocking on reviewed chapter: %v", humanized)
+	}
+	for _, finding := range []Finding{
+		{Chapter: 1, Severity: "note", Note: "旧问题"},
+		{Chapter: 1, Severity: "blocking", Note: "违反要求", Requirement: "directive:d1"},
+		{Chapter: 2, Severity: "blocking", Note: "改动章的问题"},
+	} {
+		if _, err := story.Findings(recheck, []Finding{finding}); err != nil {
+			t.Fatalf("finding %+v: %v", finding, err)
+		}
 	}
 }

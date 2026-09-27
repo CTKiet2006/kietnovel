@@ -198,10 +198,8 @@ func ValidateReviewVerdictForOperation(operation Operation, verdict ReviewVerdic
 		}
 	}
 	for _, finding := range verdict.Findings {
-		if _, ok := requested[finding.ChapterID]; !ok {
-			// 报错要带上取值域，否则模型只能猜（曾出现用 "all" 表示跨章）。
-			return fmt.Errorf("finding chapter %q is outside the requested range %v; attach cross-chapter issues to the most relevant chapter: %w",
-				finding.ChapterID, input.ChapterIDs, ErrInvalid)
+		if err := input.AdmitsFinding(finding); err != nil {
+			return err
 		}
 	}
 	return validateChecks(input.Requirements, verdict)

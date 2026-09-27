@@ -39,14 +39,16 @@ const (
 
 type novelItem struct {
 	kind      workKind
-	covered   int            // extend：已覆盖章节数
-	number    int            // chapter/rewrite：章节序号
-	plan      model.PlanNode // chapter/rewrite：章节计划
-	chapterID string         // rewrite/canon：目标正文章节
-	facts     []string       // canon：待核验的事实 ID；空表示该章未入账
-	chapters  []string       // review：窗口内正文章节
-	notes     []string       // rewrite：审阅意见；extend：上一窗口的审阅意见
-	revision  model.Revision // review：绑定的 Revision；rewrite：所依据裁定的 Revision（槽位 ID）
+	covered   int                   // extend：已覆盖章节数
+	number    int                   // chapter/rewrite：章节序号
+	plan      model.PlanNode        // chapter/rewrite：章节计划
+	chapterID string                // rewrite/canon：目标正文章节
+	facts     []string              // canon：待核验的事实 ID；空表示该章未入账
+	chapters  []string              // review：窗口内正文章节
+	reviewed  []string              // review：上一轮已审且正文未变、只作上下文的章（D68）
+	prior     []model.ReviewFinding // review：焦点章上一轮的阻塞意见
+	notes     []string              // rewrite：阻塞意见；extend：上一窗口的审阅意见
+	revision  model.Revision        // review：绑定的 Revision；rewrite：所依据裁定的 Revision（槽位 ID）
 	// requirements 是窗口要逐项核验的要求（D62）；pending 是扩窗时仍待兑现的要求原文。
 	requirements []model.Requirement
 	pending      []string
@@ -84,15 +86,15 @@ func (Policy) Next(project projectdoc.Snapshot, run model.CreationRun, evidence 
 		// 完成契约（§6.4）：内容齐全不等于完成，全书每章都要有基线仍成立的通过裁定、
 		// 每项要求都已兑现；相干文档或要求再变化时旧证据随基线自动失效。
 		unmet := completionUnmet(project, length)
+		ledger := newReviewLedger(project, length.Final, evidence.Verdicts).withPrior(evidence.Prior)
 		through := length.Final
 		if unmet != "" {
 			var ok bool
 			if item, ok = nextNovelItem(project, length); !ok {
 				return creation.Step{}, fmt.Errorf("creation run %q has unmet goal but no work item: %w", run.ID, model.ErrInvalid)
 			}
-			through = item.reviewedThrough(run.Strategy.PlanWindowChapters)
+			through = ledger.reviewedThrough(item)
 		}
-		ledger := newReviewLedger(project, length.Final, evidence.Verdicts)
 		// AI 定的收官不得让用户要求落空（D63）：固定篇幅是用户自己划的边界，AI 的收官
 		// 承诺不是——作用域落在全书之外的要求交给用户裁决，而不是静默跳过后完成。
 		if length.Fixed == 0 && len(ledger.dropped) > 0 {
@@ -102,32 +104,36 @@ func (Policy) Next(project projectdoc.Snapshot, run model.CreationRun, evidence 
 				length.Final, directive.Text, storyOf(project).DescribeScope(directive),
 			)}, nil
 		}
-		review, blocked := ledger.gate(through, run.Strategy.PlanWindowChapters)
+		canRepair := func(chapterID string) bool { return evidence.Repairs[chapterID] < run.Strategy.AutoRepairBudget }
+		step := ledger.gate(through, canRepair)
 		switch {
-		case blocked != nil:
-			item = rewriteItem(project, *blocked)
+		case step.blocked != nil:
+			item = rewriteItem(project, *step.blocked, step.chapter)
 			if item.chapterID == "" {
 				return creation.Step{Fail: "审阅发现指向了不存在的章节，需要人工检查"}, nil
 			}
-			if evidence.Repairs[item.chapterID] >= run.Strategy.AutoRepairBudget {
+			if !canRepair(item.chapterID) {
 				return creation.Step{Wait: fmt.Sprintf(
 					"第 %d 章《%s》的自动修订预算（每章 %d 次）已用尽，需要你查看审阅意见后决断",
 					item.number, item.plan.Title, run.Strategy.AutoRepairBudget,
 				)}, nil
 			}
-		case review != nil:
-			basis, err := ReviewBasis(project, review)
+		case step.review != nil:
+			basis, err := ReviewBasis(project, step.review)
 			if err != nil {
 				return creation.Step{}, err
 			}
-			item = novelItem{kind: workReview, chapters: review, requirements: ledger.window(review), revision: project.Revision, basis: basis}
+			item = novelItem{
+				kind: workReview, chapters: step.review, reviewed: step.reviewed, prior: step.prior,
+				requirements: ledger.window(step.review), revision: project.Revision, basis: basis,
+			}
 		case unmet == "":
 			return creation.Step{Done: fmt.Sprintf("全书 %d 章完成并通过审阅", length.Final)}, nil
 		case item.kind == workExtendPlan:
 			// 先审后扩（§6.3）：窗口意见与待兑现要求随扩窗输入进入下一段规划；扩窗以
 			// 覆盖末章的裁定为基线（D51），裁定失效则扩窗任务失效。
 			last := ledger.current[ledger.chapters[item.covered-1].ID]
-			item.notes, item.basis = verdictNotes(ledger.effective[last.Key]), last.Verdict.Basis
+			item.notes, item.basis = ledger.notes(item.covered), last.Verdict.Basis
 			item.pending, item.concluded = ledger.pending(item.covered), ledger.concluded(item.covered)
 		}
 	}
@@ -139,12 +145,12 @@ func (Policy) Next(project projectdoc.Snapshot, run model.CreationRun, evidence 
 	return creation.Step{Work: &work}, nil
 }
 
-// reviewedThrough 是开始本条目前必须审过的章数（D62）：写第 n 章前审完已写满的窗口
-// （蓝图一次铺满也按窗口节奏审），扩窗前审完已覆盖章节。
-func (item novelItem) reviewedThrough(window int) int {
+// reviewedThrough 是开始本条目前必须审过的章数（D62/D67）：写第 n 章前审完已封口的
+// 窗口（蓝图一次铺满也按容量分窗审），扩窗前审完已覆盖章节。
+func (l reviewLedger) reviewedThrough(item novelItem) int {
 	switch item.kind {
 	case workWriteChapter:
-		return (item.number - 1) / window * window
+		return l.settledThrough(item.number - 1)
 	case workExtendPlan:
 		return item.covered
 	default:
@@ -193,14 +199,19 @@ func nextNovelItem(project projectdoc.Snapshot, length Length) (novelItem, bool)
 	return novelItem{}, false
 }
 
-func rewriteItem(project projectdoc.Snapshot, verdict model.ReviewVerdict) novelItem {
+// rewriteItem 按裁定重写 chapterID（为空取第一个阻塞章）：只带该章的阻塞意见——参考
+// 意见不值得一次返工，带上只会扩大改动面（D68）。
+func rewriteItem(project projectdoc.Snapshot, verdict model.ReviewVerdict, chapterID string) novelItem {
 	byID := manuscriptsByID(project.Manuscript)
 	planByID := make(map[string]model.PlanNode, len(project.Plan))
 	for _, node := range project.Plan {
 		planByID[node.ID] = node
 	}
-	for _, chapterID := range verdict.BlockingChapters() {
-		chapter, ok := byID[chapterID]
+	for _, id := range verdict.BlockingChapters() {
+		if chapterID != "" && id != chapterID {
+			continue
+		}
+		chapter, ok := byID[id]
 		if !ok {
 			continue
 		}
@@ -210,12 +221,12 @@ func rewriteItem(project projectdoc.Snapshot, verdict model.ReviewVerdict) novel
 		}
 		var notes []string
 		for _, finding := range verdict.Findings {
-			if finding.ChapterID == chapterID {
+			if finding.ChapterID == id && finding.Severity == model.FindingBlocking {
 				notes = append(notes, finding.Note)
 			}
 		}
 		return novelItem{
-			kind: workRewrite, chapterID: chapterID, number: chapter.Number,
+			kind: workRewrite, chapterID: id, number: chapter.Number,
 			plan: plan, notes: notes, revision: verdict.Revision, basis: chapterBasis(project, chapter.Number, plan.ID),
 		}
 	}
@@ -227,25 +238,33 @@ func chapterBasis(project projectdoc.Snapshot, number int, planID string) model.
 	return model.EvidenceBasis{Scopes: []model.ScopeBasis{directiveScope(project, directiveTarget(project, number, planID))}}
 }
 
-// ReviewBasis 是窗口审阅的证据基线（D62）：窗口正文与衔接正文及其依赖闭包，加每章
-// 命中的要求作用域。不钉 Canon：事实随故事推进原地更新（D61），钉住会让每写一章都
-// 废掉之前的窗口；账本与正文的一致性由事实核验负责（D41）。
+// ReviewBasis 是窗口审阅的证据基线（D62、D69）：只钉裁定所依据的输入——窗口与衔接章
+// 的正文、窗口各章的计划节点（章在故事中的位置，要求作用域据此匹配）与 Intent，加每章
+// 命中的要求作用域。实体、卷弧与 Canon 只是审阅上下文：它们随故事推进原地更新，钉住
+// 会让一次别名追加废掉提到该角色的全部窗口；与正文的一致性归影响分析与事实核验（D41）。
 func ReviewBasis(project projectdoc.Snapshot, chapters []string) (model.EvidenceBasis, error) {
 	byID := manuscriptsByID(project.Manuscript)
-	targets := make([]model.DocumentRef, 0, len(chapters)+1)
-	scopes := make([]model.ScopeBasis, 0, len(chapters))
+	refs := []model.DocumentRef{{Kind: model.DocumentIntent, ID: model.SingletonDocumentID}}
+	basis := model.EvidenceBasis{Scopes: make([]model.ScopeBasis, 0, len(chapters))}
 	for _, id := range chapters {
 		chapter, ok := byID[id]
 		if !ok {
 			return model.EvidenceBasis{}, fmt.Errorf("review chapter %q is not in the manuscript: %w", id, model.ErrInvalid)
 		}
-		targets = append(targets, model.DocumentRef{Kind: model.DocumentManuscript, ID: id})
-		scopes = append(scopes, directiveScope(project, directiveTarget(project, chapter.Number, chapter.PlanNodeID)))
+		refs = append(refs, manuscriptRef(id), model.DocumentRef{Kind: model.DocumentPlan, ID: chapter.PlanNodeID})
+		basis.Scopes = append(basis.Scopes, directiveScope(project, directiveTarget(project, chapter.Number, chapter.PlanNodeID)))
 	}
 	if seam := seamChapter(project, chapters); seam != "" {
-		targets = append(targets, model.DocumentRef{Kind: model.DocumentManuscript, ID: seam})
+		refs = append(refs, manuscriptRef(seam))
 	}
-	return basisFor(project, targets, scopes)
+	for _, ref := range refs {
+		entry, ok := project.Index[ref.Key()]
+		if !ok {
+			return model.EvidenceBasis{}, fmt.Errorf("basis document %s is absent at revision %d: %w", ref.Key(), project.Revision, model.ErrInvalid)
+		}
+		basis.Documents = append(basis.Documents, model.DocumentBasis{Ref: ref, Revision: entry.Revision})
+	}
+	return basis.Normalize(), nil
 }
 
 // seamChapter 是窗口之前最近的已写正文：衔接检查用，与 derive 装配的"上一章"同一口径。
@@ -314,30 +333,28 @@ func coveringDirectives(project projectdoc.Snapshot, item novelItem) []model.Dir
 // 规划任务的 ID 带上篇幅输入：篇幅或罗盘变化后是新任务，不复用旧输入（D63）。
 func (item novelItem) work(run model.CreationRun, premise string, length Length) (creation.WorkItem, error) {
 	work := creation.WorkItem{Reasons: item.reasons()}
-	window := run.Strategy.PlanWindowChapters
 	switch item.kind {
 	case workDevelopPlan:
-		requested := length.developTo(window)
-		work.ID, work.Kind = runQuickID(run.ID, "plan", planInputID(requested, length.Fixed)), model.OperationDevelopPlan
+		work.ID, work.Kind = runQuickID(run.ID, "plan", length.inputID()), model.OperationDevelopPlan
 		work.Input = model.DevelopPlanInput{
-			Intent: premise, FixedChapters: length.Fixed, RequestedChapters: requested,
-			Goal: "设计可直接用于连续创作的卷、故事弧与章节大纲；先展开请求数量的章节（滚动规划的首个窗口），每章挂在所属故事弧下；" + length.planningGoal(),
+			Intent: premise, FixedChapters: length.Fixed,
+			Goal: "设计可直接用于连续创作的卷、故事弧与章节大纲：卷与故事弧的骨架看得清多远就搭多远，这次只为第一个故事弧展开章节，这一弧多少章由你按故事走向决定，每章挂在所属故事弧下；" + length.planningGoal(),
 		}
 	case workExtendPlan:
-		requested := length.extendTo(item.covered, window)
-		goal := "增量扩展章节大纲到请求数量：已有章节保持不变，只在末尾追加后续章节并挂在所属故事弧下；结合上一窗口的审阅意见调整后续走向，为 pending_requirements 中尚未兑现的要求安排落点；" + length.planningGoal()
+		goal := "展开下一个故事弧的章节：已有章节保持不变，只在末尾追加并挂在所属故事弧下；下一弧已有骨架就按已发生的故事修订后展开，没有就新建（需要时新建卷），这一弧多少章由你按故事走向决定；结合审阅意见调整后续走向，为 pending_requirements 中尚未兑现的要求安排落点；" + length.planningGoal()
+		parts := []string{"plan", "extend", strconv.Itoa(item.covered), length.inputID()}
 		if item.concluded {
 			goal += fmt.Sprintf("；第 %d 章已作为全书结局写成，这是续写：在这个结局之后开启新的篇章、接住已完成的故事，不重复收尾", item.covered)
 			if length.Fixed == 0 {
 				goal += "，并在 compass.ending 写下续写部分的终局方向"
 			}
+			parts = append(parts, "c")
 		}
-		work.ID = runQuickID(run.ID, "plan", "extend", strconv.Itoa(item.covered), planInputID(requested, length.Fixed))
+		work.ID = runQuickID(run.ID, parts...)
 		work.Kind = model.OperationRevisePlan
 		work.Input = model.RevisePlanInput{
 			Intent: premise, FixedChapters: length.Fixed,
 			ExistingChapters:    item.covered,
-			RequestedChapters:   requested,
 			ReviewNotes:         item.notes,
 			PendingRequirements: item.pending,
 			Basis:               item.basis,
@@ -351,11 +368,20 @@ func (item novelItem) work(run model.CreationRun, premise string, length Length)
 		}
 	case workReview:
 		goal := "审阅本窗口正文：检查与上一章的衔接、窗口内的连续性与 Intent 方向，产出结构化裁定与发现；上一章正文只用于衔接检查，不在审阅范围"
+		if len(item.reviewed) > 0 {
+			goal += "；reviewed 列出的章上一轮已审且正文未变，只作上下文：不再对它们记 blocking（违反 requirements 除外），其中的问题记为 note；改动章与它们之间的矛盾记在改动章上"
+		}
+		if len(item.prior) > 0 {
+			goal += "；逐条核对 prior_findings 列出的上一轮阻塞问题是否已解决，并检查改动有没有引入新问题"
+		}
 		if len(item.requirements) > 0 {
 			goal += "；逐项核验 requirements：已兑现为 satisfied，被违反为 violated 并用阻塞发现链接，仅凭本窗口正文还无法判断为 pending；settle 为 true 的项必须给出 satisfied 或 violated"
 		}
-		work.ID, work.Kind = reviewOperationID(run.ID, item.chapters, item.revision, item.requirements), model.OperationReviewRange
-		work.Input = model.ReviewRangeInput{ChapterIDs: item.chapters, Requirements: item.requirements, Basis: item.basis, Goal: goal}
+		input := model.ReviewRangeInput{
+			ChapterIDs: item.chapters, Requirements: item.requirements, Reviewed: item.reviewed, PriorFindings: item.prior,
+			Basis: item.basis, Goal: goal,
+		}
+		work.ID, work.Kind, work.Input = reviewOperationID(run.ID, item.revision, input), model.OperationReviewRange, input
 	case workVerifyCanon:
 		reason := fmt.Sprintf("第 %d 章正文在事实入账后被修改，需要核验来源事实", item.number)
 		if len(item.facts) == 0 {
@@ -373,7 +399,7 @@ func (item novelItem) work(run model.CreationRun, premise string, length Length)
 		work.Input = model.RewriteChapterInput{
 			ChapterID: item.chapterID, ChapterPlanID: item.plan.ID, ChapterNumber: item.number,
 			Findings: item.notes, Directives: item.directives, Basis: item.basis,
-			Goal: "根据审阅意见重写本章：针对意见修改，不引入新的越界改动；重申报本章全部既有事实（确认、更新或删除）；严格满足 directives 列出的每条创作要求（用户原话），字数约束按 constraints 执行",
+			Goal: "根据审阅意见重写本章：针对意见修改，不引入新的越界改动，与前后章节的衔接保持一致；重申报本章全部既有事实（确认、更新或删除）；严格满足 directives 列出的每条创作要求（用户原话），字数约束按 constraints 执行",
 		}
 	default:
 		return creation.WorkItem{}, fmt.Errorf("unknown work item kind %d: %w", item.kind, model.ErrInvalid)

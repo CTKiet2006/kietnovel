@@ -30,7 +30,7 @@ func publishSafetyArtifact(t *testing.T, s *Store, op, content string) model.Art
 func seedSafetyRun(t *testing.T, s *Store) {
 	t.Helper()
 	now := operationTime()
-	_, err := s.CreateCreationRun(context.Background(), model.CreationRun{ID: "run:book-1", ProjectID: "book-1", Goal: model.NovelGoal{Premise: "测试", TargetChapters: 1}.Goal(), Strategy: model.CreationRunStrategy{PlanWindowChapters: 1, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 1}, Preset: model.CreationRunPreset{Source: "test", Digest: "test", Approval: model.ApprovalAuto}, State: model.RunRunning, CreatedAt: now, UpdatedAt: now})
+	_, err := s.CreateCreationRun(context.Background(), model.CreationRun{ID: "run:book-1", ProjectID: "book-1", Goal: model.NovelGoal{Premise: "测试", TargetChapters: 1}.Goal(), Strategy: model.CreationRunStrategy{ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 1}, Preset: model.CreationRunPreset{Source: "test", Digest: "test", Approval: model.ApprovalAuto}, State: model.RunRunning, CreatedAt: now, UpdatedAt: now})
 	if err != nil {
 		t.Fatal(err)
 	}

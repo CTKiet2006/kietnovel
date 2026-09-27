@@ -23,13 +23,12 @@ func runCreation(ctx context.Context, api *bootstrap.App, args []string, stdout,
 		projectID := flags.String("project", "", "Project ID")
 		premise := flags.String("premise", "", "本轮创作目标")
 		chapters := flags.Int("chapters", 0, "全书章数；0 表示交给 AI")
-		window := flags.Int("window", 3, "滚动规划窗口")
 		repairBudget := flags.Int("repair-budget", novel.DefaultRepairBudget, "每章允许的自动修订次数")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *runID == "" || *projectID == "" || *premise == "" || *chapters < 0 || *window <= 0 || *repairBudget < 0 {
-			return fmt.Errorf("creation start 需要 --id --project --premise、非负 --chapters、正数 --window 和非负 --repair-budget")
+		if *runID == "" || *projectID == "" || *premise == "" || *chapters < 0 || *repairBudget < 0 {
+			return fmt.Errorf("creation start 需要 --id --project --premise、非负 --chapters 和非负 --repair-budget")
 		}
 		project, err := api.Projects.Project(ctx, *projectID, model.InitialRevision)
 		if err != nil {
@@ -39,11 +38,7 @@ func runCreation(ctx context.Context, api *bootstrap.App, args []string, stdout,
 		if approval == "" {
 			approval = model.ApprovalAuto
 		}
-		strategy := model.CreationRunStrategy{
-			PlanWindowChapters: *window,
-			ReviewCadence:      model.ReviewPerPlanWindow,
-			AutoRepairBudget:   *repairBudget,
-		}
+		strategy := model.CreationRunStrategy{ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: *repairBudget}
 		preset, err := model.NewCreationRunPreset("custom", approval, strategy)
 		if err != nil {
 			return err
@@ -69,26 +64,19 @@ func runCreation(ctx context.Context, api *bootstrap.App, args []string, stdout,
 	case "strategy":
 		flags := newFlags("creation strategy", stderr)
 		runID := flags.String("id", "", "Creation Run ID")
-		window := flags.Int("window", 0, "滚动规划窗口；0 表示保持当前值")
-		repairBudget := flags.Int("repair-budget", -1, "自动修订预算；-1 表示保持当前值")
+		repairBudget := flags.Int("repair-budget", -1, "每章允许的自动修订次数")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
-		if *runID == "" || *window < 0 || *repairBudget < -1 ||
-			(*window == 0 && *repairBudget == -1) || flags.NArg() != 0 {
-			return fmt.Errorf("creation strategy 需要 --id 以及 --window 或 --repair-budget 至少之一")
+		if *runID == "" || *repairBudget < 0 || flags.NArg() != 0 {
+			return fmt.Errorf("creation strategy 需要 --id 与非负 --repair-budget")
 		}
 		run, err := api.Runs.CreationRun(ctx, *runID)
 		if err != nil {
 			return err
 		}
 		strategy := run.Strategy
-		if *window > 0 {
-			strategy.PlanWindowChapters = *window
-		}
-		if *repairBudget >= 0 {
-			strategy.AutoRepairBudget = *repairBudget
-		}
+		strategy.AutoRepairBudget = *repairBudget
 		updated, err := api.Runs.UpdateCreationRunStrategy(ctx, *runID, strategy, time.Now().UTC())
 		return writeResult(stdout, updated, err)
 	case "events":

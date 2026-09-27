@@ -314,7 +314,7 @@ func createEngineTestRun(
 		ID: "run:" + projectID, ProjectID: projectID,
 		Goal: model.NovelGoal{Premise: "测试创作", TargetChapters: 3}.Goal(),
 		Strategy: model.CreationRunStrategy{
-			PlanWindowChapters: 3, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 3,
+			ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 3,
 		},
 		Preset: model.CreationRunPreset{
 			Source: "test", Digest: "test-preset", Approval: model.ApprovalAuto,

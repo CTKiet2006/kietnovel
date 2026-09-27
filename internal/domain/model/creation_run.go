@@ -80,16 +80,16 @@ type ReviewCadence string
 const ReviewPerPlanWindow ReviewCadence = "per_plan_window"
 
 // CreationRunStrategy 是连续创作的显式自动化边界。预设只负责给出初值，
-// Coordinator 此后只读取这份版本化策略，不再判断预设身份（D24/D27）。
+// Coordinator 此后只读取这份版本化策略，不再判断预设身份（D24/D27）。每次规划
+// 多少章不在策略里：由规划者决定（D67）。
 type CreationRunStrategy struct {
-	PlanWindowChapters int           `json:"plan_window_chapters"`
-	ReviewCadence      ReviewCadence `json:"review_cadence"`
-	AutoRepairBudget   int           `json:"auto_repair_budget"`
+	ReviewCadence    ReviewCadence `json:"review_cadence"`
+	AutoRepairBudget int           `json:"auto_repair_budget"`
 }
 
 func (s CreationRunStrategy) Validate() error {
-	if s.PlanWindowChapters <= 0 || s.AutoRepairBudget < 0 {
-		return fmt.Errorf("creation run strategy requires a positive plan window and non-negative repair budget: %w", ErrInvalid)
+	if s.AutoRepairBudget < 0 {
+		return fmt.Errorf("creation run strategy requires a non-negative repair budget: %w", ErrInvalid)
 	}
 	if s.ReviewCadence != ReviewPerPlanWindow {
 		return fmt.Errorf("unknown review cadence %q: %w", s.ReviewCadence, ErrInvalid)

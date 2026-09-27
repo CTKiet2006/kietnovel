@@ -15,8 +15,8 @@ func TestEveryOperationKindIsAssembled(t *testing.T) {
 	basis := model.EvidenceBasis{Documents: []model.DocumentBasis{{Ref: model.DocumentRef{Kind: model.DocumentManuscript, ID: "chapter-1"}, Revision: 1}}}
 	samples := map[model.OperationKind]model.TaskInput{
 		model.OperationInitializeProject: model.InitializeProjectInput{Intent: "凡人修仙"},
-		model.OperationDevelopPlan:       model.DevelopPlanInput{Intent: "凡人修仙", FixedChapters: 3, RequestedChapters: 3},
-		model.OperationRevisePlan:        model.RevisePlanInput{Intent: "凡人修仙", FixedChapters: 6, ExistingChapters: 3, RequestedChapters: 6},
+		model.OperationDevelopPlan:       model.DevelopPlanInput{Intent: "凡人修仙", FixedChapters: 3},
+		model.OperationRevisePlan:        model.RevisePlanInput{Intent: "凡人修仙", FixedChapters: 6, ExistingChapters: 3},
 		model.OperationReviseCanon:       model.ReviseCanonInput{ChapterID: "chapter-1", Reason: "修订设定"},
 		model.OperationWriteChapter:      model.WriteChapterInput{ChapterPlanID: "chapter-plan-1", ChapterNumber: 1},
 		model.OperationRewriteChapter: model.RewriteChapterInput{

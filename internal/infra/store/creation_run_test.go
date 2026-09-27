@@ -76,7 +76,7 @@ func TestCreationRunSingleActivePerProject(t *testing.T) {
 		t.Fatalf("terminal run must not transition, got %v", err)
 	}
 	if _, err := s.UpdateCreationRunStrategy(ctx, first.ID, model.CreationRunStrategy{
-		PlanWindowChapters: 5, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 3,
+		ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 3,
 	}, now.Add(4*time.Minute)); !errors.Is(err, model.ErrStateConflict) {
 		t.Fatalf("terminal run must not change strategy, got %v", err)
 	}
@@ -113,7 +113,7 @@ func TestCreateOperationBindsRunLineageTransactionally(t *testing.T) {
 		t.Fatalf("update goal: %v", err)
 	}
 	strategy := run.Strategy
-	strategy.PlanWindowChapters = 5
+	strategy.AutoRepairBudget = 5
 	if _, err := s.UpdateCreationRunStrategy(ctx, run.ID, strategy, now.Add(90*time.Second)); err != nil {
 		t.Fatalf("update strategy: %v", err)
 	}
@@ -123,9 +123,9 @@ func TestCreateOperationBindsRunLineageTransactionally(t *testing.T) {
 		State:  model.OperationQueued, RunID: run.ID,
 		Snapshot: model.ExecutionSnapshot{
 			Executor: testExecutor, BaseRevision: 1, ConfigDigest: "profile", ApprovalPolicy: model.ApprovalAuto,
-			InputDigest: model.Digest([]byte(`{"intent":"一句话","fixed_chapters":5,"requested_chapters":3}`)),
+			InputDigest: model.Digest([]byte(`{"intent":"一句话","fixed_chapters":5}`)),
 		},
-		Input: []byte(`{"intent":"一句话","fixed_chapters":5,"requested_chapters":3}`), CreatedAt: now.Add(2 * time.Minute), UpdatedAt: now.Add(2 * time.Minute),
+		Input: []byte(`{"intent":"一句话","fixed_chapters":5}`), CreatedAt: now.Add(2 * time.Minute), UpdatedAt: now.Add(2 * time.Minute),
 	}
 	created, err := s.CreateOperation(ctx, operation)
 	if err != nil {
@@ -184,7 +184,7 @@ func TestCreateOperationBindsRunLineageTransactionally(t *testing.T) {
 
 func testRunStrategy() model.CreationRunStrategy {
 	return model.CreationRunStrategy{
-		PlanWindowChapters: 3, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 3,
+		ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 3,
 	}
 }
 

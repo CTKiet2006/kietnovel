@@ -79,7 +79,7 @@ func fixture(t *testing.T) (*store.Store, model.CreationRun) {
 	advanceProjectRevision(t, st, 0)
 	run, err := st.CreateCreationRun(context.Background(), model.CreationRun{
 		ID: "run", ProjectID: "project", Goal: model.CreationRunGoal{Kind: "fixture", Payload: json.RawMessage(`{}`)},
-		Strategy: model.CreationRunStrategy{PlanWindowChapters: 1, ReviewCadence: model.ReviewPerPlanWindow},
+		Strategy: model.CreationRunStrategy{ReviewCadence: model.ReviewPerPlanWindow},
 		Preset:   model.CreationRunPreset{Source: "fixture", Digest: "fixture", Approval: model.ApprovalAuto},
 		State:    model.RunRunning, CreatedAt: now, UpdatedAt: now,
 	})

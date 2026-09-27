@@ -2,6 +2,7 @@ package novel
 
 import (
 	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -15,26 +16,34 @@ func withCompass(project projectdoc.Snapshot, scaleMax, final int) projectdoc.Sn
 	return project
 }
 
-func extendTo(requested int, id string) stepWant {
+// successorSuffix 是后继链的 ID 后缀；规划任务 ID 不得以它结尾，否则会被误认成后继。
+var successorSuffix = regexp.MustCompile(`:r\d+$`)
+
+func extendPlan(id string) stepWant {
 	return stepWant{kind: model.OperationRevisePlan, id: id, check: func(t *testing.T, work creation.WorkItem) {
-		if input := work.Input.(model.RevisePlanInput); input.RequestedChapters != requested || input.FixedChapters != 0 {
-			t.Fatalf("extend input = %+v, want requested %d", input, requested)
+		input := work.Input.(model.RevisePlanInput)
+		if input.ExistingChapters != 3 || input.FixedChapters != 0 || !strings.Contains(input.Goal, "这一弧多少章由你按故事走向决定") {
+			t.Fatalf("extend input = %+v", input)
+		}
+		if successorSuffix.MatchString(work.ID) {
+			t.Fatalf("plan id %q looks like a successor", work.ID)
 		}
 	}}
 }
 
-// 篇幅交给 AI（D63）：开放期按窗口扩展并以罗盘上限封顶；收官承诺后按全书章数完成；
-// 过期的收官承诺（少于已规划章数）按开放期处理。规划任务 ID 带篇幅输入。
+// 篇幅交给 AI（D63/D67）：规划不指定章数，边界只守罗盘上限与收官承诺；收官承诺后按
+// 全书章数完成；过期的收官承诺（少于已规划章数）按开放期处理。规划任务 ID 编码篇幅
+// 输入（固定章数、罗盘上限与收官承诺原值），任一变化即是新任务。
 func TestAILengthRollsWithTheCompass(t *testing.T) {
 	run := testRun(0, 2)
 	first := []string{"chapter-i", "chapter-ii", "chapter-iii"}
 	reviewed := Evidence{Verdicts: []StoredVerdict{storedTestVerdict("review-a", 1, model.ReviewPass, first, nil)}}
 	written := novelFixture(t, 3, 3)
 
-	assertStep(t, novelFixture(t, 0, 0), run, Evidence{}, stepWant{kind: model.OperationDevelopPlan, id: "run:book:1:plan:r3:f0",
+	assertStep(t, novelFixture(t, 0, 0), run, Evidence{}, stepWant{kind: model.OperationDevelopPlan, id: "run:book:1:plan:f0:s0:e0",
 		check: func(t *testing.T, work creation.WorkItem) {
-			if input := work.Input.(model.DevelopPlanInput); input.RequestedChapters != 3 || input.FixedChapters != 0 ||
-				!strings.Contains(input.Goal, "必须给出故事罗盘") {
+			if input := work.Input.(model.DevelopPlanInput); input.FixedChapters != 0 ||
+				!strings.Contains(input.Goal, "必须给出故事罗盘") || !strings.Contains(input.Goal, "只为第一个故事弧展开章节") {
 				t.Fatalf("develop input = %+v", input)
 			}
 		}})
@@ -43,11 +52,11 @@ func TestAILengthRollsWithTheCompass(t *testing.T) {
 		project projectdoc.Snapshot
 		want    stepWant
 	}{
-		{"missing compass extends a full window", written, extendTo(6, "run:book:1:plan:extend:3:r6:f0")},
-		{"open phase caps at scale_max", withCompass(written, 5, 0), extendTo(5, "run:book:1:plan:extend:3:r5:f0")},
-		{"passed scale_max still asks for one more", withCompass(written, 3, 0), extendTo(4, "run:book:1:plan:extend:3:r4:f0")},
-		{"stale final reopens the length", withCompass(written, 10, 2), extendTo(6, "run:book:1:plan:extend:3:r6:f0")},
-		{"committed final extends up to it", withCompass(written, 10, 4), extendTo(4, "run:book:1:plan:extend:3:r4:f0")},
+		{"missing compass", written, extendPlan("run:book:1:plan:extend:3:f0:s0:e0")},
+		{"open phase carries the scale_max", withCompass(written, 5, 0), extendPlan("run:book:1:plan:extend:3:f0:s5:e0")},
+		{"passed scale_max is still extended", withCompass(written, 3, 0), extendPlan("run:book:1:plan:extend:3:f0:s3:e0")},
+		{"stale final reopens the length", withCompass(written, 10, 2), extendPlan("run:book:1:plan:extend:3:f0:s10:e2")},
+		{"committed final extends toward it", withCompass(written, 10, 4), extendPlan("run:book:1:plan:extend:3:f0:s10:e4")},
 	} {
 		t.Run(c.name, func(t *testing.T) { assertStep(t, c.project, run, reviewed, c.want) })
 	}
@@ -64,7 +73,7 @@ func TestAILengthRollsWithTheCompass(t *testing.T) {
 	assertStep(t, finished, run, closed, stepWant{done: "全书 3 章完成并通过审阅"})
 
 	// 续写：撤回收官承诺后按开放期扩窗，文案点明第 3 章是已写成的结局。
-	assertStep(t, withCompass(written, 10, 0), run, closed, stepWant{kind: model.OperationRevisePlan, id: "run:book:1:plan:extend:3:r6:f0",
+	assertStep(t, withCompass(written, 10, 0), run, closed, stepWant{kind: model.OperationRevisePlan, id: "run:book:1:plan:extend:3:f0:s10:e0:c",
 		check: func(t *testing.T, work creation.WorkItem) {
 			if goal := work.Input.(model.RevisePlanInput).Goal; !strings.Contains(goal, "第 3 章已作为全书结局写成，这是续写") ||
 				!strings.Contains(goal, "compass.ending") {
@@ -137,10 +146,10 @@ func TestAIFinaleCannotDropUserRequirements(t *testing.T) {
 // 首次规划尊重已知的收官承诺；过期的收官承诺在规划文案里点明必须修订。
 func TestPlanningRespectsKnownAndStaleFinale(t *testing.T) {
 	assertStep(t, withCompass(novelFixture(t, 0, 0), 10, 2), testRun(0, 2), Evidence{},
-		stepWant{kind: model.OperationDevelopPlan, id: "run:book:1:plan:r2:f0"})
+		stepWant{kind: model.OperationDevelopPlan, id: "run:book:1:plan:f0:s10:e2"})
 	stale := withCompass(novelFixture(t, 3, 3), 10, 2)
 	reviewed := Evidence{Verdicts: []StoredVerdict{storedTestVerdict("review-a", 1, model.ReviewPass, []string{"chapter-i", "chapter-ii", "chapter-iii"}, nil)}}
-	assertStep(t, stale, testRun(0, 2), reviewed, stepWant{kind: model.OperationRevisePlan, id: "run:book:1:plan:extend:3:r6:f0",
+	assertStep(t, stale, testRun(0, 2), reviewed, stepWant{kind: model.OperationRevisePlan, id: "run:book:1:plan:extend:3:f0:s10:e2",
 		check: func(t *testing.T, work creation.WorkItem) {
 			if goal := work.Input.(model.RevisePlanInput).Goal; !strings.Contains(goal, "收官承诺 2 章已少于蓝图章数而失效") {
 				t.Fatalf("stale finale goal = %q", goal)

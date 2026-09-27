@@ -699,7 +699,7 @@ func publishTestArtifact(t *testing.T, ctx context.Context, s *store.Store, proj
 	if _, err := s.CreateCreationRun(ctx, model.CreationRun{
 		ID: "run:" + projectID, ProjectID: projectID,
 		Goal:     model.NovelGoal{Premise: "测试创作", TargetChapters: 3}.Goal(),
-		Strategy: model.CreationRunStrategy{PlanWindowChapters: 3, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 3},
+		Strategy: model.CreationRunStrategy{ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: 3},
 		Preset:   model.CreationRunPreset{Source: "test", Digest: "test-preset", Approval: model.ApprovalAuto},
 		State:    model.RunRunning, CreatedAt: now, UpdatedAt: now,
 	}); err != nil {

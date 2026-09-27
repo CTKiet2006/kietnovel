@@ -24,7 +24,18 @@ type contextPolicy struct {
 	Budget    int `json:"budget"`    // 故事上下文与任务合计的字符（rune）预算
 }
 
-var defaultPolicy = contextPolicy{Window: 5, Lookahead: 3, Budget: 32000}
+const contextBudget = 32000
+
+// 以下两项从同一上下文预算划出，供推导层切分任务输入（D67）：
+//   - ReviewTextBudget 是一次审阅的窗口正文上限：窗口正文与衔接章进入固定段、不受
+//     裁剪，余量留给相关事实、近期计划与约束。
+//   - PlanNotesBudget 是扩窗携带的审阅意见上限。
+const (
+	ReviewTextBudget = contextBudget * 3 / 8
+	PlanNotesBudget  = contextBudget / 8
+)
+
+var defaultPolicy = contextPolicy{Window: 5, Lookahead: 3, Budget: contextBudget}
 
 func ViewKey(kind model.OperationKind, task json.RawMessage) (string, error) {
 	if kind == "" || len(task) == 0 || !json.Valid(task) {
@@ -296,7 +307,8 @@ func newSelector(content ProjectContent, limit int) (*selector, error) {
 	return s, nil
 }
 
-// writing 装配写作与重写：目标章计划、上一章正文，重写时再加本章正文与来源事实。
+// writing 装配写作与重写：目标章计划、上一章正文，重写时再加本章正文与来源事实，
+// 以及已写的下一章正文——改动要与后文衔接（D68）。
 func (s *selector) writing(planID, chapterID string, policy contextPolicy) error {
 	anchor, ok := s.position[planID]
 	if !ok {
@@ -305,6 +317,11 @@ func (s *selector) writing(planID, chapterID string, policy contextPolicy) error
 	targets := []model.DocumentRef{planRef(planID)}
 	if chapterID != "" {
 		targets = append(targets, s.chapterTargets(chapterID)...)
+		if anchor+1 < len(s.chapters) {
+			if next, ok := s.written[s.chapters[anchor+1].ID]; ok {
+				targets = append(targets, manuscriptRef(next.ID))
+			}
+		}
 	}
 	return s.assemble(focus{anchor: anchor, targets: targets, previous: true}, policy)
 }

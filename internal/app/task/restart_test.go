@@ -53,7 +53,7 @@ func restartManager(t *testing.T) (*Manager, *recordingProfiles, StartOperationC
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.CreateCreationRun(ctx, model.CreationRun{ID: "run", ProjectID: "book", Goal: model.NovelGoal{Premise: "test", TargetChapters: 1}.Goal(), Strategy: model.CreationRunStrategy{PlanWindowChapters: 1, ReviewCadence: model.ReviewPerPlanWindow}, Preset: model.CreationRunPreset{Source: "test", Digest: "test", Approval: model.ApprovalAuto}, State: model.RunRunning, CreatedAt: now, UpdatedAt: now})
+	_, err = s.CreateCreationRun(ctx, model.CreationRun{ID: "run", ProjectID: "book", Goal: model.NovelGoal{Premise: "test", TargetChapters: 1}.Goal(), Strategy: model.CreationRunStrategy{ReviewCadence: model.ReviewPerPlanWindow}, Preset: model.CreationRunPreset{Source: "test", Digest: "test", Approval: model.ApprovalAuto}, State: model.RunRunning, CreatedAt: now, UpdatedAt: now})
 	if err != nil {
 		t.Fatal(err)
 	}

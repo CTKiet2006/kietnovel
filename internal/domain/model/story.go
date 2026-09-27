@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 type Intent struct {
@@ -289,6 +290,15 @@ type ManuscriptChapter struct {
 	Author     AuthorKind        `json:"author"`
 	Blocks     []ManuscriptBlock `json:"blocks"`
 	DependsOn  []DocumentRef     `json:"depends_on,omitempty"`
+}
+
+// Runes 是正文字符数：各 block 正文累加，不含标题。
+func (v ManuscriptChapter) Runes() int {
+	count := 0
+	for _, block := range v.Blocks {
+		count += utf8.RuneCountInString(block.Text)
+	}
+	return count
 }
 
 func (v ManuscriptChapter) Validate() error {

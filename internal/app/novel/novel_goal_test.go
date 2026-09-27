@@ -8,10 +8,12 @@ import (
 
 	projectdoc "github.com/voocel/ainovel-cli/internal/app/project"
 	"github.com/voocel/ainovel-cli/internal/domain/creation"
+	"github.com/voocel/ainovel-cli/internal/domain/derive"
 	"github.com/voocel/ainovel-cli/internal/domain/model"
 )
 
 // novelFixture 构造带索引的小说快照：plans 个章节计划、written 个正文，索引 revision 统一为 2。
+// 每章正文取审阅容量的三分之一：三章正好封口成一个审阅窗口（D67）。
 func novelFixture(t *testing.T, plans, written int) projectdoc.Snapshot {
 	t.Helper()
 	project := projectdoc.Snapshot{
@@ -32,7 +34,7 @@ func novelFixture(t *testing.T, plans, written int) projectdoc.Snapshot {
 		chapterID := "chapter-" + strings.Repeat("i", number)
 		project.Manuscript = append(project.Manuscript, model.ManuscriptChapter{
 			ID: chapterID, PlanNodeID: plan.ID, Number: number, Title: plan.Title,
-			Author: model.AuthorAI, Blocks: []model.ManuscriptBlock{{ID: "b", Text: "正文"}},
+			Author: model.AuthorAI, Blocks: []model.ManuscriptBlock{{ID: "b", Text: strings.Repeat("字", derive.ReviewTextBudget/3)}},
 		})
 		// 每章随章入账一条事实：没有来源事实的章视为未入账（§4.5）。
 		project.Canon = append(project.Canon, model.CanonFact{
@@ -125,7 +127,7 @@ func testRun(target, budget int) model.CreationRun {
 	return model.CreationRun{
 		ID: "run:book:1", ProjectID: "book",
 		Goal:     model.NovelGoal{Premise: "故事", TargetChapters: target}.Goal(),
-		Strategy: model.CreationRunStrategy{PlanWindowChapters: 3, ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: budget},
+		Strategy: model.CreationRunStrategy{ReviewCadence: model.ReviewPerPlanWindow, AutoRepairBudget: budget},
 	}
 }
 
@@ -150,29 +152,29 @@ func TestNovelDeriverNextFollowsNovelRules(t *testing.T) {
 		wantFail string
 		check    func(t *testing.T, work creation.WorkItem)
 	}{
-		{name: "empty plan develops", wantKind: model.OperationDevelopPlan, wantID: "run:book:1:plan:r3:f5"},
+		{name: "empty plan develops", wantKind: model.OperationDevelopPlan, wantID: "run:book:1:plan:f5:s0:e0"},
 		{name: "unwritten window writes next chapter", plans: 3, written: 1,
 			wantKind: model.OperationWriteChapter, wantID: "run:book:1:chapter:chapter-plan-ii"},
 		{name: "written window reviews before extending", plans: 3, written: 3,
-			wantKind: model.OperationReviewRange, wantID: reviewOperationID(run.ID, first, 2, nil),
+			wantKind: model.OperationReviewRange, wantID: reviewOperationID(run.ID, 2, model.ReviewRangeInput{ChapterIDs: first}),
 			check: func(t *testing.T, work creation.WorkItem) {
 				input := work.Input.(model.ReviewRangeInput)
 				if len(input.ChapterIDs) != 3 || len(input.Requirements) != 0 || len(input.Basis.Documents) == 0 {
 					t.Fatalf("window review input = %#v", input)
 				}
 			}},
-		// 蓝图一次铺满也按窗口节奏审（D62）：写第 4 章前先审完前 3 章。
+		// 蓝图一次铺满也按窗口审（D62/D67）：前 3 章已装满审阅容量，写第 4 章前先审。
 		{name: "full blueprint reviews each window before writing on", plans: 5, written: 3,
-			wantKind: model.OperationReviewRange, wantID: reviewOperationID(run.ID, first, 2, nil)},
+			wantKind: model.OperationReviewRange, wantID: reviewOperationID(run.ID, 2, model.ReviewRangeInput{ChapterIDs: first})},
 		{name: "reviewed window writes on", plans: 5, written: 3,
 			evidence: Evidence{Verdicts: []StoredVerdict{firstPass}},
 			wantKind: model.OperationWriteChapter, wantID: "run:book:1:chapter:chapter-plan-iiii"},
 		{name: "reviewed window extends with notes", plans: 3, written: 3,
 			evidence: Evidence{Verdicts: []StoredVerdict{storedTestVerdict("review-a", 1, model.ReviewPass, first, note)}},
-			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3:r5:f5",
+			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3:f5:s0:e0",
 			check: func(t *testing.T, work creation.WorkItem) {
 				input := work.Input.(model.RevisePlanInput)
-				if input.ExistingChapters != 3 || input.RequestedChapters != 5 || len(input.ReviewNotes) != 1 {
+				if input.ExistingChapters != 3 || len(input.ReviewNotes) != 1 {
 					t.Fatalf("extend input = %#v", input)
 				}
 			}},
@@ -189,7 +191,7 @@ func TestNovelDeriverNextFollowsNovelRules(t *testing.T) {
 		// 完成时只审尚未覆盖的窗口，不再累计重审全书。
 		{name: "complete manuscript reviews the uncovered window", plans: 5, written: 5,
 			evidence: Evidence{Verdicts: []StoredVerdict{firstPass}},
-			wantKind: model.OperationReviewRange, wantID: reviewOperationID(run.ID, last, 2, nil),
+			wantKind: model.OperationReviewRange, wantID: reviewOperationID(run.ID, 2, model.ReviewRangeInput{ChapterIDs: last}),
 			check: func(t *testing.T, work creation.WorkItem) {
 				if input := work.Input.(model.ReviewRangeInput); len(input.ChapterIDs) != 2 || input.ChapterIDs[0] != "chapter-iiii" {
 					t.Fatalf("final window input = %#v", input)
@@ -206,10 +208,10 @@ func TestNovelDeriverNextFollowsNovelRules(t *testing.T) {
 			evidence: Evidence{Verdicts: []StoredVerdict{
 				storedTestVerdict("review-a", 1, model.ReviewBlocked, first, blocking), storedTestVerdict("review-b", 2, model.ReviewPass, first, nil),
 			}},
-			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3:r5:f5"},
+			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3:f5:s0:e0"},
 		{name: "accepted blocking finding passes the window", plans: 3, written: 3,
 			evidence: Evidence{Verdicts: []StoredVerdict{acceptedVerdict(storedTestVerdict("review-a", 1, model.ReviewBlocked, first, blocking), "review-a/0")}},
-			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3:r5:f5"},
+			wantKind: model.OperationRevisePlan, wantID: "run:book:1:plan:extend:3:f5:s0:e0"},
 		{name: "accepted final finding completes", plans: 5, written: 5,
 			evidence: Evidence{Verdicts: []StoredVerdict{firstPass, acceptedVerdict(storedTestVerdict("review-b", 2, model.ReviewBlocked, last, lastBlocking), "review-b/0")}},
 			wantDone: "全书 5 章完成并通过审阅"},
