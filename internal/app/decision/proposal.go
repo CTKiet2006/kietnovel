@@ -282,9 +282,9 @@ func (s *Review) Reject(ctx context.Context, proposalID, userID, reason string, 
 	return rejected, nil
 }
 
-// rejectionDirective 把否决理由入账为 Directive（§4.9 / S10）：章节任务落到该章
-// Plan 节点，其余落到整书；后继按当前快照装配到它，审阅逐条核验。幂等：
-// 同一提案重复否决沿用同一 ChangeID 与已记录的理由。
+// rejectionDirective 把否决理由入账为 Directive（§4.9 / S10），作用域见 rejectionScope；
+// 后继按当前快照装配到它，审阅逐条核验。幂等：同一提案重复否决沿用同一 ChangeID 与
+// 已记录的理由。
 func (s *Review) rejectionDirective(
 	ctx context.Context,
 	rejected model.Proposal,
@@ -295,11 +295,11 @@ func (s *Review) rejectionDirective(
 	if rejected.DecisionReason == "" || rejected.Target.Kind != model.AuthorityProject {
 		return nil
 	}
-	scope := model.DirectiveScopeProject
-	if planID := chapterPlanIDOf(operation); planID != "" {
-		scope = model.DirectiveScopePlanNode(planID)
+	scope, err := s.rejectionScope(ctx, operation, rejected.Target.ID)
+	if err != nil {
+		return err
 	}
-	_, err := s.projects.AddDirective(ctx, projectdoc.AddDirectiveCommand{
+	_, err = s.projects.AddDirective(ctx, projectdoc.AddDirectiveCommand{
 		ProjectID: rejected.Target.ID, ChangeID: rejected.ID + ":directive", UserID: userID,
 		DirectiveID: rejected.ID + ":directive", Scope: scope, Text: rejected.DecisionReason,
 		Reason: "否决候选 " + rejected.ID + " 的理由", CreatedAt: at,
@@ -308,19 +308,27 @@ func (s *Review) rejectionDirective(
 }
 
 // chapterPlanIDOf 取章节任务对应的 Plan 节点；非章节任务为空。
-func chapterPlanIDOf(operation model.Operation) string {
+// rejectionScope 是否决理由的作用域（D71）：章节稿件落到该章；规划方案说的是还没写的
+// 部分，从下一章起——已写章节不因规划重写，理由若覆盖它们，每个已审窗口的要求作用域
+// 都会变、全书重审。其余任务（事实核验、受影响重写）落到整书。
+func (s *Review) rejectionScope(ctx context.Context, operation model.Operation, projectID string) (string, error) {
 	input, err := model.DecodeTaskInput(operation.Kind, operation.Input)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	switch input := input.(type) {
 	case *model.WriteChapterInput:
-		return input.ChapterPlanID
+		return model.DirectiveScopePlanNode(input.ChapterPlanID), nil
 	case *model.RewriteChapterInput:
-		return input.ChapterPlanID
-	default:
-		return ""
+		return model.DirectiveScopePlanNode(input.ChapterPlanID), nil
+	case *model.DevelopPlanInput, *model.RevisePlanInput:
+		project, err := s.projects.Project(ctx, projectID, model.InitialRevision)
+		if err != nil {
+			return "", err
+		}
+		return model.DirectiveScopeFromChapter(len(project.Manuscript) + 1), nil
 	}
+	return model.DirectiveScopeProject, nil
 }
 
 func (s *Review) PrepareRevert(

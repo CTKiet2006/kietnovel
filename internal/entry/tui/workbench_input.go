@@ -134,7 +134,7 @@ func (m model) escape() (tea.Model, tea.Cmd) {
 	}
 	b.close()
 	m.page = pageHome
-	m.home = newHomeState()
+	m.home = newHomeState(m.width)
 	m.home.lastOpened = b.projectID
 	return m, m.loadLibraryCmd()
 }

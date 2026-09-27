@@ -86,6 +86,21 @@ func submit(t *testing.T, m model, text string) (model, tea.Cmd) {
 	return press(t, typeText(t, m, text), tea.KeyEnter)
 }
 
+// tabTo 沿首页 Tab 顺序走到指定控件；一圈都没走到说明它不在焦点环里。
+func tabTo(t *testing.T, m model, focus int) model {
+	t.Helper()
+	for range m.focusRing() {
+		if m.home.focus == focus {
+			return m
+		}
+		m, _ = press(t, m, tea.KeyTab)
+	}
+	if m.home.focus != focus {
+		t.Fatalf("focus %d is not reachable by Tab", focus)
+	}
+	return m
+}
+
 func pressTimes(t *testing.T, m model, key tea.KeyType, times int) model {
 	t.Helper()
 	for i := 0; i < times; i++ {
@@ -164,8 +179,8 @@ func TestWizardVerifyFailureLeavesConfigUnsaved(t *testing.T) {
 func TestHomeRequiresPremiseBeforeCreating(t *testing.T) {
 	deps, _ := newTestDeps(t, true)
 	m := newModel(context.Background(), deps)
-	m, cmd := press(t, m, tea.KeyEnter)
-	if m.page != pageHome || cmd != nil || m.home.err == "" {
+	m, _ = press(t, m, tea.KeyEnter)
+	if m.page != pageHome || m.bench.writing || m.home.err == "" {
 		t.Fatalf("empty premise accepted: page=%v err=%q", m.page, m.home.err)
 	}
 }
@@ -194,13 +209,10 @@ func TestHomeLibraryOpensExistingProject(t *testing.T) {
 	deps, _ := newTestDeps(t, true)
 	m := newModel(context.Background(), deps)
 	updated, _ := m.Update(libraryLoadedMsg{entries: []libraryEntry{
-		{id: "book-1", premise: "旧作", target: 3, written: 1, state: "等你决定"},
+		{id: "book-1", premise: "旧作", target: 3, written: 1, state: domainmodel.RunWaitingUser},
 	}})
 	m = updated.(model)
-	m = pressTimes(t, m, tea.KeyTab, focusLibrary) // 沿首页焦点顺序进入作品库
-	if m.home.focus != focusLibrary {
-		t.Fatalf("focus = %d, want library", m.home.focus)
-	}
+	m = tabTo(t, m, focusLibrary) // 沿首页焦点顺序进入作品库
 	m, cmd := press(t, m, tea.KeyEnter)
 	if m.page != pageWorkbench || m.bench.projectID != "book-1" || cmd == nil {
 		t.Fatalf("open: page=%v project=%q", m.page, m.bench.projectID)
@@ -400,19 +412,22 @@ func TestDecisionRequiresExplicitApproveAndReasonRejects(t *testing.T) {
 	}
 }
 
-func TestHomeRefineFormCreatesProjectWithFullIntent(t *testing.T) {
+func TestHomeSettingsCreateProjectWithFullIntent(t *testing.T) {
 	deps, api := newTestDeps(t, true)
 	m := newModel(context.Background(), deps)
 	m = typeText(t, m, "一个凡人进入修仙宗门")
-	m = pressTimes(t, m, tea.KeyTab, 3) // 章节数→自动化→完善设定
+	m = tabTo(t, m, focusSettings)
 	m, _ = press(t, m, tea.KeyEnter)
-	if m.home.mode != homeForm {
-		t.Fatalf("mode = %v, want form", m.home.mode)
+	if m.home.mode != homeSettings {
+		t.Fatalf("mode = %v, want settings", m.home.mode)
 	}
-	m = typeText(t, m, "都市悬疑读者") // 受众
-	m, _ = press(t, m, tea.KeyEnter)
-	m = pressTimes(t, m, tea.KeyEnter, 3) // 期待体验/必须/禁止 留空
-	m, cmd := press(t, m, tea.KeyEnter)   // 结局方向留空，最后一步开写
+	m = typeText(t, m, "都市悬疑读者")          // 受众
+	m = pressTimes(t, m, tea.KeyEnter, 5) // 期待体验/必须/禁止/结局方向留空，最后一项回车完成
+	// 填完回到首页并停在「开始创作」上，已填的项目写在设定行里。
+	if m.home.mode != homeMain || m.home.focus != focusStart || !strings.Contains(ansi.Strip(m.View()), "已填 受众") {
+		t.Fatalf("settings did not return to start: mode=%v focus=%d", m.home.mode, m.home.focus)
+	}
+	m, cmd := press(t, m, tea.KeyEnter)
 	if m.page != pageWorkbench || !m.bench.writing || cmd == nil {
 		t.Fatalf("form create: page=%v writing=%v", m.page, m.bench.writing)
 	}
@@ -452,7 +467,7 @@ func TestHomeImportEntryImportsProjectionAndApprovesViaDecisionCard(t *testing.T
 	}
 
 	m := newModel(ctx, deps)
-	m = pressTimes(t, m, tea.KeyTab, focusImport) // 沿首页焦点顺序进入导入
+	m = tabTo(t, m, focusImport) // 沿首页焦点顺序进入导入
 	m, _ = press(t, m, tea.KeyEnter)
 	if m.home.mode != homeImport {
 		t.Fatalf("mode = %v, want import", m.home.mode)

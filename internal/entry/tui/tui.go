@@ -114,7 +114,7 @@ type model struct {
 
 func newModel(ctx context.Context, deps Deps) model {
 	m := model{ctx: ctx, deps: deps, api: deps.API, width: minWidth, height: minHeight, inflight: &inflight{}}
-	m.home = newHomeState()
+	m.home = newHomeState(m.width)
 	if !deps.API.Models.Current("").Bound || deps.ConfigError != "" {
 		m.page = pageWizard
 		m.wizard = newWizardState(deps.API.Models.Config(), deps.ConfigError, false)
@@ -176,6 +176,7 @@ func (m model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	switch message := message.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = message.Width, message.Height
+		m.home.premise.SetWidth(premiseWidth(m.width))
 		if m.bench.diag != nil {
 			m.layoutDiagnostics()
 		}

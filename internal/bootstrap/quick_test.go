@@ -1440,6 +1440,45 @@ func TestQuickWriteAIScaleRaiseWaitsForUser(t *testing.T) {
 	}
 }
 
+// D71：否决扩写方案的理由只作用于还没写的章节。已审窗口的要求作用域不变，续跑不重审
+// 已写章节；重新规划的任务带着这条理由。
+func TestRejectingExtensionPlanKeepsWrittenReviews(t *testing.T) {
+	ctx := context.Background()
+	executor := &scriptedQuickExecutor{now: testTime(), finale: 5, scaleMax: 4, raiseTo: 8}
+	api := newQuickTestApp(t, executor)
+	command := novelapp.QuickWriteCommand{
+		ProjectID: "reject-plan-book", UserID: "user-1", Premise: "一个失忆的邮差替亡者送完最后一封信",
+		WorkerID: "quick-worker", LeaseDuration: time.Minute, CreatedAt: testTime(),
+	}
+	result, err := api.Novels.QuickWrite(ctx, command)
+	raise := runQuickID(result.RunID, "plan", "extend", "3", "f0:s4:e0")
+	if err != nil || result.WaitingOperationID != raise || len(executor.reviews) != 1 {
+		t.Fatalf("raise wait = %#v, reviews = %d, %v", result, len(executor.reviews), err)
+	}
+	feedback := "下一段放慢，先把邮差的身世交代清楚"
+	if _, err := api.Decisions.Reject(ctx, raise+"-proposal", command.UserID, feedback, command.CreatedAt.Add(time.Hour)); err != nil {
+		t.Fatalf("reject raise: %v", err)
+	}
+	project, err := api.Projects.Project(ctx, command.ProjectID, 0)
+	if err != nil || len(project.Directives) != 1 || project.Directives[0].Scope != "from_chapter:4" {
+		t.Fatalf("rejection directive = %#v, %v", project.Directives, err)
+	}
+
+	calls := executor.calls
+	command.CreatedAt = command.CreatedAt.Add(2 * time.Hour)
+	if result, err = api.Novels.QuickWrite(ctx, command); err != nil {
+		t.Fatalf("replan: %v", err)
+	}
+	// 重新规划再次上调上限而等待：其间只有这一次规划，第 1–3 章的审阅仍然有效。
+	if result.WaitingOperationID == "" || executor.calls != calls+1 || len(executor.reviews) != 1 {
+		t.Fatalf("replan = %#v, calls %d → %d, reviews = %d", result, calls, executor.calls, len(executor.reviews))
+	}
+	replan, err := api.store.GetOperation(ctx, result.WaitingOperationID)
+	if err != nil || !strings.Contains(string(replan.Input), feedback) {
+		t.Fatalf("replan input lacks the rejection feedback: %s, %v", replan.Input, err)
+	}
+}
+
 // D63：等待 AI 上调上限时用户改为固定篇幅——罗盘的收官章数对齐到固定值（上下文只有一个
 // 篇幅口径），按新篇幅续写；被取代的旧规划稿不再作为等待稿件呈现。
 func TestQuickWriteFixingLengthSupersedesWaitingRaise(t *testing.T) {

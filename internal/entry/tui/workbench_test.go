@@ -323,7 +323,7 @@ func TestBlueprintProposalReadsAsStoryAndPreviewsInOutline(t *testing.T) {
 	}
 	requireContains(t, frame(m),
 		"◇ 创作方案 · 等待你确认", "新增 1 个故事弧 · 1 章 · 新增人物地点 1 个 · 设定 1 条 · 终局：真相大白",
-		"y 通过 · 写下修改意见后回车重新规划（意见留作全书要求） · /review 查看全部", "门后 ◇", "◇ 05  旧友",
+		"y 通过 · 写下修改意见后回车重新规划（意见留作后续章节的要求） · /review 查看全部", "门后 ◇", "◇ 05  旧友",
 	)
 	m.bench.cursor = 6 // 行 5 是方案里的新故事弧，行 6 是它的第 5 章
 	requireContains(t, frame(m), "◇ 方案待你确认 · 尚未生效", "苏晚认出陈渡")
@@ -341,7 +341,7 @@ func TestBlueprintProposalReadsAsStoryAndPreviewsInOutline(t *testing.T) {
 	review = ansi.Strip(review)
 	requireContains(t, review,
 		"第 1 卷 · 第一卷 · 未寄出的信", "  第 2 个故事弧 · 门后", "    第 5 章 · 旧友", "      苏晚认出陈渡",
-		"苏晚（人物） 又名 晚晚", "「苏晚」身份：陈渡的旧友", "故事罗盘\n终局：真相大白", "重新规划（意见留作全书要求）",
+		"苏晚（人物） 又名 晚晚", "「苏晚」身份：陈渡的旧友", "故事罗盘\n终局：真相大白", "重新规划（意见留作后续章节的要求）",
 	)
 	for _, leak := range []string{"{", "plan-", "原始内容"} {
 		if strings.Contains(review, leak) {

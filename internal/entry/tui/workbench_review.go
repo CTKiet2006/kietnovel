@@ -27,18 +27,18 @@ func (m model) directiveScope() (scope, target string) {
 		row := rows[cursor]
 		switch {
 		case row.placeholder:
-			return fmt.Sprintf("from_chapter:%d", row.chapter), fmt.Sprintf("第 %d 章起", row.chapter)
+			return domainmodel.DirectiveScopeFromChapter(row.chapter), fmt.Sprintf("第 %d 章起", row.chapter)
 		case row.node.Proposed && row.isChapter():
-			return fmt.Sprintf("chapter_range:%d-%d", row.chapter, row.chapter), fmt.Sprintf("第 %d 章", row.chapter)
+			return domainmodel.DirectiveScopeChapters(row.chapter, row.chapter), fmt.Sprintf("第 %d 章", row.chapter)
 		case row.node.Proposed:
-			return fmt.Sprintf("from_chapter:%d", next), fmt.Sprintf("第 %d 章起", next)
+			return domainmodel.DirectiveScopeFromChapter(next), fmt.Sprintf("第 %d 章起", next)
 		case row.isChapter():
 			return domainmodel.DirectiveScopePlanNode(row.node.Node.ID), fmt.Sprintf("第 %d 章", row.chapter)
 		default:
 			return domainmodel.DirectiveScopePlanNode(row.node.Node.ID), "「" + row.node.Node.Title + "」"
 		}
 	}
-	return fmt.Sprintf("from_chapter:%d", next), fmt.Sprintf("第 %d 章起", next)
+	return domainmodel.DirectiveScopeFromChapter(next), fmt.Sprintf("第 %d 章起", next)
 }
 
 // composerScope 草稿在第一个字时锁定作用域，之后切章不改变它的语义。
@@ -219,7 +219,7 @@ var entityNoun = map[domainmodel.EntityKind]string{
 }
 
 // decisionActions 说清怎么通过、怎么调整：修改意见让 AI 按意见重做这份稿件；规划的
-// 意见同时作为全书创作要求留下（§4.9），之后的规划与写作都会遵守。
+// 意见同时作为后续章节的创作要求留下（§4.9、D71），之后的规划与写作都会遵守。
 func (m model) decisionActions() string {
 	d := m.bench.decision
 	manuscript := func(patch domainmodel.Patch) bool { return patch.Document.Kind == domainmodel.DocumentManuscript }
@@ -229,7 +229,7 @@ func (m model) decisionActions() string {
 	case slices.ContainsFunc(d.proposal.Patches, manuscript):
 		return "y 通过 · 写下修改意见后回车重写"
 	default:
-		return "y 通过 · 写下修改意见后回车重新规划（意见留作全书要求）"
+		return "y 通过 · 写下修改意见后回车重新规划（意见留作后续章节的要求）"
 	}
 }
 

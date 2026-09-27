@@ -42,6 +42,14 @@ const (
 // DirectiveScopePlanNode 构造命中某个 Plan 节点及其子树的作用域。
 func DirectiveScopePlanNode(id string) string { return scopePlanNode + id }
 
+// DirectiveScopeChapters 构造章号闭区间 [from, to] 的作用域。
+func DirectiveScopeChapters(from, to int) string {
+	return scopeChapterRange + strconv.Itoa(from) + "-" + strconv.Itoa(to)
+}
+
+// DirectiveScopeFromChapter 构造自第 number 章起的作用域。
+func DirectiveScopeFromChapter(number int) string { return scopeFromChapter + strconv.Itoa(number) }
+
 // DirectiveConstraints 是可机械校验的量化约束（S13）。字数口径：各 block 正文
 // 的 rune 数累加，不含标题。
 type DirectiveConstraints struct {

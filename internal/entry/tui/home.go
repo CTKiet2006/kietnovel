@@ -2,12 +2,15 @@ package tui
 
 import (
 	"fmt"
-	"strconv"
+	"slices"
 	"strings"
 	"time"
+	"unicode"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	projectdoc "github.com/voocel/ainovel-cli/internal/app/project"
 	"github.com/voocel/ainovel-cli/internal/app/workbench"
 	domainmodel "github.com/voocel/ainovel-cli/internal/domain/model"
@@ -15,46 +18,48 @@ import (
 	"github.com/voocel/ainovel-cli/internal/infra/jsonc"
 )
 
-// 首页（workbench §4）：一句话输入为主体；其他入口只有完善创作设定、
-// 导入作品、进入配置和作品库。三个创建入口只产生不同的初始化输入，
-// 最终创建相同的 Project 与 CreationRun。
+// 首页（workbench §4）：左边写一个新故事，右边是作品库。新故事的输入只有一句话、
+// 篇幅、推进方式与可选设定；它们只产生不同的初始化输入，最终创建相同的 Project 与
+// CreationRun。选项全部摊开并附一句说明，不藏在要猜的标签后面。
 type homeMode int
 
 const (
 	homeMain homeMode = iota
-	homeForm
+	homeSettings
 	homeImport
 )
 
+// 焦点按阅读顺序排列：左栏自上而下，再到右栏与页眉。
 const (
 	focusPremise = iota
-	focusChapters
+	focusLength
 	focusApproval
-	focusRefine
+	focusSettings
 	focusStart
+	focusLibrary
+	focusSearch
 	focusImport
 	focusConfig
-	focusSearch
-	focusLibrary
 )
 
 type homeState struct {
-	search          textinput.Model
-	searching       bool
-	chapterInput    textinput.Model
-	editingChapters bool
-	premise         textinput.Model
-	chapters        int // 篇幅：正数固定章数，0 交给 AI
-	approval        domainmodel.ApprovalPolicy
-	focus           int
-	mode            homeMode
-	form            []textinput.Model
-	formStep        int
-	importIn        textinput.Model
-	importing       bool
-	library         []libraryEntry
-	cursor          int
-	loaded          bool
+	premise textarea.Model
+	// fixed 为 true 时篇幅固定为 chapters 章（0 表示还没填），否则交给 AI（D63）。
+	fixed    bool
+	chapters int
+	approval domainmodel.ApprovalPolicy
+	// settings 是更多设定的输入，全部可空；它们是用户的原话，原样进 Intent（D70）。
+	settings    []textinput.Model
+	settingStep int
+	focus       int
+	mode        homeMode
+	search      textinput.Model
+	searching   bool
+	importIn    textinput.Model
+	importing   bool
+	library     []libraryEntry
+	cursor      int
+	loaded      bool
 	// lastOpened 是上次打开的作品：作品库加载后预选它，回车即恢复落点。
 	lastOpened string
 	// confirmDelete 是待二次确认删除的作品 ID：再按 d 执行，按其他键取消。
@@ -68,7 +73,8 @@ type libraryEntry struct {
 	premise string
 	target  int
 	written int
-	state   string
+	state   domainmodel.CreationRunState // 空表示还没开始创作
+	updated time.Time
 }
 
 type libraryLoadedMsg struct {
@@ -90,19 +96,62 @@ type importDoneMsg struct {
 
 var approvalOrder = []domainmodel.ApprovalPolicy{domainmodel.ApprovalAuto, domainmodel.ApprovalMilestone, domainmodel.ApprovalManual}
 
-// 完善创作设定（workbench §4）：只是更完整的初始化输入，全部可空。
-var formFields = []struct{ label, placeholder string }{
-	{"受众", "写给谁看，例如：都市悬疑读者（可空，回车跳过）"},
-	{"期待体验", "逗号分隔，例如：紧张,反转,治愈（可空）"},
-	{"必须出现", "逗号分隔的元素或情节（可空）"},
-	{"禁止出现", "逗号分隔（可空）"},
-	{"结局方向", "例如：主角赢但付出代价（可空）"},
+// settingFields 是更多设定（workbench §4）：更完整的初始化输入，全部可空。
+var settingFields = []struct{ label, placeholder string }{
+	{"受众", "写给谁看，例如：喜欢都市悬疑的读者"},
+	{"期待体验", "逗号分隔，例如：紧张, 反转, 治愈"},
+	{"必须出现", "逗号分隔的人物、元素或情节"},
+	{"禁止出现", "逗号分隔"},
+	{"结局方向", "例如：主角赢了，但付出代价"},
 }
 
-func newHomeState() homeState {
-	premise := newInput("一句话说想写什么，回车开写")
-	premise.Focus()
-	return homeState{premise: premise, approval: domainmodel.ApprovalAuto, search: newInput("搜索作品标题或 ID"), chapterInput: newInput("留空由 AI 决定")}
+// newHomeState 的 width 是终端宽度：故事输入框按首页几何折行（窗口变化时 Update 重设）。
+func newHomeState(width int) homeState {
+	settings := make([]textinput.Model, len(settingFields))
+	for i, field := range settingFields {
+		settings[i] = newInput(field.placeholder)
+	}
+	return homeState{
+		premise: newPremiseInput(premiseWidth(width)), approval: domainmodel.ApprovalAuto, settings: settings,
+		search: newInput("标题或 ID"),
+	}
+}
+
+// newPremiseInput 是首页的故事输入：多行自动折行，回车留给「开始创作」。
+func newPremiseInput(width int) textarea.Model {
+	input := textarea.New()
+	input.SetWidth(width)
+	input.Placeholder = "一句话说想写什么。比如：一个失忆的邮差替亡者送信，每送出一封，就想起一段自己的过去"
+	input.ShowLineNumbers, input.Prompt = false, ""
+	input.SetHeight(premiseRows)
+	input.KeyMap.InsertNewline.SetEnabled(false)
+	surface := lipgloss.NewStyle().Background(benchColors.InputBackground)
+	style := textarea.Style{
+		Base: surface, CursorLine: surface, EndOfBuffer: surface, Prompt: surface,
+		Text:        surface.Foreground(benchColors.Text),
+		Placeholder: surface.Foreground(benchColors.Placeholder),
+	}
+	input.FocusedStyle, input.BlurredStyle = style, style
+	input.Cursor.Style = benchTheme.Text
+	input.Focus()
+	return input
+}
+
+// intent 只在填了更多设定时给出完整 Intent；只有一句话时走快速创建（结果相同）。
+func (h homeState) intent(premise string) *domainmodel.Intent {
+	values := make([]string, len(h.settings))
+	filled := false
+	for i, input := range h.settings {
+		values[i] = strings.TrimSpace(input.Value())
+		filled = filled || values[i] != ""
+	}
+	if !filled {
+		return nil
+	}
+	return &domainmodel.Intent{
+		Premise: premise, Audience: values[0], DesiredExperience: splitList(values[1]),
+		Required: splitList(values[2]), Forbidden: splitList(values[3]), EndingDirection: values[4],
+	}
 }
 
 // loadLibraryCmd 读取作品库：每本书的目标、进度与运行状态。
@@ -115,11 +164,10 @@ func (m model) loadLibraryCmd() tea.Cmd {
 		}
 		entries := make([]libraryEntry, 0, len(records))
 		for _, record := range records {
-			state := "空闲"
-			if record.State != "" {
-				state = runStateLabel(record.State)
-			}
-			entries = append(entries, libraryEntry{id: record.ID, premise: record.Premise, target: record.Target, written: record.Written, state: state})
+			entries = append(entries, libraryEntry{
+				id: record.ID, premise: record.Premise, target: record.Target, written: record.Written,
+				state: record.State, updated: record.UpdatedAt,
+			})
 		}
 		return libraryLoadedMsg{entries: entries}
 	}
@@ -190,8 +238,8 @@ func (m model) updateHome(message tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleHomeMouse(message)
 	case tea.KeyMsg:
 		switch m.home.mode {
-		case homeForm:
-			return m.handleFormKey(message)
+		case homeSettings:
+			return m.handleSettingsKey(message)
 		case homeImport:
 			return m.handleImportKey(message)
 		}
@@ -202,8 +250,8 @@ func (m model) updateHome(message tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) handleHomeKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	home := &m.home
-	if home.searching || home.editingChapters {
-		return m.handleHomeInline(key)
+	if home.searching {
+		return m.handleSearchKey(key)
 	}
 	if key.String() == "/" && home.focus != focusPremise {
 		return m.beginLibrarySearch()
@@ -215,12 +263,8 @@ func (m model) handleHomeKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			home.confirmDelete, home.notice = "", ""
 			return m.deleteProject(entry.id)
 		}
-		title := entry.premise
-		if title == "" {
-			title = entry.id
-		}
 		home.confirmDelete = entry.id
-		home.err, home.notice = "", fmt.Sprintf("再按一次 d 永久删除《%s》，按其他键取消", truncate(title, 20))
+		home.err, home.notice = "", fmt.Sprintf("再按一次 d 永久删除《%s》，按其他键取消", truncate(entry.title(), 20))
 		return m, nil
 	}
 	if home.confirmDelete != "" {
@@ -230,63 +274,15 @@ func (m model) handleHomeKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEsc:
 		return m, tea.Quit
 	case tea.KeyTab, tea.KeyShiftTab:
-		home.premise.Blur()
-		limit := focusLibrary
-		if len(home.library) > 0 {
-			limit = focusLibrary + 1
-		}
 		delta := 1
 		if key.Type == tea.KeyShiftTab {
 			delta = -1
 		}
-		home.focus = (home.focus + delta + limit) % limit
-		if home.focus == focusPremise {
-			home.premise.Focus()
-		}
-		return m, nil
+		ring := m.focusRing()
+		index := max(0, slices.Index(ring, home.focus))
+		return m, home.setFocus(ring[(index+delta+len(ring))%len(ring)])
 	case tea.KeyEnter:
-		switch home.focus {
-		case focusLibrary:
-			if len(m.libraryIndices()) > 0 {
-				return m.openProject(home.library[home.cursor].id)
-			}
-			return m, nil
-		case focusSearch:
-			return m.beginLibrarySearch()
-		case focusChapters:
-			home.editingChapters = true
-			home.chapterInput.SetValue("")
-			if home.chapters > 0 {
-				home.chapterInput.SetValue(strconv.Itoa(home.chapters))
-			}
-			home.chapterInput.CursorEnd()
-			home.premise.Blur()
-			return m, home.chapterInput.Focus()
-		case focusApproval:
-			return m.handleHomeKey(tea.KeyMsg{Type: tea.KeyRight})
-		case focusRefine:
-			if strings.TrimSpace(home.premise.Value()) == "" {
-				home.err = "先用一句话说想写什么，再完善设定"
-				return m, nil
-			}
-			home.mode, home.formStep, home.err = homeForm, 0, ""
-			home.form = make([]textinput.Model, len(formFields))
-			for i, field := range formFields {
-				home.form[i] = newInput(field.placeholder)
-			}
-			home.form[0].Focus()
-			return m, nil
-		case focusImport:
-			home.mode, home.err = homeImport, ""
-			home.importIn = newInput("作品文件路径（Projection JSONC，例如 export 产物）")
-			home.importIn.Focus()
-			return m, nil
-		case focusConfig:
-			m.page = pageWizard
-			m.wizard = newWizardState(m.api.Models.Config(), "", true)
-			return m, nil
-		}
-		return m.createProject(nil)
+		return m.activate(home.focus)
 	case tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd:
 		if home.focus == focusLibrary {
 			return m.moveLibrary(key.Type), nil
@@ -297,25 +293,32 @@ func (m model) handleHomeKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 			delta = -1
 		}
 		switch home.focus {
-		case focusChapters:
-			home.chapters = max(0, home.chapters+delta) // 0 即交给 AI（D63）
+		case focusLength:
+			home.fixed = !home.fixed
 			return m, nil
 		case focusApproval:
-			index := 0
-			for i, policy := range approvalOrder {
-				if policy == home.approval {
-					index = i
-				}
-			}
+			index := slices.Index(approvalOrder, home.approval)
 			home.approval = approvalOrder[(index+delta+len(approvalOrder))%len(approvalOrder)]
 			return m, nil
 		}
+	case tea.KeyBackspace:
+		if home.focus == focusLength && home.fixed {
+			home.chapters /= 10
+			return m, nil
+		}
 	}
-	// 焦点在别处时直接打字＝想写新书：自动聚焦一句话输入框并录入，
+	// 在篇幅行直接敲数字就是固定篇幅并填章数。
+	if home.focus == focusLength && len(key.Runes) == 1 && unicode.IsDigit(key.Runes[0]) {
+		home.fixed = true
+		if home.chapters < 1000 {
+			home.chapters = home.chapters*10 + int(key.Runes[0]-'0')
+		}
+		return m, nil
+	}
+	// 焦点在别处时直接打字＝想写新书：自动聚焦故事输入框并录入，
 	// 免得作品库预选把首次输入吞掉。
 	if home.focus != focusPremise && key.Type == tea.KeyRunes {
-		home.focus = focusPremise
-		home.premise.Focus()
+		home.setFocus(focusPremise)
 	}
 	if home.focus == focusPremise {
 		var cmd tea.Cmd
@@ -325,38 +328,80 @@ func (m model) handleHomeKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) handleFormKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+// focusRing 是 Tab 遍历的控件；作品库没有可选作品时跳过它。
+func (m model) focusRing() []int {
+	ring := []int{focusPremise, focusLength, focusApproval, focusSettings, focusStart}
+	if len(m.libraryIndices()) > 0 {
+		ring = append(ring, focusLibrary)
+	}
+	return append(ring, focusSearch, focusImport, focusConfig)
+}
+
+func (h *homeState) setFocus(focus int) tea.Cmd {
+	h.focus = focus
+	if focus == focusPremise {
+		return h.premise.Focus()
+	}
+	h.premise.Blur()
+	return nil
+}
+
+// activate 是回车与点击的同一入口：新故事一栏里的回车都是开始创作。
+func (m model) activate(focus int) (tea.Model, tea.Cmd) {
 	home := &m.home
+	switch focus {
+	case focusLibrary:
+		if len(m.libraryIndices()) > 0 {
+			return m.openProject(home.library[home.cursor].id)
+		}
+		return m, nil
+	case focusSearch:
+		return m.beginLibrarySearch()
+	case focusSettings:
+		home.mode, home.err = homeSettings, ""
+		return m, home.settings[home.settingStep].Focus()
+	case focusImport:
+		home.mode, home.err = homeImport, ""
+		home.importIn = newInput("作品文件路径（Projection JSONC，例如 export 产物）")
+		return m, home.importIn.Focus()
+	case focusConfig:
+		m.page = pageWizard
+		m.wizard = newWizardState(m.api.Models.Config(), "", true)
+		return m, nil
+	}
+	return m.createProject()
+}
+
+// handleSettingsKey 更多设定：回车或 Tab 到下一项，最后一项回车、或 Esc 随时带着已填内容回首页。
+func (m model) handleSettingsKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
+	home := &m.home
+	step := home.settingStep
 	switch key.Type {
 	case tea.KeyEsc:
-		if home.formStep == 0 {
-			home.mode = homeMain
-			return m, nil
+		return m.closeSettings()
+	case tea.KeyEnter, tea.KeyTab, tea.KeyDown:
+		if key.Type == tea.KeyEnter && step == len(home.settings)-1 {
+			return m.closeSettings()
 		}
-		home.form[home.formStep].Blur()
-		home.formStep--
-		home.form[home.formStep].Focus()
-		return m, nil
-	case tea.KeyEnter:
-		if home.formStep < len(home.form)-1 {
-			home.form[home.formStep].Blur()
-			home.formStep++
-			home.form[home.formStep].Focus()
-			return m, nil
-		}
-		intent := domainmodel.Intent{
-			Premise:           strings.TrimSpace(home.premise.Value()),
-			Audience:          strings.TrimSpace(home.form[0].Value()),
-			DesiredExperience: splitList(home.form[1].Value()),
-			Required:          splitList(home.form[2].Value()),
-			Forbidden:         splitList(home.form[3].Value()),
-			EndingDirection:   strings.TrimSpace(home.form[4].Value()),
-		}
-		return m.createProject(&intent)
+		step = min(step+1, len(home.settings)-1)
+	case tea.KeyShiftTab, tea.KeyUp:
+		step = max(step-1, 0)
+	default:
+		var cmd tea.Cmd
+		home.settings[step], cmd = home.settings[step].Update(key)
+		return m, cmd
 	}
-	var cmd tea.Cmd
-	home.form[home.formStep], cmd = home.form[home.formStep].Update(key)
-	return m, cmd
+	home.settings[home.settingStep].Blur()
+	home.settingStep = step
+	return m, home.settings[step].Focus()
+}
+
+// closeSettings 回到首页并停在「开始创作」上：再按一次回车就开写。
+func (m model) closeSettings() (tea.Model, tea.Cmd) {
+	home := &m.home
+	home.settings[home.settingStep].Blur()
+	home.settingStep, home.mode = 0, homeMain
+	return m, home.setFocus(focusStart)
 }
 
 func (m model) handleImportKey(key tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -413,18 +458,27 @@ func (m model) importProjectCmd(path string) tea.Cmd {
 	}
 }
 
-// createProject 创建作品并进入工作台开始创作；intent 非空时（完善设定入口）
-// 先以完整 Intent 初始化，再走同一条 QuickWrite 路径。
-func (m model) createProject(intent *domainmodel.Intent) (tea.Model, tea.Cmd) {
-	premise := strings.TrimSpace(m.home.premise.Value())
-	if premise == "" {
-		m.home.err = "先用一句话说想写什么"
-		return m, nil
+// createProject 创建作品并进入工作台开始创作；填了更多设定时先以完整 Intent 初始化，
+// 再走同一条 QuickWrite 路径。
+func (m model) createProject() (tea.Model, tea.Cmd) {
+	home := &m.home
+	premise := strings.TrimSpace(home.premise.Value())
+	switch {
+	case premise == "":
+		home.err = "先写下想写的故事"
+		return m, home.setFocus(focusPremise)
+	case home.fixed && home.chapters == 0:
+		home.err = "输入固定的章数，或切回 AI 决定篇幅"
+		return m, home.setFocus(focusLength)
+	}
+	chapters := 0
+	if home.fixed {
+		chapters = home.chapters
 	}
 	projectID := projectdoc.NewID("book", time.Now())
 	params := quickParams{
 		projectID: projectID, premise: premise,
-		chapters: m.home.chapters, approval: m.home.approval, intent: intent,
+		chapters: chapters, approval: home.approval, intent: home.intent(premise),
 	}
 	watch := m.openBench(projectID)
 	m.bench.writing = true
@@ -457,32 +511,36 @@ func splitList(text string) []string {
 
 func (m model) viewHome() string {
 	switch m.home.mode {
-	case homeForm:
-		return m.viewHomeForm()
+	case homeSettings:
+		return m.viewHomeSettings()
 	case homeImport:
 		return m.viewHomeImport()
 	}
 	return m.homeFrame().text
 }
 
-func (m model) viewHomeForm() string {
+func (m model) viewHomeSettings() string {
 	width := m.entryWidth()
-	lines := []string{benchTheme.Muted.Render(truncate(m.home.premise.Value(), width)), ""}
-	for i, field := range formFields {
-		if i == m.home.formStep {
-			input := m.home.form[i]
+	lines := []string{
+		benchTheme.Muted.Render(truncate(oneLine(m.home.premise.Value()), width)), "",
+		benchTheme.Muted.Render("全部可选。这些是你的原话，会原样作为创作意图保留，AI 不会改写。"), "",
+	}
+	for i, field := range settingFields {
+		input := m.home.settings[i]
+		if i == m.home.settingStep {
 			input.Width = max(1, width-4)
 			input.SetCursor(input.Position())
-			lines = append(lines, benchTheme.Accent.Render("▎ "+field.label), "  "+input.View(), "")
-		} else {
-			value := strings.TrimSpace(m.home.form[i].Value())
-			if value == "" {
-				value = "可选"
-			}
-			lines = append(lines, benchTheme.Muted.Render(truncate("  "+field.label+" · "+value, width)))
+			lines = append(lines, benchTheme.Accent.Bold(true).Render("▎ "+field.label), "  "+input.View(), "")
+			continue
 		}
+		value := strings.TrimSpace(input.Value())
+		if value == "" {
+			value = benchTheme.Muted.Render("—")
+		}
+		label := "  " + field.label + strings.Repeat(" ", 10-lipgloss.Width(field.label))
+		lines = append(lines, benchTheme.Muted.Render(label)+truncate(value, width-12), "")
 	}
-	return m.entryPage("完善创作设定", lines, m.home.err, "Enter 下一项 / 开始创作 · Esc 上一步")
+	return m.entryPage("更多设定", lines, m.home.err, "Enter / Tab 下一项 · Shift+Tab 上一项 · 最后一项回车或 Esc 完成")
 }
 
 func (m model) viewHomeImport() string {

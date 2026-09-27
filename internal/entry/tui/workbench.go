@@ -376,7 +376,7 @@ func (m model) applyWorkbench(message tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				bench.close()
 				m.page = pageHome
-				m.home = newHomeState()
+				m.home = newHomeState(m.width)
 				m.home.err = "打不开这部作品：" + message.err.Error()
 				return m, m.loadLibraryCmd()
 			}

@@ -363,7 +363,7 @@ func (m model) saveWizard(config appconfig.Config) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.page = pageHome
-	m.home = newHomeState()
+	m.home = newHomeState(m.width)
 	return m, m.loadLibraryCmd()
 }
 
