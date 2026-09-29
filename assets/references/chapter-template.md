@@ -1,27 +1,19 @@
-# Chương [X]: [Tiêu đề chương]
+# 第[X]章：[章节标题]
 
-## Tóm tắt chương
-- **Sự kiện cốt lõi**: [Một câu tóm gọn những gì xảy ra trong chương này]
-- **Tiếp nối chương trước**: [Phản hồi điểm móc của chương trước]
-- **Mục tiêu tức thời**: [Nhân vật điểm nhìn muốn đạt gì]
-- **Lực cản**: [Ai/cơ chế nào chủ động cản]
-- **Cái giá**: [Thất bại, trì hoãn hoặc bị lộ sẽ mất gì]
-- **Chuỗi áp lực**: [Lực cản tăng → lựa chọn → tình thế đổi, ít nhất hai nấc]
-- **Bước ngoặt**: [Điều gì buộc kế hoạch/cách hiểu phải đổi]
-- **Lựa chọn và đánh đổi**: [Quyết định bộc lộ tính cách]
-- **Hồi đáp**: [Lời hứa cũ nào được trả]
-- **Hậu quả**: [Điều gì không thể quay về như đầu chương]
-- **Điểm móc**: [Điểm móc ở cuối chương này]
+## 本章概要
+- **核心事件**：[一句话概括本章发生的事]
+- **承接上章**：[回应上一章的悬念]
+- **悬念钩子**：[本章结尾的钩子]
 
 ---
 
-## Nội dung chính
+## 正文
 
-[Nội dung chương dài đúng bằng lượng tình tiết cần để kể trọn chuỗi áp lực; không độn hoặc cắt theo con số máy móc]
+[章节正文内容 3000-6000 字，最低不低于 2500 字]
 
 ---
 
-## Ghi chú chương
-- Điểm móc chương này: [Mô tả ngắn điểm móc cuối chương]
-- Xem trước chương sau: [Tùy chọn, 1-2 câu]
-- Đánh dấu phục bút: [Nếu có cài phục bút, ghi chép tại đây]
+## 章节备注
+- 本章悬念：[简述结尾钩子]
+- 下章预告：[可选，1-2句话]
+- 伏笔标记：[如果埋下伏笔，在此记录]

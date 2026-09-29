@@ -1,13 +1,13 @@
 # kietnovel
 
-> Engine sáng tác tiểu thuyết dài tập bằng AI, Việt hóa toàn diện. Fork từ [voocel/ainovel-cli](https://github.com/voocel/ainovel-cli), bộ prompt song ngữ vi/zh lấy từ [kentjuno/ainovel-cli](https://github.com/kentjuno/ainovel-cli).
+> Engine sáng tác tiểu thuyết dài tập bằng AI, Việt hóa toàn diện. Fork từ [voocel/ainovel-cli](https://github.com/voocel/ainovel-cli) — giữ nguyên bộ prompt gốc đã kiểm chứng.
 
 Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định chạy trọn một bộ truyện, model chỉ được gọi đúng chỗ cần phán đoán — Engine điều phối 3 agent tự chủ Architect / Writer / Editor theo bảng quyết định, Arbiter ngữ nghĩa chỉ thức dậy khi cần. Từ một câu ý tưởng tới tiểu thuyết hoàn chỉnh.
 
 ## Điểm Nổi Bật Của Bản Việt Hóa & Đa Ngôn Ngữ
 
 - 🇻🇳 **Giao diện TUI Việt hóa 100%**: Từ Setup Wizard cài đặt ban đầu, màn hình chào mừng, thanh trạng thái, Activity stream trực tiếp, bảng quản lý Provider/Model (`/config`, `/model`) đến thông báo lỗi và phím tắt đều được dịch sang Tiếng Việt chuẩn mực, tự nhiên.
-- 🌐 **Bộ prompt song ngữ thật, không phải dịch máy**: 14 prompt hệ thống + 12 tài liệu tham chiếu + 5 bộ văn phong + quy chuẩn văn phong đều có **hai phiên bản đầy đủ** (Việt ở `assets/prompts/`, Trung ở `assets/prompts/zh/`). Chọn bằng `"language": "vi"` hoặc `"language": "zh"` trong cấu hình — không phải chỉ chèn câu lệnh bảo model viết theo ngôn ngữ nào.
+- 🌐 **Tùy chọn Ngôn ngữ sáng tác truyện**: Viết truyện bằng Tiếng Việt (mặc định) hoặc Tiếng Trung nguyên bản qua `"language": "vi"` / `"language": "zh"`. Bộ prompt giữ nguyên bản gốc (đã kiểm chứng), chỉ đổi lớp văn phong kèm chỉ dẫn buộc ngôn ngữ đầu ra.
 - 🦙 **Tích hợp sẵn Ollama Local**: Hỗ trợ chạy 100% offline, miễn phí không tốn tiền API với các model mã nguồn mở chạy trên GPU nội bộ (Qwen 2.5 / 3.5, Llama, v.v.).
 - ✍️ **Văn phong chống AI sáo rỗng**: kèm quy chuẩn hành văn tiểu thuyết Tiếng Việt (`assets/voice.md`) và bộ chống sáo rỗng (`assets/references/anti-ai-tone.md`) với danh sách cụm cấm cụ thể cho tiếng Việt — "ở một mức độ nào đó", "như thể", "bất giác", "không khỏi"... giúp hành văn sống động, gãy gọn, có chiều sâu.
 - 🚀 **Đồng bộ toàn diện Upstream mới nhất**: Kiến trúc Đa Agent, quy hoạch cuộn 2 tầng (Rolling planning), nén ngữ cảnh 4 cấp, điểm phục hồi step-level, và toàn bộ 14 lệnh slash commands.
@@ -73,16 +73,14 @@ Trong file cấu hình `config/config.json`, bạn có thể chỉ định trư�
 
 ### Cách hoạt động
 
-Không phải "bảo model viết bằng tiếng Việt" — hệ thống nạp **bộ prompt riêng cho từng ngôn ngữ**:
+Prompt hệ thống giữ nguyên bản gốc của upstream (tiếng Trung, đã được kiểm chứng và tinh chỉnh) — **không dịch lại** để tránh mất chất lượng. Ngôn ngữ sáng tác được điều khiển ở hai điểm:
 
-| Tài nguyên | Tiếng Việt | Tiếng Trung |
+| Điểm | `vi` (mặc định) | `zh` |
 |---|---|---|
-| 14 prompt hệ thống | `assets/prompts/` | `assets/prompts/zh/` |
-| 12 tài liệu tham chiếu | `assets/references/` | `assets/references/zh/` |
-| 5 bộ văn phong (default / fantasy / romance / suspense / wuxia) | `assets/styles/` | `assets/styles/zh/` |
-| Quy chuẩn văn phong | `assets/voice.md` | `assets/voice_zh.md` |
+| Lớp văn phong (`voice`) | `assets/voice.md` — quy chuẩn hành văn tiểu thuyết Tiếng Việt | `assets/voice_zh.md` — bản gốc tiếng Trung |
+| Chỉ dẫn đầu ra | Gắn vào Architect/Writer/Editor: *toàn bộ sản phẩm phải viết bằng Tiếng Việt tự nhiên, đúng chuẩn văn phong* | Không gắn — protocol vốn đã là tiếng Trung |
 
-Đổi `"language"` là đổi toàn bộ chuỗi prompt mà Architect / Writer / Editor / Arbiter nhận, không phải chỉ đổi chỉ dẫn. Bản Trung giữ nguyên cấu trúc prompt gốc của upstream nên chất lượng không bị suy giảm.
+Bản chất: một câu lệnh buộc ngôn ngữ + bộ quy chuẩn văn phong tương ứng, thay vì duy trì hai bản prompt song song dễ lệch nội dung.
 
 💡 Ghi chú: Bảng điều khiển TUI, thanh trạng thái, menu và các thông báo lỗi luôn hiển thị 100% bằng Tiếng Việt, kể cả khi `language` là `zh`.
 
@@ -457,8 +455,9 @@ Dự án được phân phối dưới giấy phép mã nguồn mở MIT License
 
 | Thành phần | Nguồn |
 |---|---|
-| Kiến trúc Engine, đa agent, quy hoạch cuộn, checkpoint, toàn bộ lệnh TUI | [voocel/ainovel-cli](https://github.com/voocel/ainovel-cli) — MIT |
-| Bộ prompt song ngữ Việt / Trung, tài liệu tham chiếu, bộ văn phong, quy chuẩn hành văn | [kentjuno/ainovel-cli](https://github.com/kentjuno/ainovel-cli) — MIT |
-| Việt hóa TUI, `NOVEL_DIR`, README, `assets/README.md` | repo này |
+| Kiến trúc Engine, đa agent, quy hoạch cuộn, checkpoint, toàn bộ lệnh TUI, **và toàn bộ bộ prompt/tài liệu tham chiếu** | [voocel/ainovel-cli](https://github.com/voocel/ainovel-cli) — MIT |
+| Việt hóa TUI, `NOVEL_DIR`, quy chuẩn văn phong tiếng Việt (`assets/voice.md`), cơ chế `language`, README | repo này |
+
+Bộ prompt giữ nguyên bản gốc của upstream: đã được kiểm chứng về chất lượng, dịch lại chỉ làm tăng rủi ro lệch nghĩa. Việt hóa tập trung ở tầng giao diện và tầng văn phong — nơi thực sự quyết định trải nghiệm và chất lượng đầu ra.
 
 Cải tiến chung nên gửi PR về upstream. Repo này tập trung vào Việt hóa và trải nghiệm người dùng Việt.
