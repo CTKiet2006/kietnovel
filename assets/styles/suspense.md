@@ -1,10 +1,10 @@
-## 悬疑推理风格
+## Phong Cách Trinh Thám - Ly Kỳ
 
-- **叙事结构**：多线叙事交织，信息差制造悬念，逐步揭示真相
-- **误导技法**：合理设置红鲱鱼（红herring），利用叙述视角盲区误导读者
-- **线索管理**：关键线索必须在揭示前至少出现两次，但不能太明显
-- **节奏控制**：紧张-舒缓交替，每章末留悬念钩子，高潮前适当减速蓄力
-- **氛围营造**：环境描写服务于紧张感，利用光影、声音、天气渲染不安
-- **人物行为**：角色的每个决策必须有动机支撑，避免"为了推动剧情而做蠢事"
-- **对话风格**：言外之意多于字面意思，审讯/对峙场景注重攻防节奏
-- **真相揭示**：不能靠巧合或未出现的证据，读者回看时能发现伏笔
+- **Cấu trúc cốt truyện**: Nhiều tuyến truyện đan xen, tạo căng thẳng qua khoảng cách thông tin, dần dần tiết lộ sự thật
+- **Kỹ thuật đánh lạc hướng**: Đặt bẫy red herring hợp lý, lợi dụng điểm mù góc nhìn kể chuyện để dẫn dắt người đọc sai hướng
+- **Quản lý manh mối**: Các manh mối quan trọng phải xuất hiện ít nhất hai lần trước khi được tiết lộ, nhưng không được quá lộ liễu
+- **Kiểm soát nhịp truyện**: Luân phiên căng thẳng - thư giãn, mỗi cuối chương để lại điểm móc gây tò mò, giảm tốc độ hợp lý trước cao trào để tích lũy sức mạnh
+- **Dựng không khí**: Miêu tả môi trường phục vụ cảm giác căng thẳng, dùng ánh sáng - bóng tối, âm thanh, thời tiết để tạo sự bất an
+- **Hành vi nhân vật**: Mỗi quyết định của nhân vật phải có động cơ rõ ràng, tránh "làm điều ngốc nghếch chỉ để đẩy cốt truyện tiến"
+- **Phong cách đối thoại**: Hàm ý nhiều hơn nghĩa đen, các cảnh thẩm vấn/đối đầu chú trọng nhịp độ công - thủ
+- **Tiết lộ sự thật**: Không thể dựa vào trùng hợp hay bằng chứng chưa từng xuất hiện, người đọc khi đọc lại có thể nhận ra phục bút

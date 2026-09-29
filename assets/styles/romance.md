@@ -1,10 +1,10 @@
-## 言情风格
+## Phong Cách Lãng Mạn
 
-- **情感递进**：遵循接触→好感→冲突→和解→深入的自然节奏，不急于推进
-- **关系张力**：每个阶段都需要合理的阻碍，阻碍来源要多样（性格、立场、误解、外部压力）
-- **内心描写**：深入角色内心，展现矛盾和挣扎，但避免大段独白式心理分析
-- **互动细节**：用微表情、小动作、不经意的习惯传递情感，比直接告白更有张力
-- **对话节奏**：暧昧期对话留白多，甜蜜期对话轻松自然，冲突期对话尖锐但克制
-- **场景氛围**：环境描写与情感状态呼应，但不过度使用"下雨=悲伤"类刻板隐喻
-- **配角功能**：闺蜜/兄弟角色推动情节发展，不沦为恋爱咨询工具
-- **冲突设计**：误会不能靠"一句话就能解释清楚"维持，矛盾要触及核心价值观差异
+- **Leo thang cảm xúc**: Tuân theo nhịp tự nhiên tiếp xúc → cảm mến → xung đột → hòa giải → thăng hoa, không thúc ép tiến độ
+- **Sức căng trong mối quan hệ**: Mỗi giai đoạn cần có trở ngại hợp lý, nguồn gốc trở ngại phải đa dạng (tính cách, lập trường, hiểu lầm, áp lực bên ngoài)
+- **Khắc họa nội tâm**: Đi sâu vào thế giới nội tâm của nhân vật, thể hiện mâu thuẫn và giằng xé, nhưng tránh những đoạn độc thoại tâm lý dài lê thê
+- **Chi tiết tương tác**: Dùng vi biểu cảm, cử chỉ nhỏ, thói quen vô tình để truyền tải cảm xúc — tạo sức căng hơn lời tỏ tình trực tiếp
+- **Nhịp điệu đối thoại**: Giai đoạn mơ hồ thì đối thoại để nhiều khoảng lặng, giai đoạn ngọt ngào thì đối thoại tự nhiên nhẹ nhàng, giai đoạn xung đột thì đối thoại sắc bén nhưng kìm nén
+- **Không khí cảnh vật**: Mô tả môi trường xung quanh cộng hưởng với trạng thái cảm xúc, nhưng không lạm dụng ẩn dụ rập khuôn kiểu "mưa = buồn"
+- **Chức năng nhân vật phụ**: Vai bạn thân / anh em thúc đẩy cốt truyện phát triển, không bị giảm xuống thành công cụ tư vấn tình yêu
+- **Thiết kế xung đột**: Hiểu lầm không thể được duy trì bằng kiểu "chỉ một câu là giải thích xong", mâu thuẫn phải chạm đến sự khác biệt giá trị cốt lõi

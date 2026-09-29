@@ -12,57 +12,54 @@ import (
 	"github.com/voocel/ainovel-cli/internal/tools"
 )
 
-//go:embed prompts/*.md
+//go:embed prompts
 var promptsFS embed.FS
 
 //go:embed references
 var referencesFS embed.FS
 
-//go:embed styles/*.md
+//go:embed styles
 var stylesFS embed.FS
 
-//go:embed voice.md
+//go:embed voice.md voice_zh.md
 var voiceFS embed.FS
 
-// Prompts 表示嵌入的提示词集合。
+// Prompts biểu thị tập hợp các prompt được nhúng.
 type Prompts struct {
 	ArchitectShort   string
 	ArchitectLong    string
-	Writer           string // 协议模板,含 {{VOICE}} 占位符;终稿经 BuildWriterPrompt 组装
+	Writer           string // Giao thức khuôn mẫu, chứa placeholder {{VOICE}}; bản cuối ráp qua BuildWriterPrompt
 	Editor           string
-	ImportSegment    string // 语义切分：识别章节/卷/附属文本边界
-	ImportAnalyze    string // 连续批次逐章事实提取
-	ImportSynthesize string // 分层综合与卷弧划分（全书 BookSynthesis）
-	ImportRange      string // 长书 Map 阶段连续区间摘要（RangeDigest）
+	ImportSegment    string // Phân tách ngữ nghĩa: nhận diện ranh giới chương/tập/phần phụ
+	ImportAnalyze    string // Trích xuất sự thật từng chương
+	ImportSynthesize string // Tổng hợp phân tầng và phân chia tập/cung toàn sách (BookSynthesis)
+	ImportRange      string // Tóm tắt khoảng liên tục giai đoạn Map (RangeDigest)
 	SimulationSource string
 	SimulationMerge  string
 	RevisionAnalyze  string
 
-	// Arbiter 裁定提示词(LLM-as-function,无 simulation guidance 包装)。
+	// Arbiter tài phán (LLM-as-function, không bọc simulation guidance)
 	ArbiterPlanStart    string
 	ArbiterIntervention string
 	ArbiterFailure      string
 }
 
-// Bundle 表示运行所需的静态资源集合。
+// Bundle biểu thị tập hợp tài nguyên tĩnh cần thiết khi chạy.
 type Bundle struct {
 	References tools.References
 	Prompts    Prompts
 	Styles     map[string]string
-	Voice      string // 写作标准(文风层),已按三层覆盖组装;见 docs/voice-layer.md
+	Voice      string // Tiêu chuẩn hành văn, ráp qua 3 tầng ghi đè
+	Language   string // "vi" hoặc "zh"
 }
 
-// LoadOptions 声明文风层的覆盖来源。空目录 = 跳过该层(eval 传零值以获得
-// 纯内置的确定性 baseline,不受使用者本机覆盖污染)。
-//
-// 路径语义:BookStyleDir 绑定书目录(outputDir)而非 cwd——文风随书走,换目录
-// 恢复同一本书加载同一份文风。注意与 rules 层不同(rules 的项目级绑定 cwd)。
+// LoadOptions khai báo nguồn ghi đè tầng văn phong.
 type LoadOptions struct {
 	BookStyleDir string // <outputDir>/style
 	HomeStyleDir string // ~/.ainovel/style
 }
 
-// DefaultLoadOptions 根据书目录构造生产环境的覆盖来源。
+// DefaultLoadOptions khởi tạo nguồn ghi đè dựa trên thư mục sách.
 func DefaultLoadOptions(outputDir string) LoadOptions {
 	var opts LoadOptions
 	if outputDir != "" {
@@ -74,24 +71,29 @@ func DefaultLoadOptions(outputDir string) LoadOptions {
 	return opts
 }
 
-// Load 返回指定风格对应的资源集合。文风资产(voice / anti-ai-tone / styles /
-// 题材 style-references)按 opts 做三层覆盖:内置 < 全局 < 本书。
+// Load trả về tài nguyên tương ứng với style và ngôn ngữ truyện (mặc định vi).
 func Load(style string, opts LoadOptions) Bundle {
+	return LoadWithLanguage("vi", style, opts)
+}
+
+// LoadWithLanguage nạp tài nguyên theo ngôn ngữ ("vi" hoặc "zh") và phong cách chỉ định.
+func LoadWithLanguage(language, style string, opts LoadOptions) Bundle {
+	lang := strings.ToLower(strings.TrimSpace(language))
+	if lang != "zh" && lang != "chinese" && lang != "cn" {
+		lang = "vi"
+	}
 	return Bundle{
-		References: loadReferences(style, opts),
-		Prompts:    loadPrompts(),
-		Styles:     loadStyles(opts),
-		Voice:      resolveAppendable(mustRead(voiceFS, "voice.md"), "voice.md", opts),
+		References: loadReferences(lang, style, opts),
+		Prompts:    loadPrompts(lang),
+		Styles:     loadStyles(lang, opts),
+		Voice:      resolveAppendable(loadVoice(lang), "voice.md", opts),
+		Language:   lang,
 	}
 }
 
-// voicePlaceholder 是 writer 协议模板中文风段的原位插入点。
 const voicePlaceholder = "{{VOICE}}"
 
-// BuildWriterPrompt 是 writer 系统提示词的唯一组装入口,生产 / eval / 测试共用,
-// 保证 A/B 两臂走同一路径(先例教训见 WithSimulationGuidance)。
-// writerPrompt 为含占位符的协议模板(可以已带 simulation guidance 后缀,占位符在
-// 前缀内,替换不受影响);style 为空时不追加。
+// BuildWriterPrompt là cổng ráp prompt duy nhất của Writer.
 func BuildWriterPrompt(writerPrompt, voice, style string) string {
 	out := strings.Replace(writerPrompt, voicePlaceholder, strings.TrimSpace(voice), 1)
 	if style != "" {
@@ -100,47 +102,22 @@ func BuildWriterPrompt(writerPrompt, voice, style string) string {
 	return out
 }
 
-// languageVietnameseDirective là chỉ dẫn ngôn ngữ gắn vào prompt các vai trò
-// chính khi cấu hình language=vi. Prompts gốc viết bằng tiếng Trung nên
-// chế độ zh không cần gắn thêm gì.
-const languageVietnameseDirective = `## Ngôn ngữ sáng tác
-
-Toàn bộ sản phẩm của vai trò này — tên truyện, tóm tắt, tiền đề, dàn ý, hồ sơ nhân vật, quy tắc thế giới, bản nháp và chương hoàn chỉnh — PHẢI viết bằng Tiếng Việt tự nhiên, mượt mà, đúng quy chuẩn trong voice. Không lẫn tiếng Trung hay tiếng Anh trừ tên riêng đã Việt hóa. Tên tool, tên file và checkpoint hệ thống giữ nguyên.`
-
-// ApplyLanguage gắn chỉ dẫn ngôn ngữ sáng tác vào prompt Architect/Writer/Editor.
-// lang "vi" (mặc định, chuỗi trống cũng tính là vi): bắt buộc sản phẩm bằng Tiếng Việt.
-// lang "zh": giữ nguyên prompt gốc. Gọi một lần sau Load, trước khi chạy engine.
-func (b *Bundle) ApplyLanguage(lang string) {
-	if strings.TrimSpace(lang) != "" && strings.TrimSpace(lang) != "vi" {
-		return
-	}
-	b.Prompts.ArchitectShort += "\n\n" + languageVietnameseDirective
-	b.Prompts.ArchitectLong += "\n\n" + languageVietnameseDirective
-	b.Prompts.Writer += "\n\n" + languageVietnameseDirective
-	b.Prompts.Editor += "\n\n" + languageVietnameseDirective
-}
-
-// OverrideVoice 用 raw 整体替换已组装的文风段(eval 做 voice A/B 用)。
-// variant 与 baseline 仍经 BuildWriterPrompt 同一路径组装。
+// OverrideVoice thay thế đoạn văn phong đã ráp (phục vụ thử nghiệm A/B).
 func (b *Bundle) OverrideVoice(raw string) {
 	b.Voice = raw
 }
 
-// resolveAppendable 追加语义的三层组装:内置保留,全局/本书作为标记段追加。
-// 无覆盖时返回内置原文(逐字节不变——文风层验收标准之一)。
-// "后者优先"是给 LLM 的优先级指示而非机械保证;需要机械保证的约束走 rules 层。
 func resolveAppendable(builtin, name string, opts LoadOptions) string {
 	out := builtin
 	if s := readOverride(opts.HomeStyleDir, name); s != "" {
-		out += "\n\n## 用户全局文风覆盖（以下要求优先于项目默认）\n\n" + s
+		out += "\n\n## Người dùng ghi đè văn phong toàn cục (User Global Style Override)\n\n" + s
 	}
 	if s := readOverride(opts.BookStyleDir, name); s != "" {
-		out += "\n\n## 本书文风覆盖（以下要求优先于以上全部）\n\n" + s
+		out += "\n\n## Ghi đè văn phong cuốn sách này (Book Style Override)\n\n" + s
 	}
 	return out
 }
 
-// readOverride 读取覆盖目录下的单个文件;目录为空、文件不存在或为空白一律返回 ""。
 func readOverride(dir, name string) string {
 	if dir == "" {
 		return ""
@@ -152,37 +129,58 @@ func readOverride(dir, name string) string {
 	return strings.TrimSpace(string(data))
 }
 
-// styleNameRe 校验用户自定义 style 文件名(不含扩展名),拒绝路径字符。
 var styleNameRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 
-func loadReferences(style string, opts LoadOptions) tools.References {
+func loadVoice(language string) string {
+	if language == "zh" {
+		if data, err := voiceFS.ReadFile("voice_zh.md"); err == nil {
+			return string(data)
+		}
+	}
+	return mustRead(voiceFS, "voice.md")
+}
+
+func loadReferences(language, style string, opts LoadOptions) tools.References {
 	if style == "" {
 		style = "default"
 	}
+	prefix := "references/"
+	if language == "zh" {
+		prefix = "references/zh/"
+	}
+	readRef := func(rel string) string {
+		if data, err := referencesFS.ReadFile(prefix + rel); err == nil {
+			return string(data)
+		}
+		return mustRead(referencesFS, "references/"+rel)
+	}
+
 	refs := tools.References{
-		ChapterGuide:      mustRead(referencesFS, "references/chapter-guide.md"),
-		HookTechniques:    mustRead(referencesFS, "references/hook-techniques.md"),
-		QualityChecklist:  mustRead(referencesFS, "references/quality-checklist.md"),
-		OutlineTemplate:   mustRead(referencesFS, "references/outline-template.md"),
-		CharacterTemplate: mustRead(referencesFS, "references/character-template.md"),
-		ChapterTemplate:   mustRead(referencesFS, "references/chapter-template.md"),
-		Consistency:       mustRead(referencesFS, "references/consistency.md"),
-		ContentExpansion:  mustRead(referencesFS, "references/content-expansion.md"),
-		DialogueWriting:   mustRead(referencesFS, "references/dialogue-writing.md"),
-		LongformPlanning:  mustRead(referencesFS, "references/longform-planning.md"),
-		Differentiation:   mustRead(referencesFS, "references/differentiation.md"),
-		AntiAITone:        resolveAppendable(mustRead(referencesFS, "references/anti-ai-tone.md"), "anti-ai-tone.md", opts),
+		ChapterGuide:      readRef("chapter-guide.md"),
+		HookTechniques:    readRef("hook-techniques.md"),
+		QualityChecklist:  readRef("quality-checklist.md"),
+		OutlineTemplate:   readRef("outline-template.md"),
+		CharacterTemplate: readRef("character-template.md"),
+		ChapterTemplate:   readRef("chapter-template.md"),
+		Consistency:       readRef("consistency.md"),
+		ContentExpansion:  readRef("content-expansion.md"),
+		DialogueWriting:   readRef("dialogue-writing.md"),
+		LongformPlanning:  readRef("longform-planning.md"),
+		Differentiation:   readRef("differentiation.md"),
+		AntiAITone:        resolveAppendable(readRef("anti-ai-tone.md"), "anti-ai-tone.md", opts),
 	}
 	if style != "" && style != "default" {
-		genreDir := "references/genres/" + style + "/"
+		genreDir := prefix + "genres/" + style + "/"
 		if data, err := referencesFS.ReadFile(genreDir + "style-references.md"); err == nil {
+			refs.StyleReference = string(data)
+		} else if data, err := referencesFS.ReadFile("references/genres/" + style + "/style-references.md"); err == nil {
 			refs.StyleReference = string(data)
 		}
 		if data, err := referencesFS.ReadFile(genreDir + "arc-templates.md"); err == nil {
 			refs.ArcTemplates = string(data)
+		} else if data, err := referencesFS.ReadFile("references/genres/" + style + "/arc-templates.md"); err == nil {
+			refs.ArcTemplates = string(data)
 		}
-		// 题材风格参考:同名整文件替换(本书 > 全局);自定义 style 无内置参考时
-		// 允许仅由覆盖提供,不回退 default(错误的参照比没有更糟)。
 		relPath := filepath.Join("genres", style, "style-references.md")
 		for _, dir := range []string{opts.HomeStyleDir, opts.BookStyleDir} {
 			if s := readOverride(dir, relPath); s != "" {
@@ -193,43 +191,61 @@ func loadReferences(style string, opts LoadOptions) tools.References {
 	return refs
 }
 
-func loadPrompts() Prompts {
-	return Prompts{
-		ArchitectShort:   WithSimulationGuidance(mustRead(promptsFS, "prompts/architect-short.md"), "architect"),
-		ArchitectLong:    WithSimulationGuidance(mustRead(promptsFS, "prompts/architect-long.md"), "architect"),
-		Writer:           WithSimulationGuidance(mustRead(promptsFS, "prompts/writer.md"), "writer"),
-		Editor:           WithSimulationGuidance(mustRead(promptsFS, "prompts/editor.md"), "editor"),
-		ImportSegment:    mustRead(promptsFS, "prompts/import-segment.md"),
-		ImportAnalyze:    mustRead(promptsFS, "prompts/import-analyze.md"),
-		ImportSynthesize: mustRead(promptsFS, "prompts/import-synthesize.md"),
-		ImportRange:      mustRead(promptsFS, "prompts/import-range.md"),
-		SimulationSource: mustRead(promptsFS, "prompts/simulation-source.md"),
-		SimulationMerge:  mustRead(promptsFS, "prompts/simulation-merge.md"),
-		RevisionAnalyze:  mustRead(promptsFS, "prompts/revision-analyze.md"),
+func loadPrompts(languages ...string) Prompts {
+	language := "vi"
+	if len(languages) > 0 && languages[0] != "" {
+		language = languages[0]
+	}
+	prefix := "prompts/"
+	if language == "zh" {
+		prefix = "prompts/zh/"
+	}
+	readPrompt := func(filename string) string {
+		if data, err := promptsFS.ReadFile(prefix + filename); err == nil {
+			return string(data)
+		}
+		return mustRead(promptsFS, "prompts/"+filename)
+	}
 
-		ArbiterPlanStart:    mustRead(promptsFS, "prompts/arbiter-plan-start.md"),
-		ArbiterIntervention: mustRead(promptsFS, "prompts/arbiter-intervention.md"),
-		ArbiterFailure:      mustRead(promptsFS, "prompts/arbiter-failure.md"),
+	return Prompts{
+		ArchitectShort:   WithSimulationGuidance(readPrompt("architect-short.md"), "architect", language),
+		ArchitectLong:    WithSimulationGuidance(readPrompt("architect-long.md"), "architect", language),
+		Writer:           WithSimulationGuidance(readPrompt("writer.md"), "writer", language),
+		Editor:           WithSimulationGuidance(readPrompt("editor.md"), "editor", language),
+		ImportSegment:    readPrompt("import-segment.md"),
+		ImportAnalyze:    readPrompt("import-analyze.md"),
+		ImportSynthesize: readPrompt("import-synthesize.md"),
+		ImportRange:      readPrompt("import-range.md"),
+		SimulationSource: readPrompt("simulation-source.md"),
+		SimulationMerge:  readPrompt("simulation-merge.md"),
+		RevisionAnalyze:  readPrompt("revision-analyze.md"),
+
+		ArbiterPlanStart:    readPrompt("arbiter-plan-start.md"),
+		ArbiterIntervention: readPrompt("arbiter-intervention.md"),
+		ArbiterFailure:      readPrompt("arbiter-failure.md"),
 	}
 }
 
-// WithSimulationGuidance 给核心 prompt 追加仿写画像指引。导出供 eval 等外部场景做
-// variant 覆盖时复用，保证覆盖后的 prompt 与 Load 产出的 baseline 等价（同一包装路径）。
-func WithSimulationGuidance(prompt, role string) string {
-	return prompt + "\n\n" + strings.ReplaceAll(simulationGuidance, "{{role}}", role)
+// WithSimulationGuidance nối thêm hướng dẫn mô phỏng văn phong theo vai trò và ngôn ngữ.
+func WithSimulationGuidance(prompt, role string, language ...string) string {
+	lang := "vi"
+	if len(language) > 0 && language[0] == "zh" {
+		lang = "zh"
+	}
+	guidance := simulationGuidanceVI
+	if lang == "zh" {
+		guidance = simulationGuidanceZH
+	}
+	return prompt + "\n\n" + strings.ReplaceAll(guidance, "{{role}}", role)
 }
 
-// OverridePrompt 用 raw 覆盖 bundle 中指定 prompt 文件对应的角色提示词，并走与 Load
-// 完全相同的 WithSimulationGuidance 包装——eval 做 A/B 时只需调它，不必复制包装逻辑，
-// 否则 baseline 带仿写画像后缀、variant 不带，A/B 不等价。file 为 prompt 文件名。
-// 注意:覆盖 writer.md 时 raw 须自带 {{VOICE}} 占位符(协议模板语义);只想 A/B 文风
-// 用 OverrideVoice。
+// OverridePrompt ghi đè prompt của vai trò cụ thể.
 func (b *Bundle) OverridePrompt(file, raw string) error {
 	role, ok := promptRole[file]
 	if !ok {
-		return fmt.Errorf("不支持覆盖的 prompt 文件: %s（仅核心提示词可覆盖）", file)
+		return fmt.Errorf("không hỗ trợ ghi đè file prompt: %s (chỉ có thể ghi đè prompt vai trò cốt lõi)", file)
 	}
-	wrapped := WithSimulationGuidance(raw, role)
+	wrapped := WithSimulationGuidance(raw, role, b.Language)
 	switch file {
 	case "architect-short.md":
 		b.Prompts.ArchitectShort = wrapped
@@ -243,7 +259,6 @@ func (b *Bundle) OverridePrompt(file, raw string) error {
 	return nil
 }
 
-// promptRole 把核心 prompt 文件名映射到 simulation guidance 的角色占位符。
 var promptRole = map[string]string{
 	"architect-short.md": "architect",
 	"architect-long.md":  "architect",
@@ -251,30 +266,41 @@ var promptRole = map[string]string{
 	"editor.md":          "editor",
 }
 
-const simulationGuidance = `## 仿写画像
+const simulationGuidanceVI = `## Hồ sơ mô phỏng văn phong (Simulation Profile)
+
+Khi trong planning_memory hoặc working_memory của novel_context xuất hiện simulation_profile, bắt buộc phải xem đó là ràng buộc định hướng mô phỏng của tác phẩm hiện tại. {{role}} cần đọc kỹ các trường style, lexicon, plot_design, hook_design, pacing_density, reader_engagement và role_guidance.
+
+Nguyên tắc sử dụng: Học hỏi cấu trúc, nhịp điệu, móc câu, cách giải phóng thông tin và thủ pháp cuốn hút độc giả; tuyệt đối không sao chép câu văn nguyên văn, tên nhân vật, địa danh, thiết lập độc quyền hay phân đoạn cố định. Nếu simulation_profile xung đột với yêu cầu rõ ràng của người dùng, ưu tiên tuân thủ yêu cầu của người dùng.`
+
+const simulationGuidanceZH = `## 仿写画像
 
 当 novel_context 的 planning_memory 或 working_memory 中存在 simulation_profile 时，必须把它视为当前作品的仿写方向约束。{{role}} 应读取其中的 style、lexicon、plot_design、hook_design、pacing_density、reader_engagement 和 role_guidance。
 
 使用原则：借鉴结构、节奏、钩子、信息释放和吸引读者的手法；不要复制原文句子、人物、地名、专有设定或固定桥段。若 simulation_profile 与用户显式要求冲突，优先服从用户要求。`
 
-// loadStyles 枚举内置风格预设,再按 全局 → 本书 顺序叠加覆盖目录下 styles/*.md
-// (同名整文件替换,新文件名即新增风格;风格是整体声音,不做合并)。
-func loadStyles(opts LoadOptions) map[string]string {
+func loadStyles(language string, opts LoadOptions) map[string]string {
 	styles := make(map[string]string)
-	entries, err := stylesFS.ReadDir("styles")
-	if err != nil {
-		return styles
+	prefix := "styles"
+	if language == "zh" {
+		prefix = "styles/zh"
 	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
+	entries, err := stylesFS.ReadDir(prefix)
+	if err != nil {
+		prefix = "styles"
+		entries, err = stylesFS.ReadDir(prefix)
+	}
+	if err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				continue
+			}
+			name := strings.TrimSuffix(e.Name(), ".md")
+			data, err := stylesFS.ReadFile(prefix + "/" + e.Name())
+			if err != nil {
+				continue
+			}
+			styles[name] = string(data)
 		}
-		name := strings.TrimSuffix(e.Name(), ".md")
-		data, err := stylesFS.ReadFile("styles/" + e.Name())
-		if err != nil {
-			continue
-		}
-		styles[name] = string(data)
 	}
 	for _, dir := range []string{opts.HomeStyleDir, opts.BookStyleDir} {
 		overlayStyles(styles, dir)
@@ -282,7 +308,6 @@ func loadStyles(opts LoadOptions) map[string]string {
 	return styles
 }
 
-// overlayStyles 把 <dir>/styles/*.md 叠进 styles 集合;非法文件名跳过并告警。
 func overlayStyles(styles map[string]string, dir string) {
 	if dir == "" {
 		return
@@ -297,7 +322,7 @@ func overlayStyles(styles map[string]string, dir string) {
 		}
 		name := strings.TrimSuffix(e.Name(), ".md")
 		if !styleNameRe.MatchString(name) {
-			slog.Warn("忽略非法风格文件名", "module", "assets", "dir", dir, "file", e.Name())
+			slog.Warn("Bỏ qua tên file style không hợp lệ", "module", "assets", "dir", dir, "file", e.Name())
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(dir, "styles", e.Name()))

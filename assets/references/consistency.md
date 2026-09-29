@@ -1,40 +1,40 @@
-# 连贯性保证机制
+# Cơ Chế Đảm Bảo Tính Nhất Quán
 
-为确保长时间创作的故事连贯性：
+Để đảm bảo tính nhất quán của câu chuyện trong quá trình sáng tác dài hơi:
 
-## 写前必读
+## Đọc Trước Khi Viết
 
-每次开始写新章节前：
-1. 阅读 `00-大纲.md` 中所有已完成章节的摘要
-2. 读取上一章文件，了解当前悬念
-3. 检查人物状态（位置、情绪、关系）
+Trước mỗi lần bắt đầu viết chương mới:
+1. Đọc tóm tắt tất cả các chương đã hoàn thành trong `00-outline.md`
+2. Đọc file chương trước để nắm bắt điểm móc hiện tại
+3. Kiểm tra trạng thái nhân vật (vị trí, cảm xúc, mối quan hệ)
 
-## 穿针引线
+## Kết Nối Mạch Truyện
 
-在新章节中：
-- 呼应前文埋下的伏笔和线索
-- 提及之前发生的事件（自然融入）
-- 让人物行为与之前保持一致
+Trong chương mới:
+- Hồi đáp các phục bút và manh mối đã được cài đặt trước
+- Đề cập đến các sự kiện đã xảy ra trước đó (lồng ghép tự nhiên)
+- Giữ cho hành vi nhân vật nhất quán với những gì đã xây dựng
 
-## 人物状态跟踪
+## Theo Dõi Trạng Thái Nhân Vật
 
-注意人物在各章节中的变化和成长：
-- 位置变化（人在哪里）
-- 情绪状态（当前心情）
-- 关系变化（与其他角色关系）
-- 能力变化（获得新技能/信息）
+Chú ý đến sự thay đổi và phát triển của nhân vật qua các chương:
+- Thay đổi vị trí (nhân vật đang ở đâu)
+- Trạng thái cảm xúc (tâm trạng hiện tại)
+- Thay đổi mối quan hệ (mối quan hệ với các nhân vật khác)
+- Thay đổi năng lực (đạt được kỹ năng/thông tin mới)
 
-## 悬念线延续
+## Duy Trì Điểm Móc
 
-确保主线悬念逐步推进：
-- 每章至少回应一个旧悬念
-- 提出新悬念或升级现有悬念
-- 不要遗忘任何未解的悬念
+Đảm bảo điểm móc cốt truyện chính tiến triển từng bước:
+- Mỗi chương ít nhất hồi đáp một điểm móc cũ
+- Đưa ra điểm móc mới hoặc leo thang căng thẳng với điểm móc hiện có
+- Không bỏ quên bất kỳ điểm móc nào chưa được giải quyết
 
-## 一致性检查清单
+## Danh Sách Kiểm Tra Tính Nhất Quán
 
-- [ ] 人物行为符合其性格设定
-- [ ] 前后伏笔有呼应，逻辑闭环
-- [ ] 高潮低谷分布合理，节奏恰当
-- [ ] 时间线连贯（没有时间跳跃错误）
-- [ ] 场景转换自然（没有凭空出现）
+- [ ] Hành vi nhân vật phù hợp với thiết lập tính cách của họ
+- [ ] Các phục bút trước sau có hồi đáp, logic khép vòng
+- [ ] Phân bố cao trào và thấp trào hợp lý, nhịp truyện phù hợp
+- [ ] Dòng thời gian mạch lạc (không có lỗi nhảy thời gian)
+- [ ] Chuyển cảnh tự nhiên (không xuất hiện đột ngột vô lý)

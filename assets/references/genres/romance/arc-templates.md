@@ -1,39 +1,39 @@
-## 言情/情感 弧型参考
+## Tham Khảo Cung Truyện Ngôn Tình / Cảm Xúc
 
-以下弧型适用于言情、情感、青春、都市爱情类长篇。根据具体设定自由组合，不必全部使用。
+Các cung truyện dưới đây phù hợp với truyện dài thể loại ngôn tình, cảm xúc, thanh xuân, tình yêu đô thị. Có thể kết hợp tự do tùy theo bối cảnh cụ thể, không cần sử dụng tất cả.
 
-### 初遇/重逢弧（8-12 章）
-2-3 章各自日常（建立人物独立性） → 3-5 章关键相遇+被迫接触（制造摩擦和第一印象） → 2-3 章初步了解+微妙转变
-- 第一印象最好不是一见钟情，而是误解或冲突
-- 被迫接触的设定要自然（合作、邻居、同事），不是刻意巧合
-- 弧末建立"这个人跟我想的不一样"的认知转变
+### Cung Gặp Gỡ / Tái Ngộ (8-12 chương)
+2-3 chương cuộc sống thường ngày của từng người (xây dựng tính độc lập của nhân vật) → 3-5 chương cuộc gặp gỡ quan trọng + tiếp xúc bắt buộc (tạo ma sát và ấn tượng đầu tiên) → 2-3 chương bước đầu tìm hiểu + chuyển biến tinh tế
+- Ấn tượng đầu tiên tốt nhất không phải là yêu từ cái nhìn đầu tiên, mà là hiểu lầm hoặc xung đột
+- Tình huống tiếp xúc bắt buộc phải tự nhiên (hợp tác, hàng xóm, đồng nghiệp), không phải trùng hợp cố ý
+- Cuối cung xây dựng nhận thức chuyển biến "người này không như mình nghĩ"
 
-### 暧昧升温弧（10-15 章）
-3-4 章日常互动加深（共同经历、互相帮助） → 3-5 章关键事件催化（危机、误会、第三方刺激） → 2-3 章暧昧高峰（差点表白/亲密时刻/被打断）→ 1-2 章关系确认或退缩
-- 这是最需要细节的弧，微表情、小动作、不经意的关注比大段心理独白有效
-- 升温不是线性的，中间要有退缩和试探
-- 第三方角色（前任、追求者、误解制造者）的介入要有独立动机
+### Cung Leo Thang Căng Thẳng Tình Cảm (10-15 chương)
+3-4 chương tương tác thường ngày sâu hơn (trải nghiệm chung, giúp đỡ lẫn nhau) → 3-5 chương sự kiện quan trọng làm chất xúc tác (khủng hoảng, hiểu lầm, kích thích từ bên thứ ba) → 2-3 chương đỉnh điểm mơ hồ (suýt tỏ tình / khoảnh khắc thân mật / bị gián đoạn) → 1-2 chương xác nhận hoặc rút lui
+- Đây là cung cần nhiều chi tiết nhất — vi biểu cảm, cử chỉ nhỏ, sự quan tâm vô tình hiệu quả hơn những đoạn độc thoại nội tâm dài
+- Leo thang căng thẳng không tuyến tính, ở giữa phải có sự rút lui và thăm dò
+- Nhân vật bên thứ ba (người cũ, kẻ theo đuổi, người gây hiểu lầm) tham gia phải có động cơ độc lập
 
-### 误会冲突弧（8-12 章）
-2-3 章矛盾种子（价值观差异/秘密/外部压力） → 2-3 章冲突爆发（不是"说开就好"的误解） → 2-3 章各自消化+外部事件推动 → 1-2 章和解契机（但不完全恢复原状）
-- 冲突必须触及核心价值观差异，不是"你为什么不接我电话"这种
-- 和解不是一方完全认错，而是双方都有成长和让步
-- 冲突后关系进入新阶段，不是简单回到冲突前
+### Cung Hiểu Lầm Xung Đột (8-12 chương)
+2-3 chương hạt giống mâu thuẫn (khác biệt quan điểm / bí mật / áp lực bên ngoài) → 2-3 chương xung đột bùng nổ (không phải hiểu lầm kiểu "nói ra là xong") → 2-3 chương mỗi người tự tiêu hóa + sự kiện bên ngoài thúc đẩy → 1-2 chương cơ hội hòa giải (nhưng không hoàn toàn trở về trạng thái ban đầu)
+- Xung đột phải chạm đến sự khác biệt giá trị cốt lõi, không phải kiểu "sao anh không bắt máy của em"
+- Hòa giải không phải một bên hoàn toàn nhận lỗi, mà cả hai đều có sự trưởng thành và nhượng bộ
+- Sau xung đột quan hệ bước vào giai đoạn mới, không đơn giản quay về trước xung đột
 
-### 分离/考验弧（10-15 章）
-2-3 章被迫分离的原因（异地、家庭反对、事业选择） → 5-8 章各自面对挑战（独立成长线+思念线交替） → 2-3 章重新相遇+关系重新定义
-- 分离期间双方都要有独立的成长线，不能只是"想念对方"
-- 思念的表达要克制，通过具体行为（保留习惯、对比新旧关系）而非心理独白
-- 重逢不是回到过去，而是两个成长了的人重新选择
+### Cung Chia Ly / Thử Thách (10-15 chương)
+2-3 chương nguyên nhân chia ly bắt buộc (dị địa, gia đình phản đối, lựa chọn sự nghiệp) → 5-8 chương mỗi người đối mặt thử thách (tuyến trưởng thành độc lập + tuyến nhớ nhung xen kẽ) → 2-3 chương gặp lại + định nghĩa lại mối quan hệ
+- Trong thời gian chia ly cả hai đều phải có tuyến trưởng thành độc lập, không chỉ là "nhớ đối phương"
+- Biểu đạt nỗi nhớ cần kìm nén, thông qua hành vi cụ thể (giữ thói quen, so sánh mối quan hệ cũ mới) thay vì độc thoại nội tâm
+- Tái ngộ không phải quay về quá khứ, mà là hai người đã trưởng thành cùng nhau lựa chọn lại
 
-### 危机共渡弧（8-12 章）
-2-3 章外部危机降临（家庭变故、事业危机、健康问题） → 3-5 章共同面对（展示关系的深度和韧性） → 2-3 章危机解决+关系升华
-- 危机要真实且有重量，不是为了制造狗血
-- 共同面对的过程中暴露彼此更真实的一面
-- 适合放在关系中期，用外部压力检验内部连接
+### Cung Cùng Vượt Khủng Hoảng (8-12 chương)
+2-3 chương khủng hoảng bên ngoài ập đến (biến cố gia đình, khủng hoảng sự nghiệp, vấn đề sức khỏe) → 3-5 chương cùng nhau đối mặt (thể hiện chiều sâu và sức bền của mối quan hệ) → 2-3 chương khủng hoảng giải quyết + mối quan hệ thăng hoa
+- Khủng hoảng phải thực và có trọng lượng, không phải để tạo drama rẻ tiền
+- Trong quá trình cùng đối mặt bộc lộ mặt thật hơn của mỗi người
+- Phù hợp đặt vào giai đoạn giữa mối quan hệ, dùng áp lực bên ngoài kiểm tra kết nối bên trong
 
-### 日常/甜蜜弧（5-8 章）
-日常相处/朋友圈互动/小事件小惊喜/伏笔布局
-- 甜蜜不是无冲突，而是冲突的体量小、解决快
-- 用日常细节巩固读者对这段关系的投入
-- 为下一个大冲突弧蓄势——越甜蜜，后面的撕裂越痛
+### Cung Thường Nhật / Ngọt Ngào (5-8 chương)
+Cuộc sống thường ngày / tương tác trong vòng bạn bè / sự kiện nhỏ bất ngờ nhỏ / bố trí phục bút
+- Ngọt ngào không phải không có xung đột, mà là xung đột nhỏ và giải quyết nhanh
+- Dùng chi tiết thường ngày củng cố sự đầu tư của độc giả vào mối quan hệ này
+- Tích lũy thế năng cho cung xung đột lớn tiếp theo — càng ngọt ngào, sự đổ vỡ sau đó càng đau
