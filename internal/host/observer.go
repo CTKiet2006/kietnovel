@@ -36,23 +36,23 @@ func errorKind(err error, msg string) string {
 		return "tool_validation"
 	case strings.Contains(lower, "too many concurrent requests"):
 		return "overloaded"
-	// providerError 会把 litellm 的结构化类型附在文本末尾。
-	// HTTP/2 INTERNAL_ERROR 本身没有可分类关键词，保留这个显式 network 标记即可。
+	// providerError appends litellm's structured type to the end of the text.
+	// HTTP/2 INTERNAL_ERROR has no classifiable keyword of its own, so keeping this explicit network marker is enough.
 	case strings.Contains(lower, "[network,"):
 		return "network"
 	}
 	return ""
 }
 
-// 单调递增的事件 ID 计数器；配合时间戳生成稳定 ID。
+// A monotonically increasing event ID counter; combined with a timestamp it yields stable IDs.
 var eventIDCounter uint64
 
 func nextEventID() string {
 	return fmt.Sprintf("e%d", atomic.AddUint64(&eventIDCounter, 1))
 }
 
-// activeCall 记录一次正在进行的调用的 ID、起点时间与 summary。
-// summary 在完成事件时回填进 finish Event，保证 replay（runtime queue）能还原行内容。
+// activeCall records the ID, start time and summary of one in-flight call.
+// The summary is back-filled into the finish Event so that a replay (from the runtime queue) can restore the row content.
 type activeCall struct {
 	id      string
 	start   time.Time
@@ -60,8 +60,8 @@ type activeCall struct {
 	depth   int
 }
 
-// observer 把 Engine 派发与 Worker 进度投影到 Host 的输出通道。
-// 它是纯观察者,不参与任何控制决策。
+// observer projects Engine dispatches and Worker progress onto the Host's output channel.
+// It is a pure observer and takes part in no control decision.
 type observer struct {
 	emitEv  func(Event)
 	emitD   func(string)
@@ -81,8 +81,8 @@ type observer struct {
 	streamLastByte      byte                       // 最近一次流式输出的末字节（用于精确补齐换行）
 }
 
-// agentExtractor 记录某个 agent 当前正在抽取的工具名与抽取器实例。
-// 工具名用于检测"新的工具调用开始了"，避免缓存被上一轮残留污染。
+// agentExtractor records the tool name currently being extracted for a given agent, plus the extractor instance.
+// The tool name is used to detect "a new tool call has started", so the cache is not polluted by leftovers from the previous round.
 type agentExtractor struct {
 	tool       string
 	ext        *jsonFieldExtractor
@@ -115,15 +115,15 @@ func newObserver(s *storepkg.Store, emitEv func(Event), emitD func(string), emit
 	}
 }
 
-// ── Engine 直驱入口 ──
+// ── Engine direct-drive entry points ──
 //
-// Engine 直接运行 Worker，事件来源分为两条:
-//  1. dispatchStart/dispatchFinish —— Engine 在派发边界直接调用(DISPATCH 行)
-//  2. workerProgress —— Worker 的进度中继(ctx ToolProgress)，
-//     由 handleToolUpdate 统一处理 TOOL/流式正文/thinking/retry/context
-//     (TOOL 行/流式正文/thinking/retry/context)。
+// The Engine runs Workers directly, and events come from two sources:
+//  1. dispatchStart/dispatchFinish - called by the Engine right at the dispatch boundary (DISPATCH rows)
+//  2. workerProgress - the Worker's progress relay (ctx ToolProgress),
+//     handled uniformly by handleToolUpdate: TOOL / streamed body / thinking / retry / context
+//     (TOOL rows / streamed body / thinking / retry / context).
 
-// dispatchStart 记录一次 Worker 派发开始并发 DISPATCH 行。
+// dispatchStart records the start of a Worker dispatch and emits the DISPATCH row.
 func (o *observer) dispatchStart(agent, task, reason string) {
 	summary := dispatchSummary(agent, task)
 	o.updateAgent(agent, func(a *agentState) {
@@ -144,8 +144,8 @@ func (o *observer) dispatchStart(agent, task, reason string) {
 	})
 }
 
-// dispatchFinish 把 DISPATCH 行落成完成态并复位 Worker 状态;
-// 清理该 Worker 名下未结束的 MODEL / TOOL 行。
+// dispatchFinish settles the DISPATCH row into its finished state and resets the Worker state;
+// it cleans up the unfinished MODEL / TOOL rows under that Worker.
 func (o *observer) dispatchFinish(agent string, runErr error) {
 	o.updateAgent(agent, func(a *agentState) {
 		a.state = "idle"
@@ -168,7 +168,7 @@ func (o *observer) dispatchFinish(agent string, runErr error) {
 	o.streamClear()
 }
 
-// workerProgress 把 Worker 进度中继适配为既有的 ToolExecUpdate 处理。
+// workerProgress adapts the Worker progress relay into the existing ToolExecUpdate handling.
 func (o *observer) workerProgress(p agentcore.ProgressPayload) {
 	payload := p
 	o.handleToolUpdate(agentcore.Event{Type: agentcore.EventToolExecUpdate, Progress: &payload})
@@ -196,13 +196,13 @@ func (o *observer) retryEventID(scope string, attempt int) string {
 	return o.retryEvents[scope]
 }
 
-// emitAndLog 用于调用类事件的"开始"态：发给 TUI 但不写入 runtime queue，
-// 避免 replay 时"开始一行、完成又一行"重复。slog 由 host.emitEvent 统一记录。
+// emitAndLog serves the "start" state of call events: it sends to the TUI but does not write to the runtime queue,
+// avoiding a "start row plus finish row" duplication on replay. slog is logged uniformly by host.emitEvent.
 func (o *observer) emitAndLog(ev Event) {
 	o.emitEv(ev)
 }
 
-// persistEvent 把事件写入 runtime queue（slog 由 host.emitEvent 统一记录）。
+// persistEvent writes the event to the runtime queue (slog is logged uniformly by host.emitEvent).
 func (o *observer) persistEvent(ev Event) {
 	if o.store == nil || o.store.Runtime == nil {
 		return

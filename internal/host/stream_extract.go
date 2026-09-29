@@ -5,19 +5,19 @@ import (
 	"unicode/utf8"
 )
 
-// toolDisplays 配置每个工具在流面板上的展示策略。不在此表中的工具不参与流式
-// 渲染（observer 直接丢弃 DeltaToolCall）。
+// toolDisplays configures how each tool is presented on the stream panel. Tools not in this table take no part
+// in streaming rendering (the observer drops their DeltaToolCall outright).
 //
-// 通用模式（nakedKey 为空）：tokenizer 把 LLM 输出的 args JSON 渲染成缩进式
-// "key: value" 文本，嵌套对象/数组按层级缩进，string/number/bool 流式输出。
-// 与 schema 完全解耦——LLM 多输出一个字段就在面板上多一行，不需要任何代码改动。
+// Generic mode (nakedKey empty): the tokenizer renders the args JSON the LLM emits as indented
+// "key: value" text, with nested objects/arrays indented per level and string/number/bool streamed out.
+// Fully decoupled from the schema - one extra field out of the LLM is one extra line on the panel, with no code change at all.
 //
-// 裸流模式（nakedKey 非空）：仅把目标顶层字段的 string 值原样流出，其它字段
-// 全部跳过。给 draft_chapter 用，让整章 markdown 不被装饰成 "content: # …"。
-// header 一律以 "✻ " 开头：这是 TUI renderStreamContent 走 renderAgentBlock
-// 高亮路径（金 ✻ + 青底蓝下划线 label + dim 横线）的约定前缀，跟 fallback
-// header（streamHeaderFallback）保持一致；改成普通文字会落到正文路径用终端
-// 默认色画掉，title 不再醒目。
+// Naked mode (nakedKey non-empty): only the string value of the target top-level field is emitted as is, and
+// all other fields are skipped. This is for draft_chapter, so a whole chapter of markdown is not decorated as "content: # …".
+// A header always starts with "✻ ": this is the conventional prefix for the TUI's renderStreamContent to take
+// the renderAgentBlock highlighting path (gold ✻ + cyan-background blue-underlined label + dim divider), and it
+// stays consistent with the fallback header (streamHeaderFallback). Turning it into ordinary text would drop
+// it to the body path with the terminal default color, and the title would no longer stand out.
 var toolDisplays = map[string]toolDisplay{
 	"draft_chapter": {nakedKey: "content"},
 
@@ -39,8 +39,8 @@ type toolDisplay struct {
 	nakedKey string
 }
 
-// jsonFieldExtractor 是流式 JSON tokenizer。逐字节驱动状态机，把 LLM 的工具
-// args 流转成可读文本。同一实例只服务一次工具调用，顶层容器闭合后 Done()=true。
+// jsonFieldExtractor is a streaming JSON tokenizer. A byte-by-byte state machine that turns the LLM's tool
+// args stream into readable text. One instance serves exactly one tool call; once the top-level container closes, Done()=true.
 type jsonFieldExtractor struct {
 	cfg toolDisplay
 
@@ -98,7 +98,7 @@ func (e *jsonFieldExtractor) Feed(chunk string) string {
 	return out.String()
 }
 
-// ── 容器栈 / 缩进 ──
+// ── Container stack / indentation ──
 
 func (e *jsonFieldExtractor) push(kind byte) {
 	e.stack = append(e.stack, kind)
@@ -118,7 +118,7 @@ func (e *jsonFieldExtractor) parent() byte {
 	return e.stack[len(e.stack)-1]
 }
 
-// writeIndent 写当前缩进。深度 = 嵌套层数 = len(stack)-1（root 容器内部不缩进）。
+// writeIndent writes the current indent. Depth = nesting level = len(stack)-1 (inside the root container there is no indent).
 func (e *jsonFieldExtractor) writeIndent(out *strings.Builder) {
 	depth := len(e.stack) - 1
 	for range depth {
@@ -126,7 +126,7 @@ func (e *jsonFieldExtractor) writeIndent(out *strings.Builder) {
 	}
 }
 
-// ── 状态机 ──
+// ── State machine ──
 
 func (e *jsonFieldExtractor) step(c byte, out *strings.Builder) {
 	switch e.state {
@@ -136,7 +136,7 @@ func (e *jsonFieldExtractor) step(c byte, out *strings.Builder) {
 			e.push('O')
 			e.state = psBeforeKey
 		case '[':
-			// 实际不会发生（tool args 总是 obj）；容忍：当 root arr
+			// this cannot actually happen (tool args are always an obj); tolerate it: when the root is an arr
 			e.push('A')
 			e.state = psBeforeValue
 		}
@@ -220,10 +220,10 @@ func (e *jsonFieldExtractor) step(c byte, out *strings.Builder) {
 	}
 }
 
-// ── 行渲染 ──
+// ── Line rendering ──
 
-// emitKeyLine 在 obj 内 key 解析完毕时调用，写出 "<lf><indent>key:" 前缀。
-// 裸流模式下不写 key 前缀（key 被记录在 keyBuf 中供 beginString 判断）。
+// emitKeyLine is called inside an obj once a key has been parsed, writing the "<lf><indent>key:" prefix.
+// In naked mode no key prefix is written (the key is recorded in keyBuf for beginString to inspect).
 func (e *jsonFieldExtractor) emitKeyLine(out *strings.Builder, key string) {
 	if e.cfg.nakedKey != "" {
 		return
@@ -242,8 +242,8 @@ func (e *jsonFieldExtractor) emitKeyLine(out *strings.Builder, key string) {
 	out.WriteByte(':')
 }
 
-// emitArrayItem 在 arr 内每个元素起始时调用，写出 "<lf><indent>-"。primitive
-// 元素紧跟空格再 emit 值；struct 元素由后续嵌套自然换行处理。
+// emitArrayItem is called at the start of every element inside an arr, writing "<lf><indent>-". A primitive
+// element is followed by a space and then its emitted value; a struct element is handled by the following nesting wrapping naturally.
 func (e *jsonFieldExtractor) emitArrayItem(out *strings.Builder) {
 	if e.cfg.nakedKey != "" {
 		return
@@ -261,11 +261,11 @@ func (e *jsonFieldExtractor) emitArrayItem(out *strings.Builder) {
 	out.WriteByte('-')
 }
 
-// ── value 起始 ──
+// ── value start ──
 
 func (e *jsonFieldExtractor) beginString(out *strings.Builder) {
 	if e.cfg.nakedKey != "" {
-		// 裸流：仅顶层 obj 中目标 key 的 string 值才输出
+		// naked: only the string value of the target key in the top-level obj is output
 		if e.cfg.nakedKey == e.keyBuf.String() && len(e.stack) == 1 && e.stack[0] == 'O' {
 			e.state = psStringStream
 		} else {
@@ -275,7 +275,7 @@ func (e *jsonFieldExtractor) beginString(out *strings.Builder) {
 		e.uHex = nil
 		return
 	}
-	// 通用：obj 字段紧跟 "key: "（已 emit "key:"，再补空格）；arr 元素紧跟 "- "
+	// generic: an obj field is followed by "key: " ("key:" is already emitted, the space is added here); an arr element by "- "
 	if e.parent() == 'A' {
 		e.emitArrayItem(out)
 		out.WriteByte(' ')
@@ -319,7 +319,7 @@ func (e *jsonFieldExtractor) beginPrim(first byte, out *strings.Builder) {
 
 func (e *jsonFieldExtractor) beginNested(kind byte, out *strings.Builder) {
 	if e.cfg.nakedKey != "" {
-		// 裸流模式不展开嵌套；用栈深度跟踪到匹配 } / ]
+		// naked mode does not expand nesting; the stack depth is tracked to the matching } / ]
 		e.push(kind)
 		if kind == 'O' {
 			e.state = psBeforeKey
@@ -328,8 +328,8 @@ func (e *jsonFieldExtractor) beginNested(kind byte, out *strings.Builder) {
 		}
 		return
 	}
-	// 通用模式：arr 元素是嵌套结构时，先 emit 单独一行的 "<indent>-"
-	// （obj key 的 ":" 之后无空格，让嵌套的子 key 自然换行到下一行）
+	// generic mode: when an arr element is a nested structure, first emit a standalone "<indent>-" line
+	// (no space after the obj key's ":", so a nested child key wraps naturally onto the next line)
 	if e.parent() == 'A' {
 		e.emitArrayItem(out)
 	}
@@ -341,18 +341,18 @@ func (e *jsonFieldExtractor) beginNested(kind byte, out *strings.Builder) {
 	}
 }
 
-// closeContainer 处理 } 或 ]。
+// closeContainer handles } or ].
 func (e *jsonFieldExtractor) closeContainer(out *strings.Builder) {
 	e.pop()
 	if len(e.stack) == 0 {
-		// 空 args（如 novel_context 不传参）兜底：emitKeyLine 没机会输出 header，
-		// 这里补一次，避免落到"既没标题也没内容"。
+		// empty args fallback (e.g. novel_context passes no parameters): emitKeyLine never had a chance to
+		// output a header, so add one here to avoid ending up with "neither a title nor content".
 		if !e.started && e.cfg.nakedKey == "" && e.cfg.header != "" {
 			out.WriteString(e.cfg.header)
 			out.WriteByte('\n')
 			e.started = true
 		}
-		// 收尾换行让面板与下一段输出之间有清晰边界
+		// the trailing newline gives the panel a clear boundary before the next segment of output
 		if e.started {
 			out.WriteByte('\n')
 		}
@@ -367,7 +367,7 @@ func (e *jsonFieldExtractor) closeContainer(out *strings.Builder) {
 	}
 }
 
-// ── string 流式 ──
+// ── string streaming ──
 
 func (e *jsonFieldExtractor) handleStringByte(c byte, out *strings.Builder, skipping bool) {
 	if e.uHex != nil {
@@ -420,18 +420,18 @@ func writeEscapedByte(out *strings.Builder, c byte) {
 	case '/':
 		out.WriteByte('/')
 	case 'b', 'f':
-		// 退格 / 换页：忽略
+		// backspace / form feed: ignored
 	case 'u':
-		// 由调用方建立 uHex 缓冲；此处不输出
+		// the caller builds the uHex buffer; nothing is emitted here
 	default:
 		out.WriteByte('\\')
 		out.WriteByte(c)
 	}
 }
 
-// ── 收尾 ──
+// ── Wrap-up ──
 
-// afterValueDone string 闭合（读到结尾的 `"`）后转移到下一态。
+// afterValueDone transitions to the next state once a string closes (its trailing `"` was read).
 func (e *jsonFieldExtractor) afterValueDone() {
 	e.escape = false
 	e.uHex = nil
@@ -447,8 +447,8 @@ func (e *jsonFieldExtractor) afterValueDone() {
 	}
 }
 
-// afterValueChar number / primitive 的"结束字符"已被读到时按字符决定下一态。
-// 这个字符可能是 , / } / ] / 空白，由本函数转发分发。
+// afterValueChar decides the next state by character once the "terminating character" of a number / primitive was read.
+// That character may be , / } / ] or whitespace, and this function forwards and dispatches on it.
 func (e *jsonFieldExtractor) afterValueChar(c byte, out *strings.Builder) {
 	switch c {
 	case '}', ']':
@@ -467,7 +467,7 @@ func (e *jsonFieldExtractor) afterValueChar(c byte, out *strings.Builder) {
 	}
 }
 
-// ── 工具 ──
+// ── Tools ──
 
 func isNumberByte(c byte) bool {
 	switch c {

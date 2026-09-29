@@ -10,8 +10,8 @@ import (
 	"github.com/voocel/agentcore"
 )
 
-// handleToolUpdate 处理 Worker 的进度中继(ProgressPayload):TOOL 行、流式正文、
-// thinking、retry、context。Engine 经 observer.workerProgress 喂入。
+// handleToolUpdate handles the Worker progress relay (ProgressPayload): TOOL rows, streamed body,
+// thinking, retry, context. The Engine feeds it via observer.workerProgress.
 func (o *observer) handleToolUpdate(ev agentcore.Event) {
 	if ev.Progress == nil {
 		return
@@ -22,7 +22,7 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 			o.handleSubagentDelta(ev.Progress)
 		}
 	case agentcore.ProgressToolStart:
-		// Worker 内部的工具调用（如 writer → draft_chapter）。
+		// a tool call inside the Worker (e.g. writer -> draft_chapter).
 		if ev.Progress.Agent == "" || ev.Progress.Tool == "" {
 			break
 		}
@@ -54,8 +54,8 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 			return
 		}
 		delete(o.toolStarts, ev.Progress.Agent)
-		// 同 ID 更新事件：TUI 按 ID 定位原 TOOL 行，回填 FinishedAt / Duration。
-		// Summary / Depth 也带上，保证 runtime queue replay 时能还原完整行。
+		// same-ID update event: the TUI locates the original TOOL row by ID and fills in FinishedAt / Duration.
+		// Summary / Depth go along too, so a runtime queue replay can restore the complete row.
 		finishEv := Event{
 			ID:         call.id,
 			Time:       call.start,
@@ -72,8 +72,8 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 	case agentcore.ProgressThinking:
 		o.handleThinkingProgress(ev)
 	case agentcore.ProgressRetry:
-		// 只展示上游明确报告的实际等待时间，避免本地估算与真实退避节奏不一致。
-		// Summary 不嵌静态延时——UI 依 RetryAt 逐秒倒计时；Detail/日志保留发出时的延时快照。
+		// only show the wait time explicitly reported upstream, so a local estimate cannot disagree with the real backoff rhythm.
+		// Summary does not embed a static delay - the UI counts down from RetryAt every second; Detail / the log keep the delay snapshot from emission time.
 		delay := retryProgressDelay(ev.Progress)
 		retryEv := Event{
 			ID:       o.retryEventID(ev.Progress.Agent, ev.Progress.Attempt),
@@ -97,9 +97,9 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 		if msg == "" {
 			msg = "unknown error"
 		}
-		// 如果有进行中的 TOOL 行，原地标记为失败并把完整错误放进 Detail。
-		// 同一次失败只生成一个 ERROR 级事件，避免 TOOL 失败态与附加 ERROR
-		// 详情在 tui.log 中被误读成两次独立故障。
+		// If a TOOL row is in progress, mark it failed in place and put the full error into Detail.
+		// One failure only produces one ERROR-level event, so that the TOOL failed state plus the added ERROR
+		// detail is not misread in tui.log as two separate faults.
 		if call, ok := o.toolStarts[ev.Progress.Agent]; ok {
 			delete(o.toolStarts, ev.Progress.Agent)
 			detail := fmt.Sprintf("%s 错误: %s", ev.Progress.Tool, msg)
@@ -121,7 +121,7 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 			o.persistEvent(finishEv)
 			return
 		}
-		// 极少数缺失 start 的进度流无法原地更新，保留独立 ERROR 事件暴露故障。
+		// The rare progress stream without a start cannot be updated in place, so keep a separate ERROR event to expose the fault.
 		errEv := Event{
 			Time:     time.Now(),
 			Category: "ERROR",

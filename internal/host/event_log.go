@@ -5,8 +5,8 @@ import (
 	"log/slog"
 )
 
-// LogEvent 通过进程 logger 记录一条 UI / 运行时事件。Summary 是展示文本；
-// Detail 是完整诊断，只要存在就作为日志正文。
+// LogEvent records one UI / runtime event through the process logger. Summary is the display text;
+// Detail is the full diagnostic payload and is used as the log body whenever it is present.
 func LogEvent(ev Event) {
 	logEvent(slog.Default(), ev)
 }
