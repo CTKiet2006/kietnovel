@@ -98,9 +98,9 @@ func TestAcquireExclusive(t *testing.T) {
 		exclusive  string
 		wantErr    string // 空=期望放行
 	}{
-		{"running", lifecycleRunning, false, "", "运行中"},
-		{"cocreating", lifecyclePaused, true, "", "阶段共创"},
-		{"busy", lifecycleIdle, false, "导入", "进行中"},
+		{"running", lifecycleRunning, false, "", "đang viết"},
+		{"cocreating", lifecyclePaused, true, "", "đồng sáng tác"},
+		{"busy", lifecycleIdle, false, "nhập truyện", "Đang nhập truyện"},
 		{"idle free", lifecycleIdle, false, "", ""},
 		{"paused free", lifecyclePaused, false, "", ""},
 	}
@@ -108,19 +108,19 @@ func TestAcquireExclusive(t *testing.T) {
 	// 否则导入会与引擎收尾并发写同一 store。
 	drain := newFlagTestHost(lifecyclePaused, false)
 	drain.engine.running = true
-	if err := drain.acquireExclusive("导入"); err == nil {
+	if err := drain.acquireExclusive("nhập truyện"); err == nil {
 		t.Fatal("引擎排水期应拒绝独占作业")
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			h := newFlagTestHost(c.lc, c.cocreating)
 			h.exclusive = c.exclusive
-			err := h.acquireExclusive("导入")
+			err := h.acquireExclusive("nhập truyện")
 			if c.wantErr == "" {
 				if err != nil {
 					t.Fatalf("应放行，得 %v", err)
 				}
-				if h.exclusive != "导入" {
+				if h.exclusive != "nhập truyện" {
 					t.Fatalf("放行后应登记占用，得 %q", h.exclusive)
 				}
 				h.releaseExclusive()
@@ -132,8 +132,8 @@ func TestAcquireExclusive(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
 				t.Fatalf("应含 %q，得 %v", c.wantErr, err)
 			}
-			if !strings.Contains(err.Error(), "导入") {
-				t.Errorf("错误文案应带 action %q，得 %v", "导入", err)
+			if !strings.Contains(err.Error(), "nhập truyện") {
+				t.Errorf("错误文案应带 action %q，得 %v", "nhập truyện", err)
 			}
 		})
 	}

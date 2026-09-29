@@ -735,12 +735,12 @@ func TestEngine_RetriesUnfinishedPlanStart(t *testing.T) {
 		if ev.Category == "DISPATCH" {
 			dispatched = true
 		}
-		if strings.Contains(ev.Summary, "启动裁定已补齐") {
+		if strings.Contains(ev.Summary, "Đã bù xong định đoạn khởi động") {
 			healed = true
 		}
 	}
 	if !dispatched || !healed {
-		t.Fatalf("补裁后应派发规划师并回显补齐事件, dispatched=%v healed=%v", dispatched, healed)
+		t.Fatalf("Sau khi bù định đoạn phải phát việc cho kiến trúc sư và có sự kiện báo đã bù, dispatched=%v healed=%v", dispatched, healed)
 	}
 }
 

@@ -163,17 +163,17 @@ func (e *engine) run(ctx context.Context) {
 			if op.dispatch != nil {
 				if op.text != "" {
 					if err := e.store.RunMeta.SetPendingSteer(op.text); err != nil {
-						slog.Warn("残留干预回存失败", "module", "engine", "err", err)
+						slog.Warn("Không lưu lại được can thiệp còn dư", "module", "engine", "err", err)
 					}
 				}
 				e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Level: "warn",
-					Summary: "引擎已停,裁定派单未执行;干预已保留,继续创作时自动重新裁定"})
+					Summary: "Engine đã dừng, phần phát việc theo định đoạn chưa chạy; can thiệp đã được giữ, sẽ tự định đoạn lại khi viết tiếp"})
 				op.dispatch = nil
 			}
 			if op.hold != nil || op.reopen != nil {
 				if err := e.applyControlOp(context.Background(), op); err != nil {
 					e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Level: "error",
-						Summary: "引擎退出时补提干预失败: " + err.Error()})
+						Summary: "Khi Engine thoát, không bổ sung lại được can thiệp: " + err.Error()})
 				}
 			}
 		}
@@ -361,11 +361,11 @@ func (e *engine) retryPlanStart(ctx context.Context, prompt string) *flow.Instru
 	if err := e.store.RunMeta.SetPlanStart(domain.PlanStartRecord{
 		RawPrompt: prompt, Planner: decision.Planner, PlannerTask: decision.Task, DecisionID: rec.ID,
 	}); err != nil {
-		e.pauseWithNotify(notify.KindPlanStart, "启动裁定无法落盘,已暂停: "+err.Error())
+		e.pauseWithNotify(notify.KindPlanStart, "Không ghi được định đoạn khởi động, đã tạm dừng: "+err.Error())
 		return nil
 	}
 	e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Level: "info",
-		Summary: fmt.Sprintf("启动裁定已补齐(规划师: %s——%s)", decision.Planner, decision.Reason)})
+		Summary: fmt.Sprintf("Đã bù xong định đoạn khởi động (kiến trúc sư: %s — %s)", decision.Planner, decision.Reason)})
 	return &flow.Instruction{Agent: decision.Planner, Task: decision.Task, Reason: decision.Reason}
 }
 
@@ -706,11 +706,11 @@ func (e *engine) applyPendingOps(ctx context.Context) (deferGate bool) {
 				// 这里回存整条干预,恢复/继续时重新裁定重试(动作幂等 + 重询按新事实)。
 				if op.text != "" {
 					if serr := e.store.RunMeta.SetPendingSteer(op.text); serr != nil {
-						slog.Warn("干预回存失败", "module", "engine", "err", serr)
+						slog.Warn("Không lưu lại được can thiệp", "module", "engine", "err", serr)
 					}
 				}
 				e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Level: "warn",
-					Summary: "干预动作执行失败,已保留;恢复/继续时自动重试"})
+					Summary: "Thực thi hành động can thiệp thất bại, đã giữ lại; sẽ tự thử lại khi khôi phục/tiếp tục"})
 			} else if pairedHoldDispatch && e.nextDefersGate() {
 				// 只有 hold 与配对派单都成功落地，才允许绕过本次 Gate。
 				// hold 写入失败或派单因事实过期被丢弃时继续绕过，都会让
@@ -736,12 +736,12 @@ func (e *engine) applyControlOp(ctx context.Context, op controlOp) error {
 		// 会残留，并与按新事实重新裁定出的 hold 冲突，最终只暂停却漏做修改。
 		fresh, err := arbiter.CollectInterventionFacts(e.store)
 		if err != nil {
-			return fmt.Errorf("刷新干预事实: %w", err)
+			return fmt.Errorf("Làm mới dữ kiện can thiệp thất bại: %w", err)
 		}
 		if fresh.Phase != op.facts.Phase || fresh.Flow != op.facts.Flow ||
 			fresh.QueueHead() != op.facts.QueueHead() {
 			e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Level: "warn",
-				Summary: "裁定派单已过时(事实推进),以最新事实重新裁定"})
+				Summary: "Phát việc theo định đoạn đã lỗi thời (dữ kiện đã tiến), sẽ định đoạn lại theo dữ kiện mới nhất"})
 			e.recordStale(op)
 			if op.text != "" && e.reconsult != nil {
 				// 同步重询:干预必须先于后续创作生效——异步会让引擎在新裁定
@@ -755,32 +755,32 @@ func (e *engine) applyControlOp(ctx context.Context, op controlOp) error {
 		if op.hold.Cancel {
 			meta, err := e.store.RunMeta.Load()
 			if err != nil {
-				e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Summary: "读取一次性暂停失败: " + err.Error(), Level: "error"})
+				e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Summary: "Đọc trạng thái tạm dừng một lần thất bại: " + err.Error(), Level: "error"})
 				return err
 			}
 			if meta != nil && meta.AdvanceHold != nil {
 				if err := e.store.RunMeta.ClearAdvanceHold(*meta.AdvanceHold); err != nil {
-					e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Summary: "取消一次性暂停失败: " + err.Error(), Level: "error"})
+					e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Summary: "Hủy tạm dừng một lần thất bại: " + err.Error(), Level: "error"})
 					return err
 				}
 			}
-			e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "已取消一次性暂停", Level: "info"})
+			e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "Đã hủy tạm dừng một lần", Level: "info"})
 		} else {
 			hold := domain.AdvanceHold{After: op.hold.After, TargetChapter: op.hold.TargetChapter, Reason: op.hold.Reason}
 			if err := e.store.RunMeta.SetAdvanceHold(hold); err != nil {
-				e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Summary: "设置一次性暂停失败: " + err.Error(), Level: "error"})
+				e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Summary: "Đặt tạm dừng một lần thất bại: " + err.Error(), Level: "error"})
 				return err // hold 未落盘时关联 dispatch 不得执行
 			}
-			e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "已设置一次性暂停: " + op.hold.Reason, Level: "info"})
+			e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "Đã đặt tạm dừng một lần: " + op.hold.Reason, Level: "info"})
 		}
 	}
 	if op.reopen != nil {
 		if err := tools.ReopenBook(e.store, op.reopen.Chapters, op.reopen.Reason); err != nil {
-			e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Summary: "重开返工失败: " + err.Error(), Level: "error"})
+			e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Summary: "Mở lại để viết lại thất bại: " + err.Error(), Level: "error"})
 			fail(err)
 		} else {
 			e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM",
-				Summary: fmt.Sprintf("已重开全书返工: 第 %v 章入队", op.reopen.Chapters), Level: "info"})
+				Summary: fmt.Sprintf("Đã mở lại toàn bộ để viết lại: chương %v đã vào hàng đợi", op.reopen.Chapters), Level: "info"})
 		}
 	}
 	if op.dispatch != nil {
@@ -790,7 +790,7 @@ func (e *engine) applyControlOp(ctx context.Context, op controlOp) error {
 		// 已知窗口(best-effort 边界,见 engine-arbiter.md 澄清③):派单自此存于内存,
 		// worker 启动前被硬杀(kill -9,defer 不执行)会丢失本次派单意图——
 		// 正常退出/Abort 由 run 的 defer 回存 PendingSteer 兜底。
-		e.next = &flow.Instruction{Agent: op.dispatch.Agent, Task: interventionDispatchTask(op.dispatch.Task, op.text), Reason: "用户干预裁定"}
+		e.next = &flow.Instruction{Agent: op.dispatch.Agent, Task: interventionDispatchTask(op.dispatch.Task, op.text), Reason: "Định đoạn can thiệp người dùng"}
 		e.deferGateForNext = op.hold != nil && !op.hold.Cancel
 		e.mu.Unlock()
 	}
