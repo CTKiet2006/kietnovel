@@ -202,7 +202,7 @@ func commandRegistryInstance() commandRegistry {
 					return m, nil
 				}
 				m.importer = state
-				m.importHint = "" // 已进入导入流程，欢迎屏的恢复提示完成使命
+				m.importHint = "" // Đã vào luồng nhập, gợi ý khôi phục ở màn hình chào xong nhiệm vụ
 				m.textarea.Blur()
 				return m, listenCmd
 			},

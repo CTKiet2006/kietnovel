@@ -70,18 +70,18 @@ func errorText(err error) string {
 
 type cocreateState struct {
 	session             *startup.CoCreateSession
-	stage               bool // true=阶段共创（运行中规划后续走向）；false=冷启动共创（启动前澄清需求）
+	stage               bool // true=đồng sáng tác giai đoạn (đang viết thì lên hướng tiếp); false=đồng sáng tác khởi động lạnh (làm rõ nhu cầu trước khi viết)
 	awaiting            bool
 	reqID               int
-	cancel              context.CancelFunc // 取消当前 LLM 请求
+	cancel              context.CancelFunc // Hủy request LLM hiện tại
 	deltaCh             chan cocreateStreamItem
 	doneCh              chan cocreateDoneMsg
 	convVP              viewport.Model
 	promptVP            viewport.Model
-	convFollow          bool // true: 流式新内容自动滚到底；用户上滚后置 false 停止跟随
+	convFollow          bool // true: nội dung stream mới tự lăn xuống đáy; user cuộn lên thì false dừng theo
 	selectedSuggestions []string
-	// focusPrompt 决定 ↑↓/PgUp/PgDn/Home/End 滚哪一栏：false=左对话栏（默认），
-	// true=右创作指令栏。欢迎页已关鼠标上报（保留原生复制），右栏溢出靠 Tab 切焦点后键盘滚。
+	// focusPrompt quyết định ↑↓/PgUp/PgDn/Home/End cuộn cột nào: false=cột hội thoại trái (mặc định),
+	// true=cột chỉ đạo viết phải. Trang chào đã tắt báo cáo chuột (giữ copy nguyên bản), cột phải tràn thì Tab đổi focus rồi cuộn phím.
 	focusPrompt bool
 }
 
@@ -101,17 +101,17 @@ func newCoCreateState(initial string) *cocreateState {
 	}
 }
 
-// stageCoCreateOpener 是阶段共创的合成开场用户语，作为 kickoff 的 user 轮次发给 LLM，
-// 让助手据"当前故事状态"主动开局，而不是空对话干等用户先说话。
-const stageCoCreateOpener = "我先暂停一下，想和你一起规划接下来的走向。"
+// stageCoCreateOpener là câu mở tổng hợp của đồng sáng tác giai đoạn, gửi cho LLM như lượt user kickoff,
+// để trợ lý dựa "trạng thái truyện hiện tại" mở lời chủ động, thay vì để hội thoại trống chờ user nói trước.
+const stageCoCreateOpener = "Tôi tạm dừng chút, muốn cùng bạn lên hướng cho đoạn tiếp."
 
-// stageCoCreateSystemLine 是这条开场在 UI 里的中性呈现：开场句本质是系统合成的、
-// 用户并未真打过，故不伪装成"你"的发言，改以系统行交代上下文（它仍以 stageCoCreateOpener
-// 发给 LLM，见 renderCoCreateConversationPanel 的 i==0 特判）。
-const stageCoCreateSystemLine = "已暂停创作，进入阶段共创 —— AI 会结合当前故事进度，和你一起规划接下来的走向。"
+// stageCoCreateSystemLine là cách hiện trung tính của câu mở này trong UI: câu mở thực chất do hệ thống tổng hợp,
+// user chưa từng gõ, nên không giả làm phát ngôn của "bạn", mà ghi một dòng hệ thống cho rõ ngữ cảnh (nó vẫn gửi cho LLM
+// bằng stageCoCreateOpener, xem nhánh đặc biệt i==0 trong renderCoCreateConversationPanel).
+const stageCoCreateSystemLine = "Đã dừng viết, vào đồng sáng tác giai đoạn — AI sẽ dựa tiến độ hiện tại cùng bạn lên hướng tiếp theo."
 
-// newStageCoCreateState 创建阶段共创状态：seed 开场并标记 stage，使 runCoCreate 走
-// StageCoCreateStream、Ctrl+S 走 ResumeFromCoCreate。
+// newStageCoCreateState tạo trạng thái đồng sáng tác giai đoạn: gieo câu mở và đánh dấu stage, để runCoCreate đi
+// StageCoCreateStream, Ctrl+S đi ResumeFromCoCreate.
 func newStageCoCreateState() *cocreateState {
 	s := newCoCreateState(stageCoCreateOpener)
 	s.stage = true
@@ -157,8 +157,8 @@ func (s *cocreateState) suggestions() []string {
 	return s.session.Suggestions()
 }
 
-// appendSuggestion 把数字键对应的建议追加到由快捷键生成的输入。
-// 用户一旦手动修改输入，current 与已选建议的组合不再相等，数字键即恢复为普通输入。
+// appendSuggestion thêm gợi ý ứng với phím số vào ô nhập sinh bởi phím tắt.
+// User vừa sửa tay ô nhập, current không còn bằng tổ hợp với gợi ý đã chọn, phím số về lại ngữ nghĩa nhập thường.
 func (s *cocreateState) appendSuggestion(index int, current string) (string, bool) {
 	suggestions := s.suggestions()
 	if index < 0 || index >= len(suggestions) {
@@ -168,7 +168,7 @@ func (s *cocreateState) appendSuggestion(index int, current string) (string, boo
 		if strings.TrimSpace(current) != "" {
 			return "", false
 		}
-	} else if current != strings.Join(s.selectedSuggestions, "；") {
+	} else if current != strings.Join(s.selectedSuggestions, "; ") {
 		s.resetSuggestionInput()
 		return "", false
 	}
@@ -181,7 +181,7 @@ func (s *cocreateState) appendSuggestion(index int, current string) (string, boo
 	}
 
 	s.selectedSuggestions = append(s.selectedSuggestions, suggestion)
-	return strings.Join(s.selectedSuggestions, "；"), true
+	return strings.Join(s.selectedSuggestions, "; "), true
 }
 
 func (s *cocreateState) resetSuggestionInput() {
@@ -193,12 +193,12 @@ func (s *cocreateState) buildPrompt() (string, error) {
 }
 
 func renderStartupModeBar(width int, mode startupMode) string {
-	quick := renderStartupModePill(mode == startupModeQuick, "快速开始")
-	cocreate := renderStartupModePill(mode == startupModeCoCreate, "共创规划")
+	quick := renderStartupModePill(mode == startupModeQuick, "Bắt đầu nhanh")
+	cocreate := renderStartupModePill(mode == startupModeCoCreate, "Đồng sáng tác")
 	title := lipgloss.NewStyle().
 		Foreground(colorAccent).
 		Bold(true).
-		Render("启动模式")
+		Render("Chế độ khởi động")
 	divider := lipgloss.NewStyle().
 		Foreground(colorDim).
 		Render("·")
@@ -219,8 +219,8 @@ func renderStartupModePill(active bool, label string) string {
 	return style.Render(label)
 }
 
-// coCreateColumns 把 modal 内容区切成左右两栏宽度。
-// 左栏承载对话与输入框（上下叠），右栏承载创作指令草稿；总和等于 modal 内容宽。
+// coCreateColumns cắt vùng nội dung modal thành hai cột rộng.
+// Cột trái gánh hội thoại với khung nhập (chồng dọc), cột phải gánh nháp chỉ đạo viết; tổng bằng rộng nội dung modal.
 func coCreateColumns(bodyW int) (leftW, rightW int) {
 	leftW = bodyW * 58 / 100
 	if leftW < 42 {
@@ -240,12 +240,12 @@ func renderCoCreateBody(width, height int, state *cocreateState, errMsg, inputVi
 	}
 	leftW, rightW := coCreateColumns(width)
 
-	// 右 border 由外层 leftCol 容器画，贯穿 body 顶到底；conversation / suggestions /
-	// input 都不画自己的右 border。input 仍是完整圆角框，左右各 1 列 margin 与
-	// conversation 的 padding 对齐，看起来与两侧边线距离一致。
-	// 共创模式下 textarea 固定 1 行（见 model.refitTextareaHeight 分支），
-	// input 高度 = 1 (textarea) + 2 (top/bottom border) = 3 行，永不漂移。
-	innerW := leftW - 1 // 给外层右竖线留 1 列
+	// Viền phải do khung leftCol ngoài vẽ, xuyên từ đỉnh body tới đáy; conversation / suggestions /
+	// input đều không vẽ viền phải riêng. input vẫn là khung bo tròn đủ, lề trái phải mỗi bên 1 cột canh với
+	// padding của conversation, nhìn khoảng cách tới đường biên hai bên đều nhau.
+	// Chế độ đồng sáng tác textarea cố định 1 dòng (xem nhánh trong model.refitTextareaHeight),
+	// cao input = 1 (textarea) + 2 (viền trên/dưới) = 3 dòng, không bao giờ trôi.
+	innerW := leftW - 1 // Chừa 1 cột cho viền đứng phải ngoài
 
 	inputBox := lipgloss.NewStyle().
 		Width(innerW-6). // -2 margin -2 padding -2 border
@@ -284,10 +284,10 @@ func renderCoCreateBody(width, height int, state *cocreateState, errMsg, inputVi
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftCol, rightPanel)
 }
 
-// extractReplyForDisplay 从 assistant 历史内容中切出 <reply>...</reply> 段。
-// 其他标签（<draft>/<ready>/<suggestions>）是给下一轮模型看的协议字段，不应裸暴露给用户。
-// 模型半遵守（漏 <reply> 开标签）时，开头到 </reply> 或下一个开标签都算 reply。
-// 完全不含任何标签时（降级路径）原样返回。
+// extractReplyForDisplay cắt đoạn <reply>...</reply> từ nội dung lịch sử assistant.
+// Các thẻ khác (<draft>/<ready>/<suggestions>) là trường giao thức cho lượt model sau, không phơi trần cho user.
+// Model tuân nửa vời (rớt thẻ mở <reply>) thì từ đầu tới </reply> hoặc thẻ mở tiếp theo đều tính là reply.
+// Không chứa thẻ nào (đường dự phòng) thì trả nguyên.
 func extractReplyForDisplay(content string) string {
 	rest := content
 	if rIdx := strings.Index(content, "<reply>"); rIdx >= 0 {
@@ -308,8 +308,8 @@ func extractReplyForDisplay(content string) string {
 	return strings.TrimSpace(rest[:cut])
 }
 
-// renderCoCreateSuggestions 在 input 上方渲染 AI 建议行。awaiting 时或没有建议时
-// 返回空字符串，让 layout 自动塌陷不留空行。建议条数最多 3 条，按 1/2/3 数字键选中。
+// renderCoCreateSuggestions vẽ dòng gợi ý AI trên khung nhập. Lúc awaiting hoặc không có gợi ý
+// trả chuỗi rỗng để layout tự xẹp không chừa dòng trống. Tối đa 3 gợi ý, bấm phím số 1/2/3 để chọn.
 func renderCoCreateSuggestions(width int, state *cocreateState) string {
 	if state == nil || state.awaiting {
 		return ""
@@ -327,12 +327,12 @@ func renderCoCreateSuggestions(width int, state *cocreateState) string {
 	bodyStyle := lipgloss.NewStyle().Foreground(colorMuted)
 	hintStyle := lipgloss.NewStyle().Foreground(colorDim).Italic(true)
 
-	lines := []string{hintStyle.Render("AI 建议（按 1/2/3 组合，可编辑后发送）：")}
+	lines := []string{hintStyle.Render("Gợi ý của AI (bấm 1/2/3 để ghép, sửa rồi gửi):")}
 	for i, s := range sugs {
 		lines = append(lines, digitStyle.Render(digits[i]+" ")+bodyStyle.Render(strings.TrimSpace(s)))
 	}
 
-	// 与 inputBox 左右 margin/padding 对齐：左 2 列（margin1+padding1）、右同。
+	// Canh với inputBox ở lề/padding trái phải: trái 2 cột (margin1+padding1), phải cũng vậy.
 	return lipgloss.NewStyle().
 		Width(width-2).
 		Padding(0, 2).
@@ -357,9 +357,9 @@ func coCreateModalSize(width, height int) (boxW, boxH int) {
 	return boxW, boxH
 }
 
-// coCreateInputWidth 算出 textarea 实际可输入的字符宽度。
-// 左栏装饰：外层右竖线 1 + input 左右 margin 2 + border 2 + padding 2 = 7 列；
-// textarea 自身 prompt+cursor 占 2 列；所以 textareaW = leftW - 9。
+// coCreateInputWidth tính rộng ký tự nhập thực của textarea.
+// Trang trí cột trái: viền đứng phải ngoài 1 + lề trái phải input 2 + viền 2 + padding 2 = 7 cột;
+// bản thân textarea prompt+cursor chiếm 2 cột; nên textareaW = leftW - 9.
 func coCreateInputWidth(width, height int) int {
 	boxW, _ := coCreateModalSize(width, height)
 	bodyW := boxW - 4
@@ -378,19 +378,19 @@ func renderCoCreateModal(width, height int, state *cocreateState, errMsg, inputV
 
 	boxW, boxH := coCreateModalSize(width, height)
 
-	// title / subtitle / hint 放在 modal 外（上方与下方居中），让 modal 内部
-	// 完全交给 body —— 左栏右竖线与右栏从 modal 顶贯穿到底。
-	// modal 实际占用 = boxH (content) + 2 (padding 1*2) + 2 (border) = boxH+4 行；
-	// 整体 stack = title(1) + subtitle(1) + 空(1) + modal(boxH+4) + 空(1) + hint(1) = boxH+9。
-	// 因此把 boxH 减 5 行预算给 modal 外的装饰，避免溢出终端。
+	// title / subtitle / hint để ngoài modal (căn giữa trên và dưới), để trong modal
+	// toàn cho body —— viền đứng phải cột trái với cột phải xuyên từ đỉnh modal tới đáy.
+	// Modal chiếm thực = boxH (nội dung) + 2 (padding 1*2) + 2 (viền) = boxH+4 dòng;
+	// stack tổng = title(1) + subtitle(1) + trống(1) + modal(boxH+4) + trống(1) + hint(1) = boxH+9.
+	// Nên bớt boxH 5 dòng ngân sách cho đồ trang ngoài modal, tránh tràn terminal.
 	contentH := boxH - 5
 	if contentH < 10 {
 		contentH = 10
 	}
 
-	titleText, subtitleText := "共创规划", "先把需求聊清楚，再开始创作"
+	titleText, subtitleText := "Đồng sáng tác", "Nói rõ nhu cầu rồi mới viết"
 	if state.stage {
-		titleText, subtitleText = "阶段共创", "规划后续走向，再继续创作"
+		titleText, subtitleText = "Đồng sáng tác giai đoạn", "Lên hướng tiếp theo rồi viết tiếp"
 	}
 	headerStyle := lipgloss.NewStyle().Width(boxW).AlignHorizontal(lipgloss.Center)
 	title := headerStyle.Foreground(colorMuted).Bold(true).Render(titleText)
@@ -399,8 +399,8 @@ func renderCoCreateModal(width, height int, state *cocreateState, errMsg, inputV
 	var hintLine string
 	hintStyle := lipgloss.NewStyle().Width(boxW).AlignHorizontal(lipgloss.Center)
 	if quitPending {
-		// quitPending 与 inputHints() 一致；否则共创 modal 盖住底栏，用户感受不到"再按一次 Ctrl+C"。
-		hintLine = hintStyle.Foreground(lipgloss.Color("243")).Bold(true).Render("Press Ctrl+C again to exit")
+		// quitPending đồng bộ với inputHints(); nếu không modal đồng sáng tác che đáy, user không cảm được "bấm Ctrl+C lần nữa".
+		hintLine = hintStyle.Foreground(lipgloss.Color("243")).Bold(true).Render("Nhấn Ctrl+C lần nữa để thoát")
 	} else {
 		hintLine = hintStyle.Foreground(colorDim).Italic(true).Render(coCreateHint(state))
 	}
@@ -418,50 +418,50 @@ func renderCoCreateModal(width, height int, state *cocreateState, errMsg, inputV
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, stack)
 }
 
-// coCreateHint 根据状态生成简短键位提示，避免与 placeholder 重复语义。
+// coCreateHint sinh gợi ý phím ngắn theo trạng thái, tránh lặp ngữ nghĩa với placeholder.
 func coCreateHint(state *cocreateState) string {
 	switch {
 	case state == nil:
-		return "Enter 发送 · Esc 退出"
+		return "Enter gửi · Esc thoát"
 	case state.awaiting:
-		return "AI 回复中 · ↑↓ 滚对话 · 滚轮滚指令 · Esc 退出"
+		return "AI đang trả lời · ↑↓ cuộn hội thoại · lăn chuột cuộn chỉ đạo · Esc thoát"
 	case state.canStart():
-		action := "Ctrl+S 开始创作"
+		action := "Ctrl+S bắt đầu viết"
 		if state.stage {
-			action = "Ctrl+S 应用并继续"
+			action = "Ctrl+S chốt và viết tiếp"
 		}
-		return "Enter 继续补充 · " + action + " · ↑↓ 滚对话 · 滚轮滚指令 · Esc 退出"
+		return "Enter bổ sung tiếp · " + action + " · ↑↓ cuộn hội thoại · lăn chuột cuộn chỉ đạo · Esc thoát"
 	default:
-		return "Enter 发送 · ↑↓ 滚对话 · 滚轮滚指令 · Esc 退出"
+		return "Enter gửi · ↑↓ cuộn hội thoại · lăn chuột cuộn chỉ đạo · Esc thoát"
 	}
 }
 
 func renderCoCreateConversationPanel(width, height int, state *cocreateState, errMsg string, spinnerFrame int) string {
-	// 不画自己的 border —— 右竖线由外层 leftCol 容器统一画。
-	// 列总宽 = width；style.Width = contentW = width-2；Padding(0,1) 后内容区 = contentW-2。
-	// 行内还要扣 "▌ " / "  " 这类 2 列前缀，否则 wrap 后每行 + 前缀会溢出内容区 2 列，
-	// 触发终端物理折行 —— lipgloss 仍认为 modal 高度固定，但终端实际渲染高度增加，
-	// 流式 thinking 时一直触发就表现为外框"高度抖动"。所以 wrapW = contentW - 4。
+	// Không vẽ viền riêng — viền đứng phải do khung leftCol ngoài vẽ thống nhất.
+	// Tổng rộng cột = width; style.Width = contentW = width-2; Padding(0,1) xong vùng nội dung = contentW-2.
+	// Trong dòng còn trừ tiền tố 2 cột kiểu "▌ " / "  ", nếu không mỗi dòng + tiền tố tràn vùng nội dung 2 cột,
+	// kích hoạt terminal gập dòng vật lý — lipgloss vẫn tưởng cao modal cố định, nhưng cao vẽ thực của terminal tăng,
+	// lúc stream thinking kích liên tục sẽ thấy khung ngoài "giật cao". Nên wrapW = contentW - 4.
 	contentW := width - 2
 	if contentW < 12 {
 		contentW = 12
 	}
 	wrapW := max(12, contentW-4)
 
-	userRole := lipgloss.NewStyle().Foreground(colorAccent2).Bold(true).Render("你")
+	userRole := lipgloss.NewStyle().Foreground(colorAccent2).Bold(true).Render("Bạn")
 	aiRole := lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render("AI")
 	userBody := lipgloss.NewStyle().Foreground(colorAccent2)
 	aiBody := lipgloss.NewStyle().Foreground(bodyTextColor)
 	thinkingStyle := lipgloss.NewStyle().Foreground(colorDim).Italic(true)
-	thinkingTag := lipgloss.NewStyle().Foreground(colorDim).Bold(true).Render("AI 思考")
+	thinkingTag := lipgloss.NewStyle().Foreground(colorDim).Bold(true).Render("AI đang nghĩ")
 
 	sysStyle := lipgloss.NewStyle().Foreground(colorDim).Italic(true)
 
 	var lines []string
 	for i, item := range state.session.History() {
 		isUser := item.Role != "assistant"
-		// 阶段共创的合成开场（恒为 history[0] 的 user 消息）以中性系统行显示，
-		// 不伪装成用户输入；它仍作为 kickoff user 轮次发给 LLM。
+		// Câu mở tổng hợp của đồng sáng tác giai đoạn (luôn là tin user history[0]) hiện bằng dòng hệ thống trung tính,
+		// không giả làm nhập của user; nó vẫn gửi cho LLM như lượt user kickoff.
 		if isUser && state.stage && i == 0 {
 			for j, line := range wrapStreamText(stageCoCreateSystemLine, wrapW) {
 				prefix := "· "
@@ -476,12 +476,12 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 		if isUser {
 			lines = append(lines, userRole)
 			for _, line := range wrapStreamText(strings.TrimSpace(item.Content), wrapW) {
-				// 整行一次 Render，避免前缀颜色 reset 与正文颜色拼接处的 ANSI 控制符 bleed。
+				// Cả dòng Render một lần, tránh ANSI reset màu tiền tố nối với màu chữ rỉ màu.
 				lines = append(lines, userBody.Render("▌ "+line))
 			}
 		} else {
 			lines = append(lines, aiRole)
-			// history 里 assistant 存的是完整四段 Raw（给模型上下文用），UI 只显示 [REPLY] 段。
+			// assistant trong history giữ Raw đủ bốn đoạn (cho ngữ cảnh model), UI chỉ hiện đoạn [REPLY].
 			display := extractReplyForDisplay(item.Content)
 			for _, line := range wrapStreamText(strings.TrimSpace(display), wrapW) {
 				lines = append(lines, aiBody.Render("  "+line))
@@ -505,7 +505,7 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 			}
 			lines = append(lines, "")
 		}
-		// sparkle 装饰：让用户始终看到"AI 在工作"
+		// Trang trí sparkle: để user luôn thấy "AI đang làm"
 		lines = append(lines, strings.TrimLeft(renderEventSparkle(spinnerFrame, contentW), " "))
 	}
 	if errMsg != "" {
@@ -513,9 +513,9 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 		lines = append(lines, lipgloss.NewStyle().Foreground(colorError).Render("! "+errMsg))
 	}
 
-	// 用 viewport 替代手动 truncate，让用户可以滚动回看。
-	// vp 高度 = panel 高度 - 1 行标题。SetContent 后若用户原本在底部，
-	// 自动滚到最新（流式跟随）；用户上滚后 convFollow 关掉就停止跟随。
+	// Dùng viewport thay cắt tay, để user cuộn lại xem.
+	// Cao vp = cao panel - 1 dòng tiêu đề. SetContent xong nếu user vốn ở đáy,
+	// tự lăn tới mới nhất (theo stream); user cuộn lên tắt convFollow thì dừng theo.
 	vpH := height - 1
 	if vpH < 1 {
 		vpH = 1
@@ -533,33 +533,33 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 		Width(contentW).
 		Height(height).
 		Padding(0, 1)
-	return style.Render(panelTitleStyle.Render(":: 共创对话") + "\n" + state.convVP.View())
+	return style.Render(panelTitleStyle.Render(":: Hội thoại đồng sáng tác") + "\n" + state.convVP.View())
 }
 
 func renderCoCreatePromptPanel(width, height int, state *cocreateState) string {
-	readyLabel := "已可开始创作"
+	readyLabel := "Đã viết được"
 	if state.stage {
-		readyLabel = "已可应用并继续"
+		readyLabel = "Đã chốt được để viết tiếp"
 	}
-	status := lipgloss.NewStyle().Foreground(colorDim).Render("继续对话中")
+	status := lipgloss.NewStyle().Foreground(colorDim).Render("Đang trò chuyện")
 	if state.ready() {
 		status = lipgloss.NewStyle().Foreground(colorAccent).Render(readyLabel)
 	}
 	if state.awaiting {
-		status = lipgloss.NewStyle().Foreground(colorMuted).Italic(true).Render("AI 整理中")
+		status = lipgloss.NewStyle().Foreground(colorMuted).Italic(true).Render("AI đang tổng hợp")
 	}
 
-	// 内容宽 = 列总宽 - 2（padding 0,1 占用 2 列，无 border）。
+	// Rộng nội dung = tổng rộng cột - 2 (padding 0,1 chiếm 2 cột, không viền).
 	contentW := width - 2
 	if contentW < 8 {
 		contentW = 8
 	}
 
-	emptyHint := "AI 会在这里持续整理出一段可直接进入创作的最终指令。"
-	panelTitle := ":: 当前创作指令"
+	emptyHint := "AI sẽ tổng hợp dần ở đây thành chỉ đạo chốt để vào viết."
+	panelTitle := ":: Chỉ đạo viết hiện tại"
 	if state.stage {
-		emptyHint = "AI 会在这里持续整理出后续阶段的方向 brief。"
-		panelTitle = ":: 后续方向"
+		emptyHint = "AI sẽ tổng hợp dần ở đây thành hướng cho giai đoạn tiếp."
+		panelTitle = ":: Hướng tiếp theo"
 	}
 	text := strings.TrimSpace(state.draftPrompt())
 	if text == "" {
@@ -582,11 +582,11 @@ func renderCoCreatePromptPanel(width, height int, state *cocreateState) string {
 	if state.promptVP.TotalLineCount() > state.promptVP.VisibleLineCount() {
 		switch {
 		case state.promptVP.AtTop():
-			hint = "↓ 下方还有内容，可滚轮或 PgDn 查看"
+			hint = "↓ Còn nội dung dưới, lăn chuột hoặc PgDn để xem"
 		case state.promptVP.AtBottom():
-			hint = "↑ 上方还有内容，可滚轮或 PgUp 查看"
+			hint = "↑ Còn nội dung trên, lăn chuột hoặc PgUp để xem"
 		default:
-			hint = "↑↓ 可继续滚动查看"
+			hint = "↑↓ cuộn tiếp để xem"
 		}
 	}
 

@@ -10,8 +10,8 @@ import (
 
 const resetForeground = "\x1b[39m"
 
-// highlightCommandToken 只给已确认的命令 token 着色，保留 textarea 原有的
-// 光标、反色和换行 ANSI 序列。参数从第一个空白字符开始，始终使用正文颜色。
+// highlightCommandToken chỉ tô màu token lệnh đã xác nhận, giữ nguyên các chuỗi ANSI
+// con trỏ, đảo màu và xuống dòng của textarea. Tham số từ khoảng trắng đầu tiên luôn dùng màu chữ thường.
 func highlightCommandToken(inputView, inputValue, commandToken string) string {
 	if commandToken == "" {
 		return inputView
@@ -28,9 +28,9 @@ func highlightCommandToken(inputView, inputValue, commandToken string) string {
 	return highlightANSIByteRange(inputView, start, start+len(commandToken))
 }
 
-// highlightANSIByteRange 在剥离 ANSI 后的字节区间上覆盖前景色。区间内若遇到
-// textarea 自己的 SGR（例如反色光标），会在其后重新下发强调色；区间结束只重置
-// 前景色，不清掉光标的其他终端属性。
+// highlightANSIByteRange phủ màu chữ lên khoảng byte sau khi bóc ANSI. Nếu trong khoảng gặp
+// SGR riêng của textarea (ví dụ con trỏ đảo màu), sẽ phát lại màu nhấn sau nó; cuối khoảng chỉ reset
+// màu chữ, không xóa các thuộc tính terminal khác của con trỏ.
 func highlightANSIByteRange(value string, start, end int) string {
 	if start < 0 || end <= start {
 		return value
@@ -77,22 +77,22 @@ func highlightANSIByteRange(value string, start, end int) string {
 	return out.String()
 }
 
-// renderInputBox 渲染底部输入区：输入框、快捷键提示行、最底部用量状态栏。
-// 输入框单独负责输入与提示，不承载启动模式栏。
+// renderInputBox vẽ ô nhập dưới cùng: khung nhập, dòng gợi ý phím tắt, thanh trạng thái usage dưới đáy.
+// Khung nhập chỉ lo nhập và gợi ý, không gánh thanh chế độ khởi động.
 func renderInputBox(inputView, hints string, snap host.UISnapshot, outputDir string, width int) string {
 	innerW := width - 4 // border + padding
 	if innerW < 12 {
 		innerW = 12
 	}
 
-	// 输入行：提示符 + 输入框
+	// Dòng nhập: ký hiệu nhắc + khung nhập
 	prompt := lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render("❯ ")
 	inputLine := prompt + inputView
 
-	// 提示行：快捷键独占整行——模型/花费等运行信息移入底部状态栏，不再挤在右侧互相截断。
+	// Dòng gợi ý: phím tắt chiếm trọn dòng — thông tin model/chi phí dời vào thanh trạng thái đáy, không chen chúc cắt nhau bên phải nữa.
 	line2 := fitInlineLine(hints, innerW)
 
-	// 输入区（单一盒子，避免视觉上出现双输入框）
+	// Vùng nhập (một hộp duy nhất, tránh nhìn như hai khung nhập)
 	inputStyle := lipgloss.NewStyle().
 		Width(width).
 		Border(baseBorder, true, false, true, false).
@@ -100,13 +100,13 @@ func renderInputBox(inputView, hints string, snap host.UISnapshot, outputDir str
 		Padding(0, 1)
 	inputBlock := inputStyle.Render(inputLine)
 
-	// 提示行（无边框，紧贴下横线下方）
+	// Dòng gợi ý (không viền, sát ngay dưới đường kẻ ngang)
 	hintStyle := lipgloss.NewStyle().
 		Width(width).
 		Padding(0, 2)
 	hintBlock := hintStyle.Render(line2)
 
-	// 状态栏占用输入区原有的末尾空行：整块高度不变，layoutHeights 无需调整。
+	// Thanh trạng thái chiếm dòng trống cuối vốn có của vùng nhập: tổng chiều cao không đổi, layoutHeights khỏi chỉnh.
 	statusBlock := hintStyle.Render(renderStatusBar(snap, outputDir, innerW))
 
 	return inputBlock + "\n" + hintBlock + "\n" + statusBlock

@@ -8,8 +8,8 @@ import (
 	"github.com/voocel/ainovel-cli/internal/host"
 )
 
-// renderTopBar 渲染顶部状态栏。
-// 左侧：provider/model，中间：书名，右侧：状态胶囊。
+// renderTopBar vẽ thanh trạng thái trên đỉnh.
+// Trái: provider/model, giữa: tên sách, phải: viên trạng thái.
 func renderTopBar(snap host.UISnapshot, width int, spinnerFrame, version string) string {
 	bookTitle := snap.BookTitle
 	if bookTitle == "" {
@@ -98,9 +98,9 @@ func renderTopBar(snap host.UISnapshot, width int, spinnerFrame, version string)
 		Render(content)
 }
 
-// renderStatePanel 把状态侧栏内容(已在 stateVP 中)包进左侧带右边框的盒子。
-// 与 renderDetailPanel 对称：内容由 renderStateContent 生成并喂进 viewport，这里只负责框。
-// MaxHeight 钳高，防止窗口缩小时溢出比右栏高（见 panels_test.go 的高度契约）。
+// renderStatePanel bọc nội dung cột trạng thái (đã ở stateVP) vào hộp có viền phải.
+// Đối xứng với renderDetailPanel: nội dung do renderStateContent sinh rồi đưa vào viewport, ở đây chỉ lo khung.
+// MaxHeight kẹp cao, chống cửa sổ co lại tràn cao hơn cột phải (xem khế ước chiều cao trong panels_test.go).
 func renderStatePanel(vp viewport.Model, width, height int, focused bool) string {
 	borderColor := colorDim
 	if focused {
@@ -116,7 +116,7 @@ func renderStatePanel(vp viewport.Model, width, height int, focused bool) string
 	return style.Render(vp.View())
 }
 
-// renderDetailPanel 渲染右侧可滚动详情面板。
+// renderDetailPanel vẽ panel chi tiết cuộn được bên phải.
 func renderDetailPanel(vp viewport.Model, width, height int, focused bool) string {
 	borderColor := colorDim
 	if focused {
@@ -133,21 +133,21 @@ func renderDetailPanel(vp viewport.Model, width, height int, focused bool) strin
 	return style.Render(vp.View())
 }
 
-// renderWelcome 渲染新建态首屏。
+// renderWelcome vẽ màn hình đầu trạng thái mới.
 func renderWelcome(width, height int, errMsg string, mode startupMode, importHint, updateHint string) string {
-	// 简洁标题
+	// Tiêu đề gọn
 	title := lipgloss.NewStyle().
 		Foreground(colorAccent).
 		Bold(true).
 		Render("A I N O V E L")
 
-	// 副标题
+	// Phụ đề
 	subtitle := lipgloss.NewStyle().
 		Foreground(colorMuted).
 		Italic(true).
 		Render("Engine sáng tác tiểu thuyết bằng AI")
 
-	// 分隔线
+	// Đường phân cách
 	divW := 44
 	if divW > width-8 {
 		divW = width - 8
@@ -155,7 +155,7 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 	divider := lipgloss.NewStyle().Foreground(colorDim).
 		Render(strings.Repeat("~", divW))
 
-	// 功能亮点
+	// Điểm nổi bật
 	features := []struct{ icon, label, desc string }{
 		{">>", "Đa model phối hợp", "Architect dàn ý / Writer viết / Editor duyệt"},
 		{"::", "Tự nối khi đứt đoạn", "Sập hay ngắt giữa chừng vẫn viết tiếp từ chỗ cũ"},
@@ -174,14 +174,14 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 	}
 	feats := strings.Join(featLines, "\n")
 
-	// 输入提示
+	// Gợi ý nhập
 	prompt := lipgloss.NewStyle().Foreground(bodyTextColor).Render("Nhập ý tưởng truyện của bạn ở dưới để bắt đầu")
 
 	modeLine := lipgloss.NewStyle().
 		Foreground(colorMuted).
 		Render("Chế độ hiện tại: " + mode.label() + " · " + mode.subtitle())
 
-	// 示例
+	// Ví dụ
 	examples := []string{
 		"Viết truyện đô thị huyền nghi 12 chương, chính là nữ pháp y",
 		"Sáng tác trường thiên tiên hiệp, chính từ phàm nhân tu tới phi thăng",
@@ -195,7 +195,7 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 	}
 	exBlock := strings.Join(exLines, "\n")
 
-	// 组装
+	// Ráp lại
 	var b strings.Builder
 	b.WriteString("\n")
 	b.WriteString(title)
@@ -215,7 +215,7 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 	b.WriteString(exBlock)
 	b.WriteString("\n\n")
 	if importHint != "" {
-		// 这本书停在导入半路：显著提示恢复入口，替代常规导入提示。
+		// Sách này kẹt giữa chừng lúc nhập: gợi ý lối khôi phục cho nổi, thay gợi ý nhập thường.
 		b.WriteString(lipgloss.NewStyle().Foreground(colorAccent2).Bold(true).
 			Render("! " + importHint))
 	} else {
@@ -223,7 +223,7 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 			Render("Có dàn ý/thiết lập sẵn? /start <đường dẫn file> để tạo truyện mới · Có bản thảo cũ? /import <đường dẫn file> để nhập vào viết tiếp"))
 	}
 	if updateHint != "" {
-		// 启动版本检查命中新版本：与 importHint 同款强调样式追加一行。
+		// Kiểm tra bản mới lúc khởi động trúng bản mới: thêm một dòng cùng kiểu nhấn như importHint.
 		b.WriteString("\n")
 		b.WriteString(lipgloss.NewStyle().Foreground(colorAccent2).Bold(true).
 			Render("! " + updateHint))
