@@ -5,8 +5,8 @@ import (
 	"math"
 	"sync/atomic"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
+	"github.com/voocel/agentcore"
 )
 
 // Máy trạng thái ngân sách: tiến lên đơn điệu, mỗi lần chuyển kích hoạt đúng một tác dụng phụ, không lùi.

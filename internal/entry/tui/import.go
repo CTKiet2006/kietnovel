@@ -2,7 +2,9 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strings"
 	"time"
 
@@ -108,12 +110,12 @@ func (s *importState) refresh(contentW int) {
 	stageStyle := lipgloss.NewStyle().Foreground(colorAccent2)
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Nhập truyện ngoài"))
+	b.WriteString(titleStyle.Render(i18n.T("Nhập truyện ngoài")))
 	b.WriteString("\n\n")
-	b.WriteString(dimStyle.Render("File nguồn "))
+	b.WriteString(dimStyle.Render(i18n.T("File nguồn ")))
 	b.WriteString(s.source)
 	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("Bắt đầu "))
+	b.WriteString(dimStyle.Render(i18n.T("Bắt đầu ")))
 	b.WriteString(formatReportTime(s.startedAt))
 	if !s.finishedAt.IsZero() {
 		b.WriteString(dimStyle.Render("  Xong "))
@@ -122,10 +124,10 @@ func (s *importState) refresh(contentW int) {
 	b.WriteString("\n\n")
 
 	// Dòng giai đoạn hiện tại
-	b.WriteString(mutedStyle.Render("Giai đoạn "))
+	b.WriteString(mutedStyle.Render(i18n.T("Giai đoạn ")))
 	b.WriteString(stageStyle.Render(string(s.stage)))
 	if s.total > 0 {
-		b.WriteString(mutedStyle.Render("  Tiến độ "))
+		b.WriteString(mutedStyle.Render(i18n.T("  Tiến độ ")))
 		if s.current > 0 {
 			b.WriteString(fmt.Sprintf("%d/%d", s.current, s.total))
 		} else {
@@ -136,12 +138,12 @@ func (s *importState) refresh(contentW int) {
 
 	// Nhật ký lịch sử. Mỗi dòng một cột icon ngữ nghĩa (khớp dáng panel sự kiện):
 	// ✗ đỏ=thất bại · ↻ cam=backoff thử lại/kiểm tra hỏi lại (cùng key nhảy tại chỗ) · ✓ xanh lá=xong · · xám=tiến độ thường.
-	b.WriteString(titleStyle.Render("Nhật ký chạy"))
+	b.WriteString(titleStyle.Render(i18n.T("Nhật ký chạy")))
 	b.WriteString(" ")
 	if s.totalLines > len(s.history) {
-		b.WriteString(dimStyle.Render(fmt.Sprintf("(%d dòng, chỉ hiện %d gần nhất, đủ ở logs/import.log)", s.totalLines, len(s.history))))
+		b.WriteString(dimStyle.Render(fmt.Sprintf(i18n.T("(%d dòng, chỉ hiện %d gần nhất, đủ ở logs/import.log)"), s.totalLines, len(s.history))))
 	} else {
-		b.WriteString(dimStyle.Render(fmt.Sprintf("(%d dòng)", s.totalLines)))
+		b.WriteString(dimStyle.Render(fmt.Sprintf(i18n.T("(%d dòng)"), s.totalLines)))
 	}
 	b.WriteString("\n")
 	now := time.Now()
@@ -172,24 +174,24 @@ func (s *importState) refresh(contentW int) {
 	b.WriteString("\n\n")
 	switch {
 	case s.err != nil:
-		b.WriteString(errStyle.Render("Nhập thất bại"))
+		b.WriteString(errStyle.Render(i18n.T("Nhập thất bại")))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("Esc đóng panel"))
+		b.WriteString(dimStyle.Render(i18n.T("Esc đóng panel")))
 	case s.paused && s.stage == imp.StageAwaitingConfirmation:
-		b.WriteString(okStyle.Render("Cắt chương xong, chờ bạn đối chiếu"))
+		b.WriteString(okStyle.Render(i18n.T("Cắt chương xong, chờ bạn đối chiếu")))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("y chốt cắt chương và chạy tiếp; muốn chỉnh thì Esc rồi /import --guide=<mô tả bằng lời>; Esc đóng panel"))
+		b.WriteString(dimStyle.Render(i18n.T("y chốt cắt chương và chạy tiếp; muốn chỉnh thì Esc rồi /import --guide=<mô tả bằng lời>; Esc đóng panel")))
 	case s.paused:
 		// Pipeline dừng ở điểm chờ phán quyết, kênh đã đóng: làm theo gợi ý trong panel rồi Esc đóng.
-		b.WriteString(okStyle.Render("Đã tạm dừng nhập, chờ bạn thao tác"))
+		b.WriteString(okStyle.Render(i18n.T("Đã tạm dừng nhập, chờ bạn thao tác")))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("Làm theo hướng dẫn trên để tiếp tục (vd /import --story=open|closed); Esc đóng panel"))
+		b.WriteString(dimStyle.Render(i18n.T("Làm theo hướng dẫn trên để tiếp tục (vd /import --story=open|closed); Esc đóng panel")))
 	case s.done:
-		b.WriteString(okStyle.Render("Nhập xong, Foundation và chương đã sẵn sàng"))
+		b.WriteString(okStyle.Render(i18n.T("Nhập xong, Foundation và chương đã sẵn sàng")))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("Esc đóng panel và nối cổng viết tiếp (engine dừng ở biên chương sau, chờ bạn duyệt)"))
+		b.WriteString(dimStyle.Render(i18n.T("Esc đóng panel và nối cổng viết tiếp (engine dừng ở biên chương sau, chờ bạn duyệt)")))
 	default:
-		b.WriteString(dimStyle.Render("Esc hủy nhập"))
+		b.WriteString(dimStyle.Render(i18n.T("Esc hủy nhập")))
 	}
 
 	// Đuôi chỉ bám khi user đang ở đáy: refresh giờ chạy mỗi tick (animation/đếm ngược),
@@ -308,12 +310,12 @@ func renderImportModal(width, height int, s *importState, frame int) string {
 		s.viewport.Height = vpH
 	}
 
-	hint := "  ↑↓ cuộn · Esc hủy/đóng"
+	hint := i18n.T("  ↑↓ cuộn · Esc hủy/đóng")
 	switch {
 	case s.paused && s.stage == imp.StageAwaitingConfirmation:
-		hint = "  ↑↓ cuộn · y chốt cắt chương · Esc đóng"
+		hint = i18n.T("  ↑↓ cuộn · y chốt cắt chương · Esc đóng")
 	case running:
-		hint = "  ↑↓ cuộn · Esc hủy"
+		hint = i18n.T("  ↑↓ cuộn · Esc hủy")
 	}
 
 	body := strings.Split(s.viewport.View(), "\n")
@@ -324,10 +326,10 @@ func renderImportModal(width, height int, s *importState, frame int) string {
 		star := lipgloss.NewStyle().Foreground(colorAccent).Bold(true).
 			Render(streamCursorFrames[frame%len(streamCursorFrames)])
 		status := lipgloss.NewStyle().Foreground(colorMuted).
-			Render(fmt.Sprintf(" Đang chạy · đã chạy %s", formatElapsed(time.Since(s.startedAt))))
+			Render(fmt.Sprintf(i18n.T(" Đang chạy · đã chạy %s"), formatElapsed(time.Since(s.startedAt))))
 		body = append([]string{star + status, ""}, body...)
 	}
-	modal := renderPaddedModalFrame(boxW, boxH, "Nhập truyện ngoài", hint, body)
+	modal := renderPaddedModalFrame(boxW, boxH, i18n.T("Nhập truyện ngoài"), hint, body)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)
 }
 
@@ -393,7 +395,7 @@ func (m Model) confirmImportSegmentation() (tea.Model, tea.Cmd) {
 	state, listenCmd, err := startImportRun(m.runtime, m.importSeq, imp.Options{AcceptSegmentation: true}, m.width, m.height)
 	if err != nil {
 		m.applyEvent(host.Event{
-			Time: time.Now(), Category: "ERROR", Summary: "Chốt cắt chương thất bại: " + err.Error(), Level: "error",
+			Time: time.Now(), Category: "ERROR", Summary: i18n.T("Chốt cắt chương thất bại: ") + err.Error(), Level: "error",
 		})
 		return m, nil
 	}
@@ -466,22 +468,22 @@ func parseImportArgs(args []string) (imp.Options, error) {
 		case strings.HasPrefix(a, "--story="):
 			v := strings.TrimPrefix(a, "--story=")
 			if v != "open" && v != "closed" {
-				return imp.Options{}, fmt.Errorf("--story chỉ là open hoặc closed: %q", v)
+				return imp.Options{}, fmt.Errorf(i18n.T("--story chỉ là open hoặc closed: %q"), v)
 			}
 			opts.StoryResolution = v
 		case strings.HasPrefix(a, "--guide="):
 			parts := append([]string{strings.TrimPrefix(a, "--guide=")}, args[i+1:]...)
 			g := strings.TrimSpace(strings.Join(parts, " "))
 			if g == "" {
-				return imp.Options{}, fmt.Errorf("--guide cần hướng dẫn cắt chương bằng lời, vd --guide=đoạn nghỉ·X cũng là chương riêng")
+				return imp.Options{}, errors.New(i18n.T("--guide cần hướng dẫn cắt chương bằng lời, vd --guide=đoạn nghỉ·X cũng là chương riêng"))
 			}
 			opts.Guidance = g
 			return opts, nil
 		case strings.HasPrefix(a, "--"):
-			return imp.Options{}, fmt.Errorf("Tùy chọn không rõ %q (hỗ trợ: --yes / --story=open|closed / --continue / --guide=<hướng dẫn cắt chương>)", a)
+			return imp.Options{}, fmt.Errorf(i18n.T("Tùy chọn không rõ %q (hỗ trợ: --yes / --story=open|closed / --continue / --guide=<hướng dẫn cắt chương>)"), a)
 		default:
 			if opts.SourcePath != "" {
-				return imp.Options{}, fmt.Errorf("Chỉ nhận một đường dẫn file nguồn: thừa %q", a)
+				return imp.Options{}, fmt.Errorf(i18n.T("Chỉ nhận một đường dẫn file nguồn: thừa %q"), a)
 			}
 			opts.SourcePath = a
 		}

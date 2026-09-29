@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"slices"
 	"strconv"
 	"strings"
@@ -194,16 +195,16 @@ func renderCommandPalette(width int, items []commandPaletteItem, cursor int) str
 	if selectedIdx < 0 || selectedIdx >= len(visible) {
 		selectedIdx = 0
 	}
-	hint := mutedStyle.Render("↑↓ Chọn · Tab/Enter Nhận · Esc Đóng")
+	hint := mutedStyle.Render(i18n.T("↑↓ Chọn · Tab/Enter Nhận · Esc Đóng"))
 	usage := "Usage: " + visible[selectedIdx].Usage
 	if remaining > 0 {
-		usage = usage + " · còn " + strconv.Itoa(remaining) + " lệnh"
+		usage = usage + i18n.T(" · còn ") + strconv.Itoa(remaining) + i18n.T(" lệnh")
 	}
 	usageLine := mutedStyle.Render(truncateWidth(usage, contentW))
 	body = append(body, usageLine+strings.Repeat(" ", max(0, contentW-lipgloss.Width(usageLine))))
 	body = append(body, hint+strings.Repeat(" ", max(0, contentW-lipgloss.Width(hint))))
 
-	return renderPaddedModalFrame(boxW, len(body)+2, "Lệnh", "", body)
+	return renderPaddedModalFrame(boxW, len(body)+2, i18n.T("Lệnh"), "", body)
 }
 
 func commandPaletteWindow(total, cursor, limit int) (start, end int) {

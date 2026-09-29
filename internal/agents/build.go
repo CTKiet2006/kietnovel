@@ -8,16 +8,16 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/voocel/agentcore"
-	corecontext "github.com/voocel/agentcore/context"
-	"github.com/voocel/agentcore/llm"
-	"github.com/voocel/agentcore/subagent"
 	"github.com/CTKiet2006/kietnovel/assets"
 	"github.com/CTKiet2006/kietnovel/internal/agents/ctxpack"
 	"github.com/CTKiet2006/kietnovel/internal/agents/guard"
 	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
 	"github.com/CTKiet2006/kietnovel/internal/store"
 	"github.com/CTKiet2006/kietnovel/internal/tools"
+	"github.com/voocel/agentcore"
+	corecontext "github.com/voocel/agentcore/context"
+	"github.com/voocel/agentcore/llm"
+	"github.com/voocel/agentcore/subagent"
 )
 
 // agentToRole 把 subagent name 归一为 ModelSet 认得的 role 名。

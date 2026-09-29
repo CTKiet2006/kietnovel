@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore/schema"
 )
 
 // AuditFoundationTool 接收 Architect 对已落盘基础设定的语义审查结论。

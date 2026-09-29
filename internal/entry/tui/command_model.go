@@ -1,13 +1,15 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strings"
 
+	"github.com/CTKiet2006/kietnovel/internal/host"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/voocel/agentcore"
-	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
 type modelRuntime interface {
@@ -34,35 +36,42 @@ type modelRoleOption struct {
 	Label string
 }
 
-var modelRoleOptions = []modelRoleOption{
-	{Key: "default", Label: "Mặc định"},
-
-	{Key: "architect", Label: "Architect"},
-	{Key: "writer", Label: "Writer"},
-	{Key: "editor", Label: "Editor"},
+// modelRoleOptions() dựng mới mỗi lần gọi, không phải biến package: nhãn phải dịch
+// sau khi SetLanguage đã chạy, còn biến package khởi tạo lúc import nên luôn kẹt
+// tiếng Việt. Key là định danh ổn định, không dịch.
+func modelRoleOptions() []modelRoleOption {
+	return []modelRoleOption{
+		{Key: "default", Label: i18n.T("Mặc định")},
+		{Key: "architect", Label: "Architect"},
+		{Key: "writer", Label: "Writer"},
+		{Key: "editor", Label: "Editor"},
+	}
 }
 
 type thinkingOption struct{ Key, Label string }
 
-var allThinkingOptions = []thinkingOption{
-	{"", "Mặc định (kế thừa)"},
-	{"off", "Tắt"},
-	{"low", "Thấp"},
-	{"medium", "Trung bình"},
-	{"high", "Cao"},
-	{"xhigh", "Rất cao"},
-	{"max", "Cao nhất"},
+// allThinkingOptions() xem modelRoleOptions() về lý do dựng lười.
+func allThinkingOptions() []thinkingOption {
+	return []thinkingOption{
+		{"", i18n.T("Mặc định (kế thừa)")},
+		{"off", i18n.T("Tắt")},
+		{"low", i18n.T("Thấp")},
+		{"medium", i18n.T("Trung bình")},
+		{"high", "Cao"},
+		{"xhigh", i18n.T("Rất cao")},
+		{"max", i18n.T("Cao nhất")},
+	}
 }
 
 func thinkingOptionsFor(rt modelRuntime, role string) []thinkingOption {
 	levels := rt.AvailableThinking(role)
 	if len(levels) == 0 {
-		return []thinkingOption{allThinkingOptions[0]}
+		return []thinkingOption{allThinkingOptions()[0]}
 	}
 	out := make([]thinkingOption, 0, len(levels))
 	for _, level := range levels {
 		key := string(level)
-		for _, option := range allThinkingOptions {
+		for _, option := range allThinkingOptions() {
 			if option.Key == key {
 				out = append(out, option)
 				break
@@ -70,7 +79,7 @@ func thinkingOptionsFor(rt modelRuntime, role string) []thinkingOption {
 		}
 	}
 	if len(out) == 0 {
-		return []thinkingOption{allThinkingOptions[0]}
+		return []thinkingOption{allThinkingOptions()[0]}
 	}
 	return out
 }
@@ -105,11 +114,11 @@ func newModelSwitchState(rt modelRuntime, roleHint string) *modelSwitchState {
 		providers: rt.ConfiguredProviders(),
 	}
 	if len(state.providers) == 0 {
-		state.message = "Hiện không có provider khả dụng"
+		state.message = i18n.T("Hiện không có provider khả dụng")
 	}
 
 	roleHint = normalizeRoleKey(roleHint)
-	for i, opt := range modelRoleOptions {
+	for i, opt := range modelRoleOptions() {
 		if opt.Key == roleHint {
 			state.roleIdx = i
 			break
@@ -131,11 +140,11 @@ func normalizeRoleKey(role string) string {
 }
 
 func (s *modelSwitchState) role() string {
-	return modelRoleOptions[s.roleIdx].Key
+	return modelRoleOptions()[s.roleIdx].Key
 }
 
 func (s *modelSwitchState) roleLabel() string {
-	return modelRoleOptions[s.roleIdx].Label
+	return modelRoleOptions()[s.roleIdx].Label
 }
 
 func (s *modelSwitchState) provider() string {
@@ -172,7 +181,7 @@ func (s *modelSwitchState) thinkingKey() string {
 
 func (s *modelSwitchState) thinkingLabel() string {
 	if s.thinkingIdx < 0 || s.thinkingIdx >= len(s.thinking) {
-		return allThinkingOptions[0].Label
+		return allThinkingOptions()[0].Label
 	}
 	return s.thinking[s.thinkingIdx].Label
 }
@@ -185,7 +194,7 @@ func (s *modelSwitchState) moveFocus(delta int) {
 func (s *modelSwitchState) cycle(delta int, rt modelRuntime) {
 	switch s.focus {
 	case modelFocusRole:
-		total := len(modelRoleOptions)
+		total := len(modelRoleOptions())
 		s.roleIdx = (s.roleIdx + delta + total) % total
 		s.syncSelection(rt)
 	case modelFocusProvider:
@@ -249,10 +258,10 @@ func (s *modelSwitchState) syncThinking(rt modelRuntime) {
 
 func (s *modelSwitchState) apply(rt modelRuntime) error {
 	if len(s.providers) == 0 {
-		return fmt.Errorf("Hiện không có provider khả dụng")
+		return errors.New(i18n.T("Hiện không có provider khả dụng"))
 	}
 	if len(s.models) == 0 {
-		return fmt.Errorf("provider %q chưa có model nào", s.provider())
+		return fmt.Errorf(i18n.T("provider %q chưa có model nào"), s.provider())
 	}
 	wantThinking := s.thinkingKey()
 	if err := rt.SwitchModel(s.role(), s.provider(), s.model()); err != nil {
@@ -311,16 +320,16 @@ func renderModelSwitchBar(width int, state *modelSwitchState) string {
 	title := lipgloss.NewStyle().
 		Foreground(colorMuted).
 		Bold(true).
-		Render("/model Đổi model")
+		Render(i18n.T("/model Đổi model"))
 
-	row1 := renderModelField("Vai trò", state.roleLabel(), state.focus == modelFocusRole)
+	row1 := renderModelField(i18n.T("Vai trò"), state.roleLabel(), state.focus == modelFocusRole)
 	row2 := renderModelField("Provider", state.provider(), state.focus == modelFocusProvider)
 	row3 := renderModelField("Model", state.modelLabel(), state.focus == modelFocusModel)
-	row4 := renderModelField("Mức suy luận", state.thinkingLabel(), state.focus == modelFocusThinking)
+	row4 := renderModelField(i18n.T("Mức suy luận"), state.thinkingLabel(), state.focus == modelFocusThinking)
 	hint := lipgloss.NewStyle().
 		Foreground(colorDim).
 		Italic(true).
-		Render("Tab Đổi trường   ←→ Đổi lựa chọn   Enter Áp dụng   Esc Hủy")
+		Render(i18n.T("Tab Đổi trường   ←→ Đổi lựa chọn   Enter Áp dụng   Esc Hủy"))
 	lines := []string{
 		row1,
 		row2,
@@ -371,7 +380,7 @@ func renderModelSwitchBar(width int, state *modelSwitchState) string {
 
 func renderModelField(label, value string, focused bool) string {
 	if strings.TrimSpace(value) == "" {
-		value = "Chưa đặt"
+		value = i18n.T("Chưa đặt")
 	}
 	labelText := lipgloss.NewStyle().
 		Foreground(colorMuted).

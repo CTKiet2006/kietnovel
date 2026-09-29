@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore/schema"
 )
 
 // ResolveOutlineFeedbackTool 落盘“现有计划仍适用”的审查结论并消费反馈。

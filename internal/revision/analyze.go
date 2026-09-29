@@ -7,11 +7,11 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/voocel/agentcore"
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/chapterfacts"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
+	"github.com/voocel/agentcore"
+	"github.com/voocel/agentcore/schema"
 )
 
 var analysisContract = llmcontract.Contract{

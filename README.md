@@ -1,13 +1,13 @@
 # kietnovel
 
-> Engine sáng tác tiểu thuyết dài tập bằng AI, Việt hóa toàn diện. Fork từ [voocel/ainovel-cli](https://github.com/voocel/ainovel-cli) — giữ nguyên bộ prompt gốc đã kiểm chứng.
+> Engine sáng tác tiểu thuyết dài tập bằng AI, Việt hóa toàn diện. Phát triển từ [ainovel-cli](https://github.com/voocel/ainovel-cli) — giữ nguyên bộ prompt gốc đã kiểm chứng, cộng thêm giao diện đa ngôn ngữ vi/en/zh.
 
 Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định chạy trọn một bộ truyện, model chỉ được gọi đúng chỗ cần phán đoán — Engine điều phối 3 agent tự chủ Architect / Writer / Editor theo bảng quyết định, Arbiter ngữ nghĩa chỉ thức dậy khi cần. Từ một câu ý tưởng tới tiểu thuyết hoàn chỉnh.
 
 ## Điểm Nổi Bật Của Bản Việt Hóa & Đa Ngôn Ngữ
 
-- 🇻🇳 **Giao diện TUI Việt hóa 100%**: Từ Setup Wizard cài đặt ban đầu, màn hình chào mừng, thanh trạng thái, Activity stream trực tiếp, bảng quản lý Provider/Model (`/config`, `/model`) đến thông báo lỗi và phím tắt đều được dịch sang Tiếng Việt chuẩn mực, tự nhiên.
-- 🌐 **Tùy chọn Ngôn ngữ sáng tác truyện**: Viết truyện bằng Tiếng Việt (mặc định) hoặc Tiếng Trung nguyên bản qua `"language": "vi"` / `"language": "zh"`. Bộ prompt giữ nguyên bản gốc (đã kiểm chứng), chỉ đổi lớp văn phong kèm chỉ dẫn buộc ngôn ngữ đầu ra.
+- 🌐 **Giao diện TUI đa ngôn ngữ (vi / en / zh)**: Từ Setup Wizard cài đặt ban đầu, màn hình chào mừng, thanh trạng thái, Activity stream trực tiếp, bảng quản lý Provider/Model (`/config`, `/model`) đến thông báo lỗi và phím tắt — tất cả dịch theo ngôn ngữ đang chọn, chuẩn mực và tự nhiên. Đổi giữa chừng bằng lệnh `/language`.
+- ✍️ **Tùy chọn ngôn ngữ sáng tác truyện**: Viết truyện bằng Tiếng Việt (mặc định), Tiếng Anh hay Tiếng Trung giản thuận qua `"language": "vi"` / `"en"` / `"zh"`. Bộ prompt giữ nguyên bản gốc (đã kiểm chứng), chỉ đổi lớp văn phong kèm chỉ dẫn buộc ngôn ngữ đầu ra.
 - 🔑 **Chạy thẳng với API cloud**: Hỗ trợ OpenRouter, DeepSeek, Gemini, Anthropic, OpenAI. Một API key là viết được ngay, không cần Docker.
 - ✍️ **Văn phong chống AI sáo rỗng**: kèm quy chuẩn hành văn tiểu thuyết Tiếng Việt (`assets/voice.md`) và bộ chống sáo rỗng (`assets/references/anti-ai-tone.md`) với danh sách cụm cấm cụ thể cho tiếng Việt — "ở một mức độ nào đó", "như thể", "bất giác", "không khỏi"... giúp hành văn sống động, gãy gọn, có chiều sâu.
 - 🚀 **Đồng bộ toàn diện Upstream mới nhất**: Kiến trúc Đa Agent, quy hoạch cuộn 2 tầng (Rolling planning), nén ngữ cảnh 4 cấp, điểm phục hồi step-level, và toàn bộ 14 lệnh slash commands.
@@ -115,25 +115,37 @@ $env:NOVEL_DIR = ".\novels\tien-hiep-ky"
 kietnovel
 ```
 
-## 3. Tùy Chọn Ngôn Ngữ Sáng Tác
+## 3. Tùy Chọn Ngôn Ngữ (vi / en / zh)
 
-Trong file cấu hình `~/.ainovel/config.json`, bạn có thể chỉ định trường `"language"`:
+Trong file cấu hình `~/.ainovel/config.json`, bạn có thể chỉ định trường `"language"`.
+Một lựa chọn này chi phối **cả hai**: ngôn ngữ giao diện TUI lẫn ngôn ngữ sáng tác.
 
-- `"language": "vi"` (Mặc định): Toàn bộ dàn ý, nhân vật, bối cảnh thế giới, quy chuẩn văn phong chống AI và nội dung từng chương sẽ được sinh ra bằng Tiếng Việt tự nhiên, mượt mà.
-- `"language": "zh"`: Nội dung truyện được sinh ra bằng Tiếng Trung nguyên bản (phù hợp nếu bạn viết truyện Trung hoặc muốn dùng công cụ dịch sau).
+- `"language": "vi"` (Mặc định): Toàn bộ tiếng Việt, thuật ngữ, quy chuẩn văn phong, chỉ báo thế giới.
+- `"language": "en"`: Giao diện tiếng Anh, nội dung truyện sinh ra bằng tiếng Anh tự nhiên, đúng chuẩn tiểu thuyết bản ngữ.
+- `"language": "zh"`: Giao diện tiếng Trung, nội dung truyện sinh ra bằng tiếng Trung giản thuận (phù hợp nếu bạn viết truyện Trung hoặc muốn đăng cùng cổ địch sau).
 
 ### Cách hoạt động
 
-Prompt hệ thống giữ nguyên bản gốc của upstream (tiếng Trung, đã được kiểm chứng và tinh chỉnh) — **không dịch lại** để tránh mất chất lượng. Ngôn ngữ sáng tác được điều khiển ở hai điểm:
+Prompt hệ thống giữ nguyên bản gốc của upstream (tiếng Trung, đã kiểm chứng về tinh thần) - **không dịch lại** để tránh mất chất lượng. Ngôn ngữ sáng tác được điều khiển ở hai điểm:
 
-| Điểm | `vi` (mặc định) | `zh` |
-|---|---|---|
-| Lớp văn phong (`voice`) | `assets/voice.md` — quy chuẩn hành văn tiểu thuyết Tiếng Việt | `assets/voice_zh.md` — bản gốc tiếng Trung |
-| Chỉ dẫn đầu ra | Gắn vào Architect/Writer/Editor: *toàn bộ sản phẩm phải viết bằng Tiếng Việt tự nhiên, đúng chuẩn văn phong* | Không gắn — protocol vốn đã là tiếng Trung |
+| Điểm | `vi` (mặc định) | `en` | `zh` |
+|---|---|---|---|
+| Lớp văn phong (`voice`) | `assets/voice.md` - quy chuẩn nhà văn tiểu thuyết Tiếng Việt | `assets/voice_en.md` - quy chuẩn tiểu thuyết tiếng Anh bản ngữ | `assets/voice_zh.md` - bản gốc tiếng Trung |
+| Chỉ dẫn đầu ra | Gắn vào Architect/Writer/Editor: *toàn bộ sản phẩm phải viết bằng Tiếng Việt tự nhiên, đúng chuẩn văn phong* | Gắn tương tự, bằng tiếng Anh | Không gắn - protocol vốn đã là tiếng Trung |
 
-Bản chất: một câu lệnh buộc ngôn ngữ + bộ quy chuẩn văn phong tương ứng, thay vì duy trì hai bản prompt song song dễ lệch nội dung.
+Bản chất: một câu lệnh buộc ngôn ngữ + một bộ quy chuẩn văn phong tương ứng, thay vì
+duy trì hai bản prompt song song dễ lệch nội dung.
 
-💡 Ghi chú: Bảng điều khiển TUI, thanh trạng thái, menu và các thông báo lỗi luôn hiển thị 100% bằng Tiếng Việt, kể cả khi `language` là `zh`.
+### Cách đổi ngôn ngữ
+
+- Lúc cài đặt: Setup Wizard hỏi ngôn ngữ ngay từ đầu.
+- Khi đang chạy: gõ `/language` để xem ngôn ngữ hiện tại, hoặc `/language en`
+  (cũng nhận `vi`, `zh`) để đổi. Lựa chọn được ghi vào cấu hình và giữ cho các
+  lần khởi động sau.
+
+Giao diện đổi ngay. Riêng **ngôn ngữ sáng tác** được nạp một lần lúc khởi động, nên
+có hiệu lực đầy đủ từ lần mở kế tiếp - ứng dụng sẽ nhắc việc này ngay sau khi đổi.
+
 
 ## 4. Cấu Hình Nhà Cung Cấp AI (LLM)
 
@@ -253,6 +265,7 @@ Khi đang ở trong giao diện TUI, bạn có thể gõ `/` để mở bảng c
 | `/importsim <file>` | Nhập hồ sơ mô phỏng văn phong từ tệp json |
 | `/sync` | Đồng bộ các chỉnh sửa thủ công của bạn trên các file chương vào hệ thống |
 | `/export` | Xuất tác phẩm thành file văn bản hoàn chỉnh (.txt hoặc .epub) |
+| `/language [vi\|en\|zh]` | Xem hoặc đổi ngôn ngữ giao diện; lựa chọn được lưu vào cấu hình |
 
 ### Can thiệp thời gian thực (Steer)
 
@@ -461,17 +474,33 @@ Hệ thống sẽ tự động tổng hợp các yêu cầu này vào bộ quy t
 
 ### License
 
-Dự án được phân phối dưới giấy phép mã nguồn mở MIT License (kế thừa từ upstream). Bản Việt hóa và phát triển bởi cộng đồng. Chúc bạn có những tác phẩm tuyệt vời!
+Dự án được phân phối dưới **Apache License 2.0** — cùng giấy phép với
+[ainovel-cli](https://github.com/voocel/ainovel-cli), dự án mà toàn bộ kiến trúc
+của kietnovel bắt nguồn từ đó. Apache-2.0 yêu cầu tác phẩm phái sinh phải giữ
+nguyên giấy phép này, nên kietnovel không thể (và không nên) phát hành lại dưới
+MIT.
+
+Apache-2.0 cũng cấp quyền patent tường minh cho cả người đóng góp, nên bạn dùng
+thương mại, sửa đổi hay phân phối lại đều không cần xin phép ai.
 
 ---
 
-## Ghi nhận nguồn
+## Acknowledgments
 
-| Thành phần | Nguồn |
-|---|---|
-| Kiến trúc Engine, đa agent, quy hoạch cuộn, checkpoint, toàn bộ lệnh TUI, **và toàn bộ bộ prompt/tài liệu tham chiếu** | [voocel/ainovel-cli](https://github.com/voocel/ainovel-cli) — MIT |
-| Việt hóa TUI, `NOVEL_DIR`, quy chuẩn văn phong tiếng Việt (`assets/voice.md`), cơ chế `language`, README | repo này |
+*Built on the shoulders of giants:*
 
-Bộ prompt giữ nguyên bản gốc của upstream: đã được kiểm chứng về chất lượng, dịch lại chỉ làm tăng rủi ro lệch nghĩa. Việt hóa tập trung ở tầng giao diện và tầng văn phong — nơi thực sự quyết định trải nghiệm và chất lượng đầu ra.
+- **[ainovel-cli](https://github.com/voocel/ainovel-cli)** — original Go implementation that
+  inspired this project. Toàn bộ kiến trúc Engine đa agent, cơ chế quy hoạch cuộn,
+  checkpoint, các lệnh TUI, cùng bộ prompt và tài liệu tham chiếu đều xuất phát
+  từ đây. — Apache-2.0
+- **[agentcore](https://github.com/voocel/agentcore)** — tool-calling và streaming
+  runtime mà lớp Agent dựng trên. — Apache-2.0
+- **[litellm](https://github.com/voocel/litellm)** — giao diện LLM đa nhà cung cấp. — Apache-2.0
+- **[Bubble Tea](https://github.com/charmbracelet/bubbletea)**,
+  **[Lip Gloss](https://github.com/charmbracelet/lipgloss)**,
+  **[Bubbles](https://github.com/charmbracelet/bubbles)** — khung TUI. — MIT
 
-Cải tiến chung nên gửi PR về upstream. Repo này tập trung vào Việt hóa và trải nghiệm người dùng Việt.
+kietnovel là một tác phẩm phái sinh đã sửa đổi nhiều, nhưng vẫn thừa hưởng mã
+nguồn gốc và giữ nguyên giấy phép Apache-2.0 theo yêu cầu của bản gốc. Phần
+đóng góp riêng của repo này: giao diện đa ngôn ngữ vi/en/zh, lệnh `/language`,
+`NOVEL_DIR`, bộ quy chuẩn văn phong cho ba ngôn ngữ, cùng toàn bộ tài liệu.

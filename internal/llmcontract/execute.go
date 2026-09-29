@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/llmretry"
+	"github.com/voocel/agentcore"
 )
 
 // FailureKind 区分不可由同一次结构化反馈修复的失败边界。

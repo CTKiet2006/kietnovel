@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strconv"
 	"strings"
 
@@ -49,25 +50,25 @@ func parseExportArgs(args []string) (exp.Options, error) {
 			case "from":
 				n, err := strconv.Atoi(v)
 				if err != nil || n < 0 {
-					return exp.Options{}, fmt.Errorf("from phải là số nguyên không âm: %q", v)
+					return exp.Options{}, fmt.Errorf(i18n.T("from phải là số nguyên không âm: %q"), v)
 				}
 				opts.From = n
 			case "to":
 				n, err := strconv.Atoi(v)
 				if err != nil || n < 0 {
-					return exp.Options{}, fmt.Errorf("to phải là số nguyên không âm: %q", v)
+					return exp.Options{}, fmt.Errorf(i18n.T("to phải là số nguyên không âm: %q"), v)
 				}
 				opts.To = n
 			default:
-				return exp.Options{}, fmt.Errorf("Tham số không rõ %q (hỗ trợ: from / to)", k)
+				return exp.Options{}, fmt.Errorf(i18n.T("Tham số không rõ %q (hỗ trợ: from / to)"), k)
 			}
 			continue
 		}
 		if strings.HasPrefix(a, "-") {
-			return exp.Options{}, fmt.Errorf("Flag không rõ %q", a)
+			return exp.Options{}, fmt.Errorf(i18n.T("Flag không rõ %q"), a)
 		}
 		if opts.OutPath != "" {
-			return exp.Options{}, fmt.Errorf("Chỉ hỗ trợ một tham số đường dẫn: %q", a)
+			return exp.Options{}, fmt.Errorf(i18n.T("Chỉ hỗ trợ một tham số đường dẫn: %q"), a)
 		}
 		opts.OutPath = a
 	}
@@ -77,9 +78,9 @@ func parseExportArgs(args []string) (exp.Options, error) {
 // formatExportSuccess vẽ Result thành Summary sự kiện.
 func formatExportSuccess(res *exp.Result) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "✓ Đã xuất %d chương / %s ra %s", res.Chapters, humanBytes(res.Bytes), res.Path)
+	fmt.Fprintf(&b, i18n.T("✓ Đã xuất %d chương / %s ra %s"), res.Chapters, humanBytes(res.Bytes), res.Path)
 	if n := len(res.Skipped); n > 0 {
-		fmt.Fprintf(&b, " (bỏ qua %d chương chưa xong: %s)", n, briefIntList(res.Skipped, 5))
+		fmt.Fprintf(&b, i18n.T(" (bỏ qua %d chương chưa xong: %s)"), n, briefIntList(res.Skipped, 5))
 	}
 	return b.String()
 }

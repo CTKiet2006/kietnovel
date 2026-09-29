@@ -8,12 +8,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 	"github.com/CTKiet2006/kietnovel/internal/flow"
 	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore/schema"
 )
 
 // SaveReviewTool 保存 Editor 的审阅结果。

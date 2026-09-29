@@ -11,6 +11,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/revision"
 	storepkg "github.com/CTKiet2006/kietnovel/internal/store"
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 )
 
 // upgradeProject nâng dữ liệu dự án cũ lên định dạng hiện tại, và đưa cùng một lỗi gốc cho cả giao diện lẫn log.
@@ -28,7 +29,7 @@ func runProjectUpgrades(st *storepkg.Store) error {
 		return fmt.Errorf("Không đọc được phiên bản định dạng dự án: %w", err)
 	}
 	if version > storepkg.CurrentProjectFormatVersion {
-		return fmt.Errorf("Định dạng dự án v%d mới hơn mức chương trình này hỗ trợ (v%d), hãy nâng cấp ainovel-cli", version, storepkg.CurrentProjectFormatVersion)
+		return fmt.Errorf("Định dạng dự án v%d mới hơn mức chương trình này hỗ trợ (v%d), hãy nâng cấp %s", version, storepkg.CurrentProjectFormatVersion, buildversion.AppName)
 	}
 	for version < storepkg.CurrentProjectFormatVersion {
 		next := version + 1

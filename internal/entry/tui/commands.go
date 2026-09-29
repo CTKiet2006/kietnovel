@@ -1,14 +1,16 @@
 package tui
 
 import (
-	"fmt"
+	"errors"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/entry/startup"
 	"github.com/CTKiet2006/kietnovel/internal/host"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type slashCommandSpec struct {
@@ -58,7 +60,7 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "help",
 			Group:       "system",
 			Usage:       "/help",
-			Description: "Xem danh sách lệnh",
+			Description: i18n.T("Xem danh sách lệnh"),
 			AutoExecute: true,
 			Run: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 				m.help = newHelpState(m.width, m.height)
@@ -70,7 +72,7 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "model",
 			Group:       "system",
 			Usage:       "/model [role]",
-			Description: "Đổi model và mức suy luận của từng vai trò",
+			Description: i18n.T("Đổi model và mức suy luận của từng vai trò"),
 			AutoExecute: true,
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				roleHint := ""
@@ -78,7 +80,7 @@ func commandRegistryInstance() commandRegistry {
 					roleHint = args[0]
 					if normalizeRoleKey(roleHint) == "" {
 						m.applyEvent(host.Event{
-							Time: time.Now(), Category: "ERROR", Summary: "Vai trò không rõ: " + roleHint, Level: "error",
+							Time: time.Now(), Category: "ERROR", Summary: i18n.T("Vai trò không rõ: ") + roleHint, Level: "error",
 						})
 						m.refreshEventViewport()
 						return m, nil
@@ -93,11 +95,11 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "config",
 			Group:       "system",
 			Usage:       "/config",
-			Description: "Thêm/sửa Provider, model và context window",
+			Description: i18n.T("Thêm/sửa Provider, model và context window"),
 			AutoExecute: true,
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				if len(args) != 0 {
-					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: "Cách dùng: /config", Level: "error"})
+					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: i18n.T("Cách dùng: /config"), Level: "error"})
 					m.refreshEventViewport()
 					return m, nil
 				}
@@ -110,7 +112,7 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "diag",
 			Group:       "analysis",
 			Usage:       "/diag",
-			Description: "Chẩn đoán sức khỏe truyện đang viết",
+			Description: i18n.T("Chẩn đoán sức khỏe truyện đang viết"),
 			AutoExecute: true,
 			Run: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 				m.reportSeq++
@@ -123,10 +125,10 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "review",
 			Group:       "writing",
 			Usage:       "/review on|off",
-			Description: "Bật/tắt duyệt từng chương",
+			Description: i18n.T("Bật/tắt duyệt từng chương"),
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				if len(args) != 1 || (args[0] != "on" && args[0] != "off") {
-					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: "Cách dùng: /review on|off", Level: "error"})
+					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: i18n.T("Cách dùng: /review on|off"), Level: "error"})
 					m.refreshEventViewport()
 					return m, nil
 				}
@@ -135,7 +137,7 @@ func commandRegistryInstance() commandRegistry {
 					mode = domain.ChapterAdvanceAuto
 				}
 				if err := m.runtime.SetAdvanceMode(mode); err != nil {
-					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: "Đổi chế độ duyệt thất bại: " + err.Error(), Level: "error"})
+					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: i18n.T("Đổi chế độ duyệt thất bại: ") + err.Error(), Level: "error"})
 					m.refreshEventViewport()
 					return m, nil
 				}
@@ -146,17 +148,17 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "next",
 			Group:       "writing",
 			Usage:       "/next",
-			Description: "Duyệt để viết chương tiếp theo",
+			Description: i18n.T("Duyệt để viết chương tiếp theo"),
 			AutoExecute: true,
 			NeedsIdle:   true,
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				if len(args) != 0 {
-					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: "Cách dùng: /next", Level: "error"})
+					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: i18n.T("Cách dùng: /next"), Level: "error"})
 					m.refreshEventViewport()
 					return m, nil
 				}
 				if err := m.runtime.AdvanceOneChapter(); err != nil {
-					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: "Cho viết chương tiếp thất bại: " + err.Error(), Level: "error"})
+					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: i18n.T("Cho viết chương tiếp thất bại: ") + err.Error(), Level: "error"})
 					m.refreshEventViewport()
 					return m, nil
 				}
@@ -167,11 +169,11 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "start",
 			Group:       "writing",
 			Usage:       "/start <path>",
-			Description: "Tạo truyện mới từ file thiết lập/dàn ý",
+			Description: i18n.T("Tạo truyện mới từ file thiết lập/dàn ý"),
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				if m.mode != modeNew {
 					m.applyEvent(host.Event{
-						Time: time.Now(), Category: "ERROR", Summary: "/start chỉ dùng ở màn hình chào để tạo truyện mới", Level: "error",
+						Time: time.Now(), Category: "ERROR", Summary: i18n.T("/start chỉ dùng ở màn hình chào để tạo truyện mới"), Level: "error",
 					})
 					m.refreshEventViewport()
 					return m, nil
@@ -188,15 +190,15 @@ func commandRegistryInstance() commandRegistry {
 		{
 			Name:        "import",
 			Group:       "writing",
-			Usage:       "/import <path> [--yes] [--story=open|closed] [--continue] [--guide=<hướng dẫn cắt chương>]",
-			Description: "Nhập truyện ngoài vào để viết tiếp (không tham số thì tiếp tục lần nhập dở; --guide chỉnh cách cắt chương bằng ngôn ngữ tự nhiên)",
+			Usage:       i18n.T("/import <path> [--yes] [--story=open|closed] [--continue] [--guide=<hướng dẫn cắt chương>]"),
+			Description: i18n.T("Nhập truyện ngoài vào để viết tiếp (không tham số thì tiếp tục lần nhập dở; --guide chỉnh cách cắt chương bằng ngôn ngữ tự nhiên)"),
 			NeedsIdle:   true,
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				m.importSeq++
 				state, listenCmd, err := startImport(m.runtime, m.importSeq, args, m.width, m.height)
 				if err != nil {
 					m.applyEvent(host.Event{
-						Time: time.Now(), Category: "ERROR", Summary: "Bắt đầu nhập thất bại: " + err.Error(), Level: "error",
+						Time: time.Now(), Category: "ERROR", Summary: i18n.T("Bắt đầu nhập thất bại: ") + err.Error(), Level: "error",
 					})
 					m.refreshEventViewport()
 					return m, nil
@@ -210,13 +212,13 @@ func commandRegistryInstance() commandRegistry {
 		{
 			Name:        "reopen",
 			Group:       "writing",
-			Usage:       "/reopen [hướng viết tiếp]",
-			Description: "Mở lại truyện đã hoàn thành để viết tiếp",
+			Usage:       i18n.T("/reopen [hướng viết tiếp]"),
+			Description: i18n.T("Mở lại truyện đã hoàn thành để viết tiếp"),
 			NeedsIdle:   true,
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				if err := m.runtime.Reopen(strings.Join(args, " ")); err != nil {
 					m.applyEvent(host.Event{
-						Time: time.Now(), Category: "ERROR", Summary: "Mở lại thất bại: " + err.Error(), Level: "error",
+						Time: time.Now(), Category: "ERROR", Summary: i18n.T("Mở lại thất bại: ") + err.Error(), Level: "error",
 					})
 					m.refreshEventViewport()
 					return m, nil
@@ -229,19 +231,19 @@ func commandRegistryInstance() commandRegistry {
 			Aliases:     []string{"plan"},
 			Group:       "writing",
 			Usage:       "/cocreate",
-			Description: "Tạm dừng để cùng AI định hướng giai đoạn tiếp",
+			Description: i18n.T("Tạm dừng để cùng AI định hướng giai đoạn tiếp"),
 			AutoExecute: true,
 			Run: func(m Model, _ []string) (tea.Model, tea.Cmd) {
 				if m.mode != modeRunning {
 					m.applyEvent(host.Event{
-						Time: time.Now(), Category: "ERROR", Summary: "Đồng sáng tác chỉ dùng khi đang viết", Level: "error",
+						Time: time.Now(), Category: "ERROR", Summary: i18n.T("Đồng sáng tác chỉ dùng khi đang viết"), Level: "error",
 					})
 					m.refreshEventViewport()
 					return m, nil
 				}
 				if !m.runtime.PauseForCoCreate() {
 					m.applyEvent(host.Event{
-						Time: time.Now(), Category: "ERROR", Summary: "Không vào được đồng sáng tác: truyện đã xong hoặc đang trong đồng sáng tác", Level: "error",
+						Time: time.Now(), Category: "ERROR", Summary: i18n.T("Không vào được đồng sáng tác: truyện đã xong hoặc đang trong đồng sáng tác"), Level: "error",
 					})
 					m.refreshEventViewport()
 					return m, nil
@@ -256,14 +258,14 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "simulate",
 			Group:       "writing",
 			Usage:       "/simulate",
-			Description: "Đọc ./simulate để tạo/cập nhật hồ sơ văn phong",
+			Description: i18n.T("Đọc ./simulate để tạo/cập nhật hồ sơ văn phong"),
 			NeedsIdle:   true,
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				m.simSeq++
 				state, listenCmd, err := startSimulate(m.runtime, m.simSeq, args, m.width, m.height)
 				if err != nil {
 					m.applyEvent(host.Event{
-						Time: time.Now(), Category: "ERROR", Summary: "Bắt đầu mô phỏng văn phong thất bại: " + err.Error(), Level: "error",
+						Time: time.Now(), Category: "ERROR", Summary: i18n.T("Bắt đầu mô phỏng văn phong thất bại: ") + err.Error(), Level: "error",
 					})
 					m.refreshEventViewport()
 					return m, nil
@@ -277,14 +279,14 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "importsim",
 			Group:       "writing",
 			Usage:       "/importsim <profile.json>",
-			Description: "Nhập hồ sơ văn phong có sẵn từ file json",
+			Description: i18n.T("Nhập hồ sơ văn phong có sẵn từ file json"),
 			NeedsIdle:   true,
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				m.simSeq++
 				state, listenCmd, err := startImportSimulation(m.runtime, m.simSeq, args, m.width, m.height)
 				if err != nil {
 					m.applyEvent(host.Event{
-						Time: time.Now(), Category: "ERROR", Summary: "Nhập hồ sơ văn phong thất bại: " + err.Error(), Level: "error",
+						Time: time.Now(), Category: "ERROR", Summary: i18n.T("Nhập hồ sơ văn phong thất bại: ") + err.Error(), Level: "error",
 					})
 					m.refreshEventViewport()
 					return m, nil
@@ -298,19 +300,19 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "sync",
 			Group:       "writing",
 			Usage:       "/sync [--check]",
-			Description: "Kiểm tra/nhận các chương bạn sửa tay",
+			Description: i18n.T("Kiểm tra/nhận các chương bạn sửa tay"),
 			AutoExecute: true,
 			NeedsIdle:   true,
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				cmd, checkOnly, err := startRevisionSync(m.runtime, args)
 				if err != nil {
-					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: "Bắt đầu đồng bộ chương thất bại: " + err.Error(), Level: "error"})
+					m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: i18n.T("Bắt đầu đồng bộ chương thất bại: ") + err.Error(), Level: "error"})
 					m.refreshEventViewport()
 					return m, nil
 				}
-				summary := "Đang phân tích và nhận các sửa đổi chương..."
+				summary := i18n.T("Đang phân tích và nhận các sửa đổi chương...")
 				if checkOnly {
-					summary = "Đang kiểm tra các chương bị sửa từ bên ngoài..."
+					summary = i18n.T("Đang kiểm tra các chương bị sửa từ bên ngoài...")
 				}
 				m.applyEvent(host.Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: "info"})
 				m.refreshEventViewport()
@@ -321,25 +323,111 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "export",
 			Group:       "writing",
 			Usage:       "/export [path] [from=N] [to=M] [--overwrite]",
-			Description: "Xuất các chương đã xong ra TXT/EPUB",
+			Description: i18n.T("Xuất các chương đã xong ra TXT/EPUB"),
 			AutoExecute: true,
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
 				cmd, err := startExport(m.runtime, args)
 				if err != nil {
 					m.applyEvent(host.Event{
-						Time: time.Now(), Category: "ERROR", Summary: "Bắt đầu xuất thất bại: " + err.Error(), Level: "error",
+						Time: time.Now(), Category: "ERROR", Summary: i18n.T("Bắt đầu xuất thất bại: ") + err.Error(), Level: "error",
 					})
 					m.refreshEventViewport()
 					return m, nil
 				}
 				m.applyEvent(host.Event{
-					Time: time.Now(), Category: "SYSTEM", Summary: "Đang xuất...", Level: "info",
+					Time: time.Now(), Category: "SYSTEM", Summary: i18n.T("Đang xuất..."), Level: "info",
 				})
 				m.refreshEventViewport()
 				return m, cmd
 			},
 		},
+		{
+			Name:        "language",
+			Aliases:     []string{"lang", "ngonngu"},
+			Group:       "system",
+			Usage:       "/language [vi|en|zh]",
+			Description: i18n.T("Đổi ngôn ngữ giao diện và ngôn ngữ sáng tác"),
+			AutoExecute: true,
+			Run:         runLanguageCommand,
+		},
 	})
+}
+
+// runLanguageCommand đổi ngôn ngữ giao diện ngay và ghi xuống cấu hình.
+//
+// Ranh giới quan trọng: ngôn ngữ sáng tác (lớp voice) được host nạp một lần lúc
+// khởi động, nên đổi giữa phiên chỉ có tác dụng từ lần mở sau. Không nói quá tay,
+// và nói rõ trong thông báo để không gây hiểu nhầm.
+func runLanguageCommand(m Model, args []string) (tea.Model, tea.Cmd) {
+	lang := strings.ToLower(strings.TrimSpace(strings.Join(args, " ")))
+	if lang == "" {
+		m.applyEvent(host.Event{
+			Time: time.Now(), Category: "SYSTEM", Level: "info",
+			Summary: i18n.T("Ngôn ngữ hiện tại: ") + languageLabel(i18n.Language()) +
+				i18n.T(" — dùng /language vi|en|zh để đổi"),
+		})
+		return m, nil
+	}
+
+	switch lang {
+	case i18n.LangVietnamese, i18n.LangEnglish, i18n.LangChinese:
+	default:
+		m.applyEvent(host.Event{
+			Time: time.Now(), Category: "ERROR", Level: "warn",
+			Summary: i18n.T("Không hỗ trợ ngôn ngữ này, chọn: vi, en, zh"),
+		})
+		return m, nil
+	}
+
+	// Đổi giao diện trước để các thông báo phía dưới sinh ra bằng ngôn ngữ mới.
+	i18n.SetLanguage(lang)
+	m.retranslate()
+
+	// Ghi cấu hình. Lỗi ghi không chặn việc đổi ngôn ngữ của phiên đang chạy.
+	path := bootstrap.EffectiveConfigPath()
+	cfg := bootstrap.CloneConfig(m.cfg)
+	cfg.Language = lang
+	summary := i18n.T("Đã đổi sang: ") + languageLabel(lang)
+	level := "info"
+	if err := bootstrap.SaveConfig(path, cfg); err != nil {
+		level = "warn"
+		summary += i18n.T(" — lưu cấu hình thất bại, lần sau có thể mất lựa chọn: ") + err.Error()
+	} else {
+		summary += i18n.T(" — ngôn ngữ sáng tác sẽ đổi từ lần khởi động sau")
+	}
+	m.applyEvent(host.Event{
+		Time: time.Now(), Category: "SYSTEM", Level: level, Summary: summary,
+	})
+	m.refreshEventViewport()
+	return m, nil
+}
+
+// retranslate dựng lại những nhãn đã tính sẵn lúc khởi động, vì chúng đã bị khoá
+// theo ngôn ngữ cũ. Placeholder và tiêu đề bảng lệnh là hai chỗ thường bị sót.
+func (m *Model) retranslate() {
+	m.textarea.Placeholder = donePlaceholder()
+	if m.compActive || len(m.compItems) > 0 {
+		m.compItems = commandRegistryInstance().PaletteItems()
+		if m.compIdx >= len(m.compItems) {
+			m.compIdx = 0
+		}
+	}
+	if m.help != nil {
+		m.help = newHelpState(m.width, m.height)
+	}
+}
+
+// languageLabel trả tên ngôn ngữ hiển thị thân thiện. Tên ngôn ngữ giữ nguyên
+// dạng gốc, không dịch: người dùng nhận ra tên ngôn ngữ của họ hơn là bản dịch.
+func languageLabel(lang string) string {
+	switch lang {
+	case i18n.LangEnglish:
+		return "English"
+	case i18n.LangChinese:
+		return "中文"
+	default:
+		return "Tiếng Việt"
+	}
 }
 
 func commandSpecs() []slashCommandSpec {
@@ -353,7 +441,7 @@ func prepareFileStart(args []string) (string, error) {
 		path = path[1 : len(path)-1]
 	}
 	if path == "" {
-		return "", fmt.Errorf("Cách dùng: /start <đường dẫn file thiết lập hoặc dàn ý>")
+		return "", errors.New(i18n.T("Cách dùng: /start <đường dẫn file thiết lập hoặc dàn ý>"))
 	}
 	prompt, err := startup.LoadPromptFile(path)
 	if err != nil {
@@ -366,14 +454,14 @@ func (m Model) handleSlashCommand(cmd slashCommand) (tea.Model, tea.Cmd) {
 	spec, ok := commandRegistryInstance().Find(cmd.name)
 	if !ok {
 		m.applyEvent(host.Event{
-			Time: time.Now(), Category: "ERROR", Summary: "Lệnh không rõ: /" + cmd.name, Level: "error",
+			Time: time.Now(), Category: "ERROR", Summary: i18n.T("Lệnh không rõ: /") + cmd.name, Level: "error",
 		})
 		m.refreshEventViewport()
 		return m, nil
 	}
 	if spec.NeedsIdle && m.snapshot.IsRunning {
 		m.applyEvent(host.Event{
-			Time: time.Now(), Category: "ERROR", Summary: "Lệnh chỉ chạy khi đang rảnh: /" + spec.Name, Level: "error",
+			Time: time.Now(), Category: "ERROR", Summary: i18n.T("Lệnh chỉ chạy khi đang rảnh: /") + spec.Name, Level: "error",
 		})
 		m.refreshEventViewport()
 		return m, nil

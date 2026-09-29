@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/schema"
-	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 )
 
 // FailureFacts 是 worker_failure / deadlock 两个场景共用的事实包:

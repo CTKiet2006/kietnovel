@@ -9,9 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	storepkg "github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore"
 )
 
 // errorKind classifies a runtime error into a stable, short label for log

@@ -6,12 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
+	"github.com/CTKiet2006/kietnovel/internal/host"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
-	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
-	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
 func hubFieldIDs(fields []hubField) []string {

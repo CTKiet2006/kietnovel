@@ -1,11 +1,12 @@
 package tui
 
 import (
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"path/filepath"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/CTKiet2006/kietnovel/internal/host"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // renderStatusBar vẽ thanh trạng thái usage dưới đáy màn hình, chiếm dòng trống cuối vốn có của vùng nhập (cao thêm bằng 0):
@@ -61,7 +62,7 @@ func renderStatusBar(snap host.UISnapshot, outputDir string, width int) string {
 			s += dim.Render("/" + formatCostUSD(snap.BudgetLimitUSD))
 		}
 		if saved := formatCostUSD(snap.TotalSavedUSD); saved != "" {
-			s += dim.Render(" tiết kiệm " + saved)
+			s += dim.Render(i18n.T(" tiết kiệm ") + saved)
 		}
 		segs = append(segs, s)
 	}
@@ -72,7 +73,7 @@ func renderStatusBar(snap host.UISnapshot, outputDir string, width int) string {
 		right = dim.Render("./" + filepath.Base(outputDir))
 	}
 	if left == "" && right == "" {
-		return dim.Render("SẴN SÀNG")
+		return dim.Render(i18n.T("SẴN SÀNG"))
 	}
 	return joinInlineSides(left, right, width)
 }

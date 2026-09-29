@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/voocel/agentcore"
 )
 
 func factsN(n int) []ImportedChapterFacts {

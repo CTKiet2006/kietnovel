@@ -1,6 +1,9 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
+	"github.com/charmbracelet/lipgloss"
+)
 
 // Bảng màu chủ đề — tông ấm mùi sách
 // AdaptiveColor: Light = giá trị nền sáng, Dark = giá trị nền tối
@@ -52,20 +55,29 @@ var statusColors = map[string]lipgloss.AdaptiveColor{
 	"ERROR":    colorError,
 }
 
-// Hiển thị trạng thái: icon + nhãn tiếng Việt. Cùng tông ấm chủ đề, tránh khối màu đặc chói.
-// Icon của RUNNING để trống, do spinner frame điền động để cảm giác chuyển động hòa vào chỉ báo trạng thái.
-var statusDisplay = map[string]struct {
+// statusDisplay là hàm chứ không phải biến package: nhãn phải dịch sau khi
+// SetLanguage chạy, còn biến package khởi tại lúc import nên luôn kẹt tiếng Việt.
+// Khoá trạng thái là hằng số nội bộ, không dịch.
+//
+// Icon của RUNNING để trống, do spinner frame điền động để cảm giác chuyển
+// động hòa vào chỉ báo trạng thái.
+func statusDisplay() map[string]struct {
 	icon  string
 	label string
-}{
-	"READY":    {"○", "Sẵn sàng"},
-	"RUNNING":  {"", "Đang viết"},
-	"REVIEW":   {"◆", "Chờ duyệt"},
-	"REWRITE":  {"◆", "Viết lại"},
-	"COMPLETE": {"●", "Xong"},
-	"PAUSED":   {"⏸", "Tạm dừng"},
-	"PAUSING":  {"⏸", "Đang dừng"},
-	"ERROR":    {"✕", "Lỗi"},
+} {
+	return map[string]struct {
+		icon  string
+		label string
+	}{
+		"READY":    {"○", i18n.T("Sẵn sàng")},
+		"RUNNING":  {"", i18n.T("Đang viết")},
+		"REVIEW":   {"◆", i18n.T("Chờ duyệt")},
+		"REWRITE":  {"◆", i18n.T("Viết lại")},
+		"COMPLETE": {"●", "Xong"},
+		"PAUSED":   {"⏸", i18n.T("Tạm dừng")},
+		"PAUSING":  {"⏸", i18n.T("Đang dừng")},
+		"ERROR":    {"✕", i18n.T("Lỗi")},
+	}
 }
 
 // Ánh xạ màu nhóm sự kiện

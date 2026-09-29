@@ -2,19 +2,21 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"path/filepath"
 	"strings"
 	"time"
 	"unicode"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
 	"github.com/CTKiet2006/kietnovel/internal/diag"
 	"github.com/CTKiet2006/kietnovel/internal/host"
 	"github.com/CTKiet2006/kietnovel/internal/store"
 	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Các loại message
@@ -74,7 +76,7 @@ func checkForUpdate(currentVersion string) tea.Cmd {
 	return func() tea.Msg {
 		configDir := bootstrap.DefaultConfigDir()
 		if configDir == "" {
-			return updateCheckMsg{err: fmt.Errorf("Không xác định được thư mục cache kiểm tra cập nhật")}
+			return updateCheckMsg{err: errors.New(i18n.T("Không xác định được thư mục cache kiểm tra cập nhật"))}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -91,11 +93,14 @@ func checkForUpdate(currentVersion string) tea.Cmd {
 const updateNotesPreviewWidth = 56
 
 func formatUpdateNotice(result *buildversion.CheckResult) string {
-	notice := fmt.Sprintf("Phiên bản mới %s đã phát hành", result.Latest)
+	notice := fmt.Sprintf(i18n.T("Phiên bản mới %s đã phát hành"), result.Latest)
 	if preview := updateNotesPreview(result.Notes); preview != "" {
 		notice += " · " + preview
 	}
-	return notice + " · Chạy ainovel-cli update để nâng cấp"
+	// Tên lệnh nâng cấp phải khớp tên binary, nên đưa vào bản dịch bằng %s thay vì
+	// ghép chuỗi. Giữ cả câu làm một đơn vị dịch vì thứ tự từ khác nhau giữa các
+	// ngôn ngữ, tách mảnh ra ghép lại sẽ ra câu vỡ.
+	return notice + " " + i18n.Tf("· Chạy %s update để nâng cấp", buildversion.AppName)
 }
 
 func updateNotesPreview(notes string) string {

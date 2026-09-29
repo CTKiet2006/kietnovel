@@ -9,10 +9,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/store"
 	"github.com/CTKiet2006/kietnovel/internal/utils"
+	"github.com/voocel/agentcore/schema"
 )
 
 // References 嵌入的参考资料。

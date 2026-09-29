@@ -11,11 +11,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/diag"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/store"
 	"github.com/CTKiet2006/kietnovel/internal/stylestat"
+	"github.com/voocel/agentcore"
 )
 
 // Collected 是一次运行产出的只读采集结果。全部来自已有评测器与事实层，eval 不自己重算。

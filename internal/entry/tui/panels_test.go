@@ -5,9 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CTKiet2006/kietnovel/internal/host"
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
 func TestRenderTopBarShowsVersion(t *testing.T) {
@@ -16,7 +17,7 @@ func TestRenderTopBarShowsVersion(t *testing.T) {
 		ModelName: "test-model",
 		BookTitle: "测试小说",
 	}, 120, "", "v1.2.3")
-	if !strings.Contains(out, "ainovel-cli v1.2.3") {
+	if !strings.Contains(out, buildversion.AppName+" v1.2.3") {
 		t.Fatalf("Top bar thiếu version: %q", out)
 	}
 }

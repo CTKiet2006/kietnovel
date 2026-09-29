@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -30,7 +31,7 @@ func renderHelpText(width int) string {
 	hintStyle := lipgloss.NewStyle().Foreground(colorDim)
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Trợ giúp lệnh"))
+	b.WriteString(titleStyle.Render(i18n.T("Trợ giúp lệnh")))
 	b.WriteString("\n\n")
 
 	for i, spec := range commandSpecs() {
@@ -42,21 +43,21 @@ func renderHelpText(width int) string {
 			b.WriteString(usageStyle.Render("  alias: /" + strings.Join(spec.Aliases, " /")))
 		}
 		b.WriteString("\n")
-		b.WriteString(usageStyle.Render("Cách dùng: " + spec.Usage))
+		b.WriteString(usageStyle.Render(i18n.T("Cách dùng: ") + spec.Usage))
 		b.WriteString("\n")
 		b.WriteString(descStyle.Render(wrapText(spec.Description, width)))
 		b.WriteString("\n")
 	}
 
 	b.WriteString("\n")
-	b.WriteString(titleStyle.Render("Phím tắt"))
+	b.WriteString(titleStyle.Render(i18n.T("Phím tắt")))
 	b.WriteString("\n\n")
 	for _, line := range []string{
-		"Gõ / để tìm lệnh",
-		"↑↓ chọn lệnh gợi ý",
-		"Tab/Enter nhận gợi ý",
-		"Esc đóng bảng lệnh đang mở",
-		"Ctrl+R bật chế độ bôi đen để copy (tắt báo chuột để kéo chọn, nhấn lần nữa để về như cũ)",
+		i18n.T("Gõ / để tìm lệnh"),
+		i18n.T("↑↓ chọn lệnh gợi ý"),
+		i18n.T("Tab/Enter nhận gợi ý"),
+		i18n.T("Esc đóng bảng lệnh đang mở"),
+		i18n.T("Ctrl+R bật chế độ bôi đen để copy (tắt báo chuột để kéo chọn, nhấn lần nữa để về như cũ)"),
 	} {
 		b.WriteString(hintStyle.Render(line))
 		b.WriteString("\n")
@@ -82,8 +83,8 @@ func renderHelpModal(width, height int, state *helpState) string {
 	modal := renderPaddedModalFrame(
 		boxW,
 		boxH,
-		"Trợ giúp lệnh",
-		"  ↑↓ Cuộn · Esc Đóng",
+		i18n.T("Trợ giúp lệnh"),
+		i18n.T("  ↑↓ Cuộn · Esc Đóng"),
 		strings.Split(state.viewport.View(), "\n"),
 	)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore"
 )
 
 // 冷启动共创：从零澄清需求，产出整本书的创作指令。

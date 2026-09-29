@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
+	"github.com/voocel/agentcore/schema"
 )
 
 // Properties 返回完整章节事实共用的 JSON Schema 字段。

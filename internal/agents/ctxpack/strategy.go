@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CTKiet2006/kietnovel/internal/store"
 	"github.com/voocel/agentcore"
 	corecontext "github.com/voocel/agentcore/context"
-	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 const storeSummaryStrategyName = "store_summary"

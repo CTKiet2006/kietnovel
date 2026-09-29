@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/voocel/agentcore/schema"
-	agentcoretools "github.com/voocel/agentcore/tools"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore/schema"
+	agentcoretools "github.com/voocel/agentcore/tools"
 )
 
 // EditChapterTool 对章节草稿做定点字符串替换，适用于打磨场景。

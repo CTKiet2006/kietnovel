@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voocel/agentcore/llm"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 	"github.com/CTKiet2006/kietnovel/internal/models"
 	"github.com/CTKiet2006/kietnovel/internal/notify"
 	"github.com/CTKiet2006/kietnovel/internal/utils"
+	"github.com/voocel/agentcore/llm"
 )
 
 // DefaultContextWindow là kích thước cửa sổ dự phòng khi model chưa được đăng ký trong registry.
