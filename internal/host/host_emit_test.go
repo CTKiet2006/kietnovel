@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// 关闭后的 emit 应被明确拒绝，不能依赖 recover 吞掉竞态。
+// An emit after close must be rejected explicitly, not swallowed by a recover that hides the race.
 func TestEmitAfterCloseDoesNotPanic(t *testing.T) {
 	h := &Host{
 		events:   make(chan Event, 1),

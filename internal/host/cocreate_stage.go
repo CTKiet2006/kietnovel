@@ -8,10 +8,10 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/utils"
 )
 
-// buildStoryStateSummary 组装一段精简的故事现状摘要，供阶段共创助手了解"已经写了什么"。
-// 复用 store 访问点，只取规划方向所需的高层事实（进度 / 罗盘 / 最近卷 / 主要人物 / 活跃伏笔）；
-// 不拉正文、不喂 novel_context 的全量 JSON——共创是对话，要的是可读概览，不是写作上下文。
-// 任一项缺失都跳过（best-effort），返回空串表示尚无可用进度。
+// buildStoryStateSummary assembles a compact summary of the current story state so the staged co-create
+// assistant knows "what has already been written". It reuses the store access points and takes only the
+// high-level facts the planning direction needs (progress / compass / latest volume / main characters / active
+// foreshadowing); it does not pull the prose and does not feed the full novel_context JSON - co-create is a dialogue, it wants a readable overview, not a writing context. Any missing item is skipped (best-effort), and an empty string means no usable progress yet.
 func buildStoryStateSummary(s *store.Store) string {
 	if s == nil {
 		return ""
@@ -64,7 +64,7 @@ func buildStoryStateSummary(s *store.Store) string {
 		warn("story_compass", err)
 	}
 
-	// 最近一卷摘要，让助手知道故事刚走到哪
+	// The latest volume summary tells the assistant where the story just got to
 	if vols, err := s.Summaries.LoadAllVolumeSummaries(); len(vols) > 0 {
 		last := vols[len(vols)-1]
 		fmt.Fprintf(&b, "- 最近《%s》：%s\n", last.Title, utils.TruncateRunes(last.Summary, 200))
@@ -72,7 +72,7 @@ func buildStoryStateSummary(s *store.Store) string {
 		warn("volume_summaries", err)
 	}
 
-	// 主要人物（core/important），最多 8 个
+	// Main characters (core/important), at most 8
 	if chars, err := s.Characters.Load(); len(chars) > 0 {
 		var names []string
 		for _, c := range chars {
@@ -95,7 +95,7 @@ func buildStoryStateSummary(s *store.Store) string {
 		warn("characters", err)
 	}
 
-	// 未收伏笔，最多 6 条
+	// Unresolved foreshadowing, at most 6
 	if fs, err := s.World.LoadActiveForeshadow(); len(fs) > 0 {
 		var items []string
 		for _, f := range fs {
@@ -116,8 +116,8 @@ func buildStoryStateSummary(s *store.Store) string {
 	return strings.TrimSpace(b.String())
 }
 
-// stageSystemPrompt 组装阶段共创的完整系统提示：阶段 prompt + 当前故事状态摘要。
-// 摘要作为数据附录挂在末尾（用分隔线与格式规范隔开），呼应 prompt 里"进度见下方"的指引。
+// stageSystemPrompt assembles the full system prompt for staged co-create: the stage prompt plus the current story state summary.
+// The summary is appended at the end as a data appendix (separated from the format spec by a divider), echoing the "progress is below" instruction in the prompt.
 func stageSystemPrompt(s *store.Store) string {
 	prompt := stageCoCreateSystemPrompt
 	if summary := buildStoryStateSummary(s); summary != "" {

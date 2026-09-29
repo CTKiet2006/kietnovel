@@ -2,9 +2,9 @@ package host
 
 import "time"
 
-// runObservedStep 给一次完整的宿主侧 LLM 调用补齐可观察生命周期。
-// 只复用现有事件 ID 的开始/结束原地更新机制，不引入额外状态，
-// 也不把结构化 JSON 混进 Worker 的实时输出面板。
+// runObservedStep gives a full host-side LLM call a complete observable lifecycle.
+// It only reuses the existing in-place start/finish update mechanism keyed by event ID,
+// introduces no extra state, and does not mix structured JSON into the Worker's live output panel.
 func runObservedStep[T any](o *observer, category, agent, label string, call func() (T, error)) (T, error) {
 	if o == nil {
 		return call()
@@ -43,7 +43,7 @@ func runObservedStep[T any](o *observer, category, agent, label string, call fun
 	return result, err
 }
 
-// runObservedDecision 是 Arbiter 裁定的固定形状：Arbiter 仍是非流式 LLM 函数。
+// runObservedDecision is the fixed shape of an Arbiter verdict: the Arbiter is still a non-streaming LLM call.
 func runObservedDecision[T any](o *observer, label string, call func() (T, error)) (T, error) {
 	return runObservedStep(o, "DECISION", "arbiter", label, call)
 }

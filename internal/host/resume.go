@@ -140,9 +140,9 @@ func legacyPremiseSection(premise, heading string) string {
 	return strings.TrimSpace(strings.Join(body, "\n"))
 }
 
-// resumeLabel 基于事实生成 Resume 的 UI 标签。
-// label 为空表示无可恢复状态（应走新建）。恢复本身不需要任何 prompt——
-// Engine 只恢复事实：从 store 重算路由续跑（docs/engine-rfc.md §6）。
+// resumeLabel builds the UI label for Resume out of facts.
+// An empty label means there is no resumable state (a fresh start should be used instead). Resuming itself
+// needs no prompt at all - the Engine only restores facts: it recomputes the route from the store and continues (docs/engine-rfc.md §6).
 func resumeLabel(store *storepkg.Store) (string, error) {
 	progress, err := store.Progress.Load()
 	if err != nil && !os.IsNotExist(err) {
@@ -154,14 +154,14 @@ func resumeLabel(store *storepkg.Store) (string, error) {
 	return describeResume(store, progress)
 }
 
-// describeResume 生成人类可读的恢复标签；不影响 Engine 路由。
-// 所有执行路由由 Flow Router 按事实推导；这里仅面向 UI 的 "恢复：xxx"。
+// describeResume builds a human-readable resume label; it does not affect Engine routing.
+// Every execution route is derived by the Flow Router from facts; this is only the UI-facing "Resume: xxx".
 func describeResume(store *storepkg.Store, progress *domain.Progress) (string, error) {
 	switch progress.Phase {
 	case domain.PhasePremise, domain.PhaseOutline:
 		return fmt.Sprintf("恢复：规划阶段（%s）", progress.Phase), nil
 	case domain.PhaseWriting:
-		// 优先级与 Router 的决策优先级对齐，让 label 与即将派发的指令一致。
+		// Priority aligns with the Router's decision priority so the label matches the command about to be dispatched.
 		pending, err := store.Signals.LoadPendingCommit()
 		if err != nil {
 			return "", fmt.Errorf("读取待恢复提交: %w", err)
@@ -194,8 +194,8 @@ func describeResume(store *storepkg.Store, progress *domain.Progress) (string, e
 	return "恢复", nil
 }
 
-// describeArcEndLabel 为弧末/卷末的多种中间状态生成贴合 UI 的标签。
-// 与 flow.Route 的弧末分支保持同序，保证 label 与 Router 首条指令对齐。
+// describeArcEndLabel builds UI-friendly labels for the various intermediate states at the end of an arc / volume.
+// It keeps the same ordering as the arc-end branch of flow.Route so the label matches the Router's first command.
 func describeArcEndLabel(store *storepkg.Store, progress *domain.Progress) (string, error) {
 	if !progress.Layered || len(progress.CompletedChapters) == 0 {
 		return "", nil
