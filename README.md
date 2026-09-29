@@ -52,7 +52,27 @@ Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định 
 
 Yêu cầu duy nhất: **Go ≥ 1.25**. Không cần Docker.
 
-**Cách 1 — script cài (giống cách bạn cài `agy` / `hermes`, lệnh nằm trên PATH ở mọi nơi):**
+### Một lệnh
+
+```powershell
+go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@latest
+```
+
+Lệnh trên tải về, build và đặt binary vào `C:\Users\<bạn>\go\bin` (thư mục này đã nằm trong PATH nếu bạn cài Go bằng installer mặc định). Mở terminal mới rồi gõ:
+
+```powershell
+kietnovel
+```
+
+Muốn ghim đúng một phiên bản thay vì bản mới nhất:
+
+```powershell
+go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@v1.0.0
+```
+
+> **Lưu ý:** ngay sau khi phát hành phiên bản mới, `proxy.golang.org` có thể mất vài phút mới thấy tag. Trong lúc đó `@latest` trỏ nhầm tag cũ — hãy dùng `@v1.0.0` để cài chắc chắn.
+
+### Cài vào thư mục riêng (nếu `go\bin` chưa có trong PATH)
 
 ```powershell
 git clone https://github.com/CTKiet2006/kietnovel.git
@@ -60,17 +80,18 @@ cd kietnovel
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-Script build, chép binary vào `%LOCALAPPDATA%\kietnovel\bin\` và tự thêm thư mục đó vào user PATH. Mở terminal mới là gõ `kietnovel` ở bất kỳ đâu cũng chạy.
+Script build, chép binary vào `%LOCALAPPDATA%\kietnovel\bin\` và tự thêm thư mục đó vào user PATH.
 
-**Cách 2 — chạy tại chỗ, không cài (chỉ dùng được trong thư mục repo):**
+### Chạy tại chỗ, không cài
 
 ```powershell
+git clone https://github.com/CTKiet2006/kietnovel.git
 cd kietnovel
 go build -o kietnovel.exe ./cmd/kietnovel
 .\kietnovel.exe
 ```
 
-**Cập nhật sau khi có thay đổi mới:** chạy lại `scripts\install.ps1` (thoát `kietnovel` trước nếu đang mở — Windows không cho ghi đè file đang chạy).
+**Cập nhật:** chạy lại lệnh `go install ...@latest` (thoát `kietnovel` trước nếu đang mở — Windows không cho ghi đè file đang chạy).
 
 Lần đầu chạy, hệ thống tự bật **Setup Wizard** tiếng Việt để chọn Provider, nhập API Key/Base URL, chọn Model và Ngôn ngữ sáng tác. Xong là viết được ngay.
 
@@ -432,8 +453,8 @@ Hệ thống sẽ tự động tổng hợp các yêu cầu này vào bộ quy t
 ## 11. Tech Stack & License
 
 - **Ngôn ngữ**: Go (Hiệu năng cao, kiểm soát chặt chẽ concurrency và I/O)
-- **Agent Core**: agentcore (Tool-calling + Streaming)
-- **LLM Interface**: litellm
+- **Agent Core**: [agentcore](https://github.com/voocel/agentcore) (Tool-calling + Streaming)
+- **LLM Interface**: [litellm](https://github.com/voocel/litellm)
 - **TUI Framework**: Bubble Tea & Lip Gloss
 - **Cấu trúc prompt**: file Markdown embed vào binary (`//go:embed`), nạp theo ngôn ngữ lúc khởi động — không cần mạng để chọn bộ prompt
 - **Dependency**: 10 gói trực tiếp, tất cả từ nguồn công khai. `govulncheck` sạch, không có dependency ngoài stdlib ở tầng LLM
