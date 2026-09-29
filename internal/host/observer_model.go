@@ -6,8 +6,8 @@ import (
 	"github.com/voocel/agentcore"
 )
 
-// handleWorkerEvent 用 AgentLoop 的真实边界投影模型响应：
-// TurnStart 发生在请求前，assistant MessageEnd 发生在工具执行前。
+// handleWorkerEvent chiếu phản hồi model theo đúng ranh giới thật của AgentLoop:
+// TurnStart xảy ra trước khi gửi request, assistant MessageEnd xảy ra trước khi chạy tool.
 func (o *observer) handleWorkerEvent(agent string, ev agentcore.Event) {
 	switch ev.Type {
 	case agentcore.EventTurnStart:
@@ -24,7 +24,7 @@ func (o *observer) startModelResponse(agent string) {
 		return
 	}
 	now := time.Now()
-	call := &activeCall{id: nextEventID(), start: now, summary: "等待模型", depth: 1}
+	call := &activeCall{id: nextEventID(), start: now, summary: "Đang chờ model", depth: 1}
 	o.modelStarts[agent] = call
 	o.emitAndLog(Event{
 		ID:       call.id,
@@ -60,8 +60,8 @@ func (o *observer) finishModelResponse(agent string) {
 		return
 	}
 	delete(o.modelStarts, agent)
-	call.summary = "模型响应"
-	// MODEL 是实时观测事件，只写日志并投递 UI，不进入 runtime queue。
+	call.summary = "Đã có phản hồi model"
+	// MODEL là sự kiện quan sát thời gian thực, chỉ ghi log và đẩy UI, không vào hàng đợi của runtime.
 	o.emitEv(Event{
 		ID:         call.id,
 		Time:       call.start,
