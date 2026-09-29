@@ -16,52 +16,52 @@ const validGlobal = `{
   "providers": { "openrouter": { "api_key": "sk-test-123456" } }
 }`
 
-// writeGlobal 在隔离的 HOME 下写入全局配置，并返回该 HOME。
+// writeGlobal ghi cấu hình toàn cục dưới HOME cách ly, và trả về HOME đó.
 func writeGlobal(t *testing.T, content string) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	// Windows 的 os.UserHomeDir 读 USERPROFILE；不设它会读到本机真实 ~/.ainovel。
+	// os.UserHomeDir của Windows đọc USERPROFILE; không đặt nó sẽ đọc nhầm ~/.ainovel thật của máy.
 	t.Setenv("USERPROFILE", home)
 	dir := filepath.Join(home, ".ainovel")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
+		t.Fatalf("tạo thư mục: %v", err)
 	}
 	if content != "" {
 		if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(content), 0o644); err != nil {
-			t.Fatalf("write global: %v", err)
+			t.Fatalf("ghi global: %v", err)
 		}
 	}
 	return home
 }
 
-// writeProjectConfig 在当前工作目录的 ./.ainovel/ 下写入项目级配置。
-// 调用前需先 t.Chdir 到目标目录。
+// writeProjectConfig ghi cấu hình cấp project dưới ./.ainovel/ của thư mục làm việc hiện tại.
+// Gọi trước cần t.Chdir tới thư mục đích.
 func writeProjectConfig(t *testing.T, content string) {
 	t.Helper()
 	if err := os.MkdirAll(".ainovel", 0o755); err != nil {
-		t.Fatalf("mkdir .ainovel: %v", err)
+		t.Fatalf("tạo thư mục .ainovel: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(".ainovel", "config.json"), []byte(content), 0o644); err != nil {
-		t.Fatalf("write project: %v", err)
+		t.Fatalf("ghi project: %v", err)
 	}
 }
 
-// 根因 3：项目级 ./.ainovel/config.json 存在但是坏 JSON，必须报错，不能静默吞掉退回全局。
+// Căn nguyên 3: project ./.ainovel/config.json có nhưng là JSON hỏng, bắt buộc phải báo lỗi, không được nuốt lặng rồi rơi về global.
 func TestLoadConfig_CorruptProjectFailsLoud(t *testing.T) {
 	writeGlobal(t, validGlobal)
 	proj := t.TempDir()
 	t.Chdir(proj)
-	// 手抄示例多了个尾逗号——最常见的坏 JSON。
+	// Chép tay ví dụ thừa dấu phẩy cuối — JSON hỏng thường gặp nhất.
 	writeProjectConfig(t, `{ "model": "x", }`)
 
 	if _, err := LoadConfig(); err == nil {
-		t.Fatal("坏的 ./.ainovel/config.json 应当报错，却被静默忽略了")
+		t.Fatal("config.json project hỏng phải báo lỗi, đằng này lại bị bỏ qua lặng lẽ")
 	}
 }
 
-// 全局是最低优先级基底：坏文件不得阻断更高优先级的项目级覆盖（回归守卫——
-// 上一版误把全局也 fail-loud，导致"坏全局 + 有效项目配置"的用户被无关文件挡住）。
+// Global là nền ưu tiên thấp nhất: file hỏng không được chặn override project ưu tiên cao hơn (guard hồi quy —
+// bản trước lỡ fail-loud cả global, khiến người dùng "global hỏng + project còn tốt" bị file không liên quan chặn).
 func TestLoadConfig_CorruptGlobalDoesNotBlockProjectOverride(t *testing.T) {
 	writeGlobal(t, `{ not json`)
 	proj := t.TempDir()
@@ -70,21 +70,21 @@ func TestLoadConfig_CorruptGlobalDoesNotBlockProjectOverride(t *testing.T) {
 
 	cfg, err := LoadConfig()
 	if err != nil {
-		t.Fatalf("坏全局不应阻断有效项目级配置，得到: %v", err)
+		t.Fatalf("global hỏng không được chặn cấu hình project còn tốt, nhận được: %v", err)
 	}
 	if cfg.Provider != "openrouter" {
-		t.Errorf("应使用项目级配置的值，得到 provider=%q", cfg.Provider)
+		t.Errorf("phải dùng giá trị của cấu hình project, nhận được provider=%q", cfg.Provider)
 	}
 }
 
-// 就近编辑：项目目录有 ./.ainovel/config.json 时 EffectiveConfigPath 指向它（绝对路径），
-// 否则回落全局——/config 与 /model 都据此决定写盘位置。
+// Sửa tại chỗ: thư mục project có ./.ainovel/config.json thì EffectiveConfigPath trỏ nó (đường dẫn tuyệt đối),
+// nếu không thì rơi về global — /config và /model đều căn cứ đó để quyết định chỗ ghi đĩa.
 func TestEffectiveConfigPathPrefersProject(t *testing.T) {
 	writeGlobal(t, validGlobal)
 
-	t.Chdir(t.TempDir()) // 无项目配置
+	t.Chdir(t.TempDir()) // Không có cấu hình project
 	if got := EffectiveConfigPath(); got != DefaultConfigPath() {
-		t.Fatalf("无项目配置应回落全局，got %q want %q", got, DefaultConfigPath())
+		t.Fatalf("không có cấu hình project phải rơi về global, got %q want %q", got, DefaultConfigPath())
 	}
 
 	proj := t.TempDir()
@@ -92,26 +92,26 @@ func TestEffectiveConfigPathPrefersProject(t *testing.T) {
 	writeProjectConfig(t, validGlobal)
 	wantAbs, err := filepath.Abs(filepath.Join(".ainovel", "config.json"))
 	if err != nil {
-		t.Fatalf("abs: %v", err)
+		t.Fatalf("lấy abs: %v", err)
 	}
 	if got := EffectiveConfigPath(); got != wantAbs {
-		t.Fatalf("有项目配置应写项目，got %q want %q", got, wantAbs)
+		t.Fatalf("có cấu hình project phải ghi project, got %q want %q", got, wantAbs)
 	}
 }
 
-// 文件不存在是正常情况（便携/首次），不能报错。
+// File không tồn tại là chuyện thường (bản portable/lần đầu), không được báo lỗi.
 func TestLoadConfig_MissingFilesNoError(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home) // ~/.ainovel/config.json 不存在
+	t.Setenv("HOME", home) // ~/.ainovel/config.json không tồn tại
 	t.Setenv("USERPROFILE", home)
-	t.Chdir(t.TempDir()) // 也没有 ./.ainovel/config.json
+	t.Chdir(t.TempDir()) // Cũng không có ./.ainovel/config.json
 
 	if _, err := LoadConfig(); err != nil {
-		t.Fatalf("缺失配置文件不应报错，得到: %v", err)
+		t.Fatalf("thiếu file cấu hình không được báo lỗi, nhận được: %v", err)
 	}
 }
 
-// 正常路径：全局 + 项目级合并生效。
+// Đường thường: global + project merge có hiệu lực.
 func TestLoadConfig_ValidMergeWorks(t *testing.T) {
 	writeGlobal(t, validGlobal)
 	proj := t.TempDir()
@@ -131,22 +131,22 @@ func TestLoadConfig_ValidMergeWorks(t *testing.T) {
 
 	cfg, err := LoadConfig()
 	if err != nil {
-		t.Fatalf("有效配置不应报错: %v", err)
+		t.Fatalf("cấu hình hợp lệ không được báo lỗi: %v", err)
 	}
 	if cfg.Provider != "openrouter" {
-		t.Errorf("provider 应保留全局值 openrouter，得到 %q", cfg.Provider)
+		t.Errorf("provider phải giữ giá trị global openrouter, nhận được %q", cfg.Provider)
 	}
 	if cfg.ModelName != "google/gemini-2.5-pro" {
-		t.Errorf("model 应被项目级覆盖，得到 %q", cfg.ModelName)
+		t.Errorf("model phải bị project override, nhận được %q", cfg.ModelName)
 	}
 	if cfg.ReasoningEffort != "high" {
-		t.Errorf("reasoning_effort 应被项目级覆盖，得到 %q", cfg.ReasoningEffort)
+		t.Errorf("reasoning_effort phải bị project override, nhận được %q", cfg.ReasoningEffort)
 	}
 	if got := cfg.Roles["writer"].ReasoningEffort; got != "low" {
-		t.Errorf("roles.writer.reasoning_effort 应被项目级覆盖，得到 %q", got)
+		t.Errorf("roles.writer.reasoning_effort phải bị project override, nhận được %q", got)
 	}
 	if !cfg.DisableUpdateCheck {
-		t.Error("项目级 disable_update_check=true 应生效")
+		t.Error("project disable_update_check=true phải có hiệu lực")
 	}
 }
 
