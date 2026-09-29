@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/voocel/ainovel-cli/internal/host"
-	"github.com/voocel/ainovel-cli/internal/revision"
+	"github.com/CTKiet2006/kietnovel/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/revision"
 )
 
 type revisionDoneMsg struct {

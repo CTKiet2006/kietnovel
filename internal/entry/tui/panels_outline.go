@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/voocel/ainovel-cli/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
 // outlineGridThreshold là ngưỡng số chương để dàn ý chuyển nhiều cột.

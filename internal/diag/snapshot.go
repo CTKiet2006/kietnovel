@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // Snapshot 是对 output 目录全部工件的只读快照。

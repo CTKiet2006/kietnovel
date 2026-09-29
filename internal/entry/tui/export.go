@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/voocel/ainovel-cli/internal/host"
-	"github.com/voocel/ainovel-cli/internal/host/exp"
+	"github.com/CTKiet2006/kietnovel/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/host/exp"
 )
 
 // exportDoneMsg là kết quả cuối của lệnh /export.

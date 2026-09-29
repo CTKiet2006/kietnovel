@@ -10,8 +10,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
-	"github.com/voocel/ainovel-cli/internal/bootstrap"
-	"github.com/voocel/ainovel-cli/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
+	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
 func hubFieldIDs(fields []hubField) []string {

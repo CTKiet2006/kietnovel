@@ -23,7 +23,7 @@ func Resolve(raw Info) Info {
 
 func Print(w io.Writer, info Info) {
 	info = Resolve(info)
-	fmt.Fprintf(w, "ainovel-cli %s\ncommit: %s\nbuilt: %s\n", info.Version, info.Commit, info.Date)
+	fmt.Fprintf(w, "kietnovel %s\ncommit: %s\nbuilt: %s\n", info.Version, info.Commit, info.Date)
 }
 
 func displayVersion(v string) string {

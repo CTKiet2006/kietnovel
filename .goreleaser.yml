@@ -8,9 +8,9 @@ before:
     - go test -count=1 ./...
 
 builds:
-  - id: ainovel-cli
-    main: ./cmd/ainovel-cli
-    binary: ainovel-cli
+  - id: kietnovel
+    main: ./cmd/kietnovel
+    binary: kietnovel
     env:
       - CGO_ENABLED=0
     ldflags:
@@ -27,9 +27,9 @@ builds:
       - arm64
 
 archives:
-  - id: ainovel-cli-archive
+  - id: kietnovel-archive
     ids:
-      - ainovel-cli
+      - kietnovel
     formats:
       - tar.gz
     format_overrides:
@@ -73,4 +73,4 @@ changelog:
 release:
   github:
     owner: voocel
-    name: ainovel-cli
+    name: kietnovel

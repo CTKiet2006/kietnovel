@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
 const pendingRevisionPath = "meta/pending_revision.json"

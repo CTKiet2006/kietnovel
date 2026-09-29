@@ -3,9 +3,9 @@ package tools
 import (
 	"fmt"
 
-	"github.com/voocel/ainovel-cli/internal/errs"
-	"github.com/voocel/ainovel-cli/internal/flow"
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/errs"
+	"github.com/CTKiet2006/kietnovel/internal/flow"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // requireAggregateTarget 将 Editor 的新聚合写入绑定到 Router 当前唯一待补的工件。

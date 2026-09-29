@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/voocel/ainovel-cli/internal/host"
-	"github.com/voocel/ainovel-cli/internal/utils"
+	"github.com/CTKiet2006/kietnovel/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/utils"
 )
 
 // renderEventContent render danh sách sự kiện thành luồng sự kiện phân cấp.

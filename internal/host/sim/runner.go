@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/llmcontract"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 )
 
 const maxSourceRunes = 60000

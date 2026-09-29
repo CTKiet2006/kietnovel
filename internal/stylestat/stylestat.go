@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/voocel/ainovel-cli/internal/utils"
+	"github.com/CTKiet2006/kietnovel/internal/utils"
 )
 
 // minChapters 少于此章数不出统计——样本太小，频率没有意义。

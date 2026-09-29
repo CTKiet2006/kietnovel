@@ -6,10 +6,10 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/voocel/ainovel-cli/assets"
-	"github.com/voocel/ainovel-cli/internal/bootstrap"
-	"github.com/voocel/ainovel-cli/internal/host"
-	buildversion "github.com/voocel/ainovel-cli/internal/version"
+	"github.com/CTKiet2006/kietnovel/assets"
+	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
+	"github.com/CTKiet2006/kietnovel/internal/host"
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 )
 
 // Run khởi động TUI.

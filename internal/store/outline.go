@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/errs"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/errs"
 )
 
 // ErrOutlineChapterNotFound 表示章节尚未进入当前大纲。

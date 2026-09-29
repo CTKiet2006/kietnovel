@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // Action 是 NextAction 从工作区事实推导出的下一步确定性动作。

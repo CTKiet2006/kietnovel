@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
 // renderEPUB 把章节集合打包成 EPUB 3 字节流。

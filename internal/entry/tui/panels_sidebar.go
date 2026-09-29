@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/voocel/ainovel-cli/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
 // renderStateContent dựng nội dung thuần của sidebar trạng thái (không khung/viền), dùng cho stateVP.SetContent.

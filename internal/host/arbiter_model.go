@@ -5,7 +5,7 @@ import (
 
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/llm"
-	"github.com/voocel/ainovel-cli/internal/llmcontract"
+	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 )
 
 // usageTrackedModel 给模型调用接上用量追踪:token/成本必须进入预算与 usage 系统,

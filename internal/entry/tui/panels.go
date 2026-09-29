@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/voocel/ainovel-cli/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
 // renderTopBar vẽ thanh trạng thái trên đỉnh.

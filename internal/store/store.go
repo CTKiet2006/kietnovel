@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/errs"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/errs"
 )
 
 // Store 是状态管理的组合根，持有所有子存储。

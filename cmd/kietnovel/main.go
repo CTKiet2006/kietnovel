@@ -7,14 +7,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/voocel/ainovel-cli/assets"
-	"github.com/voocel/ainovel-cli/internal/bootstrap"
-	"github.com/voocel/ainovel-cli/internal/entry/headless"
-	"github.com/voocel/ainovel-cli/internal/entry/startup"
-	"github.com/voocel/ainovel-cli/internal/entry/tui"
-	"github.com/voocel/ainovel-cli/internal/eval"
-	"github.com/voocel/ainovel-cli/internal/rules"
-	buildversion "github.com/voocel/ainovel-cli/internal/version"
+	"github.com/CTKiet2006/kietnovel/assets"
+	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
+	"github.com/CTKiet2006/kietnovel/internal/entry/headless"
+	"github.com/CTKiet2006/kietnovel/internal/entry/startup"
+	"github.com/CTKiet2006/kietnovel/internal/entry/tui"
+	"github.com/CTKiet2006/kietnovel/internal/eval"
+	"github.com/CTKiet2006/kietnovel/internal/rules"
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 )
 
 var (
@@ -209,7 +209,7 @@ func runSelfUpdate(target string) error {
 	info := versionInfo()
 	result, err := buildversion.Update(context.Background(), buildversion.UpdateOptions{
 		Repo:           buildversion.DefaultRepo,
-		BinaryName:     "ainovel-cli",
+		BinaryName:     "kietnovel",
 		TargetVersion:  target,
 		CurrentVersion: info.Version,
 	})
@@ -217,10 +217,10 @@ func runSelfUpdate(target string) error {
 		return err
 	}
 	if !result.Updated {
-		fmt.Printf("ainovel-cli đã là phiên bản mới nhất %s\n", result.Version)
+		fmt.Printf("kietnovel đã là phiên bản mới nhất %s\n", result.Version)
 		return nil
 	}
-	fmt.Printf("ainovel-cli đã cập nhật lên %s\n", result.Version)
+	fmt.Printf("kietnovel đã cập nhật lên %s\n", result.Version)
 	fmt.Printf("Vị trí cài đặt: %s\n", result.Path)
 	return nil
 }

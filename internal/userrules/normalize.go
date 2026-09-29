@@ -16,8 +16,8 @@ import (
 
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/schema"
-	"github.com/voocel/ainovel-cli/internal/llmcontract"
-	"github.com/voocel/ainovel-cli/internal/rules"
+	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
+	"github.com/CTKiet2006/kietnovel/internal/rules"
 )
 
 // normalizeMaxTokens 单次归一化的输出上限（思考 token 与 JSON 输出共享这一预算）。

@@ -6,13 +6,13 @@ import (
 	"os"
 	"strings"
 
-	"github.com/voocel/ainovel-cli/assets"
-	"github.com/voocel/ainovel-cli/internal/bootstrap"
-	"github.com/voocel/ainovel-cli/internal/diag"
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/entry/startup"
-	"github.com/voocel/ainovel-cli/internal/host"
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/assets"
+	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
+	"github.com/CTKiet2006/kietnovel/internal/diag"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/entry/startup"
+	"github.com/CTKiet2006/kietnovel/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 type Options struct {

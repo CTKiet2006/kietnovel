@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voocel/ainovel-cli/internal/store"
-	"github.com/voocel/ainovel-cli/internal/stylestat"
+	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/stylestat"
 )
 
 func TestStyleStatsIndexAppendRewriteAndRemove(t *testing.T) {

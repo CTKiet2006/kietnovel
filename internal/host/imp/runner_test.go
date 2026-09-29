@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voocel/ainovel-cli/internal/store"
-	"github.com/voocel/ainovel-cli/internal/tools"
+	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/tools"
 )
 
 // testDeps 构造三个语义函数同用一个 mock 档位的最小 Deps。

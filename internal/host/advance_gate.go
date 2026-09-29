@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/flow"
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/flow"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // ChapterAdvanceGate là thành phần chính sách tiến viết duy nhất của Host:

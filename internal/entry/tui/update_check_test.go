@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
-	buildversion "github.com/voocel/ainovel-cli/internal/version"
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 )
 
 func TestUpdateNotesPreviewSanitizesAndTruncates(t *testing.T) {

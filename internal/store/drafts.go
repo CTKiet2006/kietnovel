@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
 // DraftStore 管理章节构思、草稿和终稿。

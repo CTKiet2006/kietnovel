@@ -9,8 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/voocel/ainovel-cli/internal/rules"
-	"github.com/voocel/ainovel-cli/internal/utils"
+	"github.com/CTKiet2006/kietnovel/internal/rules"
+	"github.com/CTKiet2006/kietnovel/internal/utils"
 )
 
 // exampleConfig là template có comment sẽ ghi vào ~/.ainovel/config.example.jsonc sau khi dẫn.

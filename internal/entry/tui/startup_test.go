@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voocel/ainovel-cli/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
 func TestStartCommandLoadsPromptFile(t *testing.T) {

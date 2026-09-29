@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/revision"
-	storepkg "github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/revision"
+	storepkg "github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // upgradeProject nâng dữ liệu dự án cũ lên định dạng hiện tại, và đưa cùng một lỗi gốc cho cả giao diện lẫn log.

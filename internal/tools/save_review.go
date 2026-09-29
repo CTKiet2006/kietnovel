@@ -9,11 +9,11 @@ import (
 	"strings"
 
 	"github.com/voocel/agentcore/schema"
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/errs"
-	"github.com/voocel/ainovel-cli/internal/flow"
-	"github.com/voocel/ainovel-cli/internal/llmcontract"
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/errs"
+	"github.com/CTKiet2006/kietnovel/internal/flow"
+	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // SaveReviewTool 保存 Editor 的审阅结果。

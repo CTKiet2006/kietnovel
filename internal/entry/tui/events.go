@@ -10,11 +10,11 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/voocel/ainovel-cli/internal/bootstrap"
-	"github.com/voocel/ainovel-cli/internal/diag"
-	"github.com/voocel/ainovel-cli/internal/host"
-	"github.com/voocel/ainovel-cli/internal/store"
-	buildversion "github.com/voocel/ainovel-cli/internal/version"
+	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
+	"github.com/CTKiet2006/kietnovel/internal/diag"
+	"github.com/CTKiet2006/kietnovel/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/store"
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 )
 
 // Các loại message

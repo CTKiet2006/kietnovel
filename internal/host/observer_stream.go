@@ -2,7 +2,7 @@ package host
 
 import (
 	"github.com/voocel/agentcore"
-	"github.com/voocel/ainovel-cli/internal/utils"
+	"github.com/CTKiet2006/kietnovel/internal/utils"
 )
 
 // handleSubagentDelta 分流 subagent 的文本与工具调用参数：

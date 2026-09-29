@@ -5,8 +5,8 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/voocel/ainovel-cli/internal/store"
-	"github.com/voocel/ainovel-cli/internal/stylestat"
+	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/stylestat"
 )
 
 // StyleStatsIndex 把 Store 中的已完成章节同步到增量统计器。
