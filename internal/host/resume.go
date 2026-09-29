@@ -13,10 +13,10 @@ import (
 	storepkg "github.com/voocel/ainovel-cli/internal/store"
 )
 
-// upgradeProject 把老项目数据升到当前格式，并把同一个根错误同时交给界面和日志。
+// upgradeProject nâng dữ liệu dự án cũ lên định dạng hiện tại, và đưa cùng một lỗi gốc cho cả giao diện lẫn log.
 func upgradeProject(st *storepkg.Store) error {
 	if err := runProjectUpgrades(st); err != nil {
-		slog.Error("项目数据升级失败", "module", "migration", "err", err)
+		slog.Error("Nâng cấp dữ liệu dự án thất bại", "module", "migration", "err", err)
 		return err
 	}
 	return nil
@@ -25,30 +25,30 @@ func upgradeProject(st *storepkg.Store) error {
 func runProjectUpgrades(st *storepkg.Store) error {
 	version, err := st.LoadProjectFormatVersion()
 	if err != nil {
-		return fmt.Errorf("读取项目格式版本: %w", err)
+		return fmt.Errorf("Không đọc được phiên bản định dạng dự án: %w", err)
 	}
 	if version > storepkg.CurrentProjectFormatVersion {
-		return fmt.Errorf("项目格式版本 v%d 高于当前程序支持的 v%d，请升级 ainovel-cli", version, storepkg.CurrentProjectFormatVersion)
+		return fmt.Errorf("Định dạng dự án v%d mới hơn mức chương trình này hỗ trợ (v%d), hãy nâng cấp ainovel-cli", version, storepkg.CurrentProjectFormatVersion)
 	}
 	for version < storepkg.CurrentProjectFormatVersion {
 		next := version + 1
 		switch version {
 		case storepkg.LegacyProjectFormatVersion:
 			if err := migrateLegacyBook(st); err != nil {
-				return fmt.Errorf("升级项目数据 v%d→v%d: %w", version, next, err)
+				return fmt.Errorf("Nâng cấp dữ liệu dự án v%d→v%d: %w", version, next, err)
 			}
 		case storepkg.ChapterRecordProjectFormatVersion:
-			// v3 补齐 v2 可能遗漏的接纳记录；已有记录由迁移函数原样保留。
+			// v3 bổ sung các bản ghi nhận có thể v2 đã bỏ sót; bản ghi đã có được giữ nguyên bởi hàm migration.
 			if err := revision.MigrateLegacyBaseline(st); err != nil {
-				return fmt.Errorf("升级项目数据 v%d→v%d: %w", version, next, err)
+				return fmt.Errorf("Nâng cấp dữ liệu dự án v%d→v%d: %w", version, next, err)
 			}
 		default:
-			return fmt.Errorf("不支持从项目格式 v%d 升级", version)
+			return fmt.Errorf("Không hỗ trợ nâng cấp từ định dạng dự án v%d", version)
 		}
 		if err := st.SaveProjectFormatVersion(next); err != nil {
-			return fmt.Errorf("保存项目格式版本 v%d: %w", next, err)
+			return fmt.Errorf("Không lưu được phiên bản định dạng dự án v%d: %w", next, err)
 		}
-		slog.Info("项目数据升级完成", "module", "migration", "from", version, "to", next)
+		slog.Info("Đã nâng cấp xong dữ liệu dự án", "module", "migration", "from", version, "to", next)
 		version = next
 	}
 	return nil
