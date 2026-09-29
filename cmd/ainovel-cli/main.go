@@ -108,9 +108,9 @@ func runWithConfig(cfg bootstrap.Config, opts cliOptions, args []string) {
 	// FillDefaults phải chạy trước khi tải asset: OutputDir là trường runtime, giá trị mặc định chuẩn hóa ở đây —
 	// nếu không, dưới cấu hình mặc định thì override văn phong cấp sách <thư mục sách>/style/ không bao giờ được tải.
 	cfg.FillDefaults()
-	bundle := assets.Load(cfg.Style, assets.DefaultLoadOptions(cfg.OutputDir))
-	// Ngôn ngữ sáng tác (vi/zh) điều khiển nội dung truyện; TUI luôn tiếng Việt.
-	bundle.ApplyLanguage(cfg.Language)
+	// Ngôn ngữ sáng tác (vi/zh) chọn bộ prompt + tài liệu tham chiếu tương ứng;
+	// TUI thì luôn tiếng Việt.
+	bundle := assets.LoadWithLanguage(cfg.Language, cfg.Style, assets.DefaultLoadOptions(cfg.OutputDir))
 	if opts.Headless {
 		prompt, err := loadPrompt(opts)
 		if err != nil {
