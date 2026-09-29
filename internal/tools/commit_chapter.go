@@ -127,15 +127,26 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	}
 	if existingPending == nil || existingPending.Stage == domain.CommitStageStarted {
 		if err := t.validateCommitArgs(a); err != nil {
-			// 旧版本可能在发现非法返工事实前就留下了冻结提交。继续保留这份
-			// 不可变载荷只会让每次重试重复同一个错误，因此显式解除冻结，
-			// 让 Writer 能修正参数后重新提交；正文和章节记录均不在此改动。
-			if existingPending != nil && existingPending.Rewrite &&
+			// 一份冻结的载荷被反复重放时，每次重试都会撞上同一个错误，而模型无法
+			// 通过新参数脱身：上面的 payload 回放会覆盖掉它刚传的内容。保留这份
+			// 不可变载荷只制造死锁，因此凡是 stage=Started（即尚未写入任何正文的
+			// 那一步）都显式解除冻结，让模型改正后重提。正文与章节记录不受影响。
+			//
+			// 限定在 stage=Started：进度已标记/信号已保存的提交走的是
+			// finishPendingCommit 路径，那里 payload 必须保持不可变。
+			//
+			// ErrToolArgs / ErrToolPrecondition 是模型改参数就能过的类别；
+			// ErrToolConflict（队列/状态类）说明是环境变了而非参数错了，
+			// 此时解锁会让模型绕过状态机检查，所以不放行。
+			if existingPending != nil && existingPending.Stage == domain.CommitStageStarted &&
 				(errors.Is(err, errs.ErrToolArgs) || errors.Is(err, errs.ErrToolPrecondition)) {
 				if clearErr := t.store.Signals.ClearPendingCommit(); clearErr != nil {
-					return nil, fmt.Errorf("返工提交校验失败（%v），且清理冻结提交失败: %w: %w", err, errs.ErrStoreWrite, clearErr)
+					return nil, fmt.Errorf("提交校验失败（%v），且清理冻结提交失败: %w: %w", err, errs.ErrStoreWrite, clearErr)
 				}
-				return nil, fmt.Errorf("旧版遗留的返工提交未通过校验，已解除冻结；请修正后重新提交: %w", err)
+				if existingPending.Rewrite {
+					return nil, fmt.Errorf("旧版遗留的返工提交未通过校验，已解除冻结；请修正后重新提交: %w", err)
+				}
+				return nil, fmt.Errorf("未完成的提交未通过校验，已解除冻结；请修正参数后重新提交: %w", err)
 			}
 			return nil, err
 		}

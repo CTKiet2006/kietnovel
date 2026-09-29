@@ -298,8 +298,12 @@ func runOptionalTextInput(label, placeholder string) (string, error) {
 	return utils.CleanInputLine(result.value), nil
 }
 
+// runTextInputWithDefault nhập một trường có sẵn giá trị mặc định.
+// Ô trống + Enter luôn được chấp nhận: trả về defaultValue nếu có, không thì ""
+// — nếu không, người dùng chọn provider không kèm baseURL dựng sẵn sẽ bị kẹt
+// vĩnh viễn ở bước này vì Enter không làm gì (issue #125).
 func runTextInputWithDefault(label, placeholder, defaultValue string) (string, error) {
-	m := setupInputModel{label: label, placeholder: placeholder, defaultValue: defaultValue}
+	m := setupInputModel{label: label, placeholder: placeholder, defaultValue: defaultValue, allowEmpty: true}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	final, err := p.Run()
 	if err != nil {
@@ -309,7 +313,7 @@ func runTextInputWithDefault(label, placeholder, defaultValue string) (string, e
 	if result.cancelled {
 		return "", fmt.Errorf("đã hủy thiết lập")
 	}
-	if result.value == "" && result.defaultValue != "" {
+	if utils.CleanInputLine(result.value) == "" && result.defaultValue != "" {
 		return result.defaultValue, nil
 	}
 	return utils.CleanInputLine(result.value), nil

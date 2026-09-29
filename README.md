@@ -64,9 +64,32 @@ docker compose run --rm ainovel
 
 Lần đầu chạy, hệ thống sẽ tự động bật Setup Wizard tương tác bằng Tiếng Việt để bạn chọn Provider, nhập API Key/Base URL, chọn Model và Ngôn ngữ sáng tác.
 
+### ⚠️ Vị trí file cấu hình khác nhau giữa 2 chế độ chạy
+
+Đây là chỗ hay gây nhầm nhất. Hệ thống **không** đọc `./config/config.json` khi bạn chạy binary trực tiếp:
+
+| Chế độ chạy | File cấu hình | Ghi chú |
+|---|---|---|
+| `docker compose run --rm ainovel` | `./config/config.json` | `docker-compose.yml` map thư mục này vào `/root/.ainovel` |
+| `./kietnovel` (binary trực tiếp) | `~/.ainovel/config.json` | Không có `./config/` nào cả |
+
+Còn cấu hình riêng cho từng thư mục dự án (ưu tiên cao hơn cả hai) thì đặt ở `./.ainovel/config.json` — vị trí này luôn đúng dù chạy theo chế độ nào.
+
+Lần chạy đầu tiên Wizard sẽ tự tạo file ở đúng chỗ của chế độ bạn đang dùng. Nếu chạy `--headless` mà bị báo *"headless không hỗ trợ thiết lập lần đầu"*, hãy mở TUI một lần để hoàn tất cấu hình.
+
+### Quản lý nhiều bộ truyện
+
+Đặt biến môi trường `NOVEL_DIR` trỏ tới thư mục của bộ truyện bạn đang viết, mỗi bộ một thư mục độc lập (chi tiết ở mục 6). Với Docker:
+
+```bash
+NOVEL_DIR=./novels/tien-hiep-ky docker compose run --rm ainovel
+```
+
+Trên PowerShell: `$env:NOVEL_DIR = ".\novels\tien-hiep-ky"; docker compose run --rm ainovel`
+
 ## 3. Tùy Chọn Ngôn Ngữ Sáng Tác
 
-Trong file cấu hình `config/config.json`, bạn có thể chỉ định trường `"language"`:
+Trong file cấu hình (`~/.ainovel/config.json` khi chạy binary trực tiếp, hoặc `config/config.json` khi chạy qua Docker — xem mục 2), bạn có thể chỉ định trường `"language"`:
 
 - `"language": "vi"` (Mặc định): Toàn bộ dàn ý, nhân vật, bối cảnh thế giới, quy chuẩn văn phong chống AI và nội dung từng chương sẽ được sinh ra bằng Tiếng Việt tự nhiên, mượt mà.
 - `"language": "zh"`: Nội dung truyện được sinh ra bằng Tiếng Trung nguyên bản (phù hợp nếu bạn viết truyện Trung hoặc muốn dùng công cụ dịch sau).
@@ -86,7 +109,7 @@ Bản chất: một câu lệnh buộc ngôn ngữ + bộ quy chuẩn văn phong
 
 ## 4. Cấu Hình Nhà Cung Cấp AI (LLM)
 
-File cấu hình đặt tại `config/config.json`:
+File cấu hình đặt tại `config/config.json` (Docker). **Nếu chạy binary trực tiếp, file nằm ở `~/.ainovel/config.json`** — cùng nội dung, khác chỗ. Xem mục 2.
 
 ### Dùng Ollama Cục Bộ (100% Offline)
 
@@ -103,7 +126,7 @@ PARAMETER num_ctx 65536
 ollama create kietnovel-qwen -f "$env:TEMP\kietnovel.Modelfile"
 ```
 
-Nội dung `config/config.json`:
+Nội dung cấu hình:
 
 ```json
 {
@@ -117,7 +140,7 @@ Nội dung `config/config.json`:
     }
   },
   "context_window": 65536,
-  "thinking": "off",
+  "reasoning_effort": "off",
   "style": "default"
 }
 ```
@@ -139,7 +162,7 @@ OpenRouter:
     }
   },
   "context_window": 128000,
-  "thinking": "off",
+  "reasoning_effort": "off",
   "style": "default"
 }
 ```

@@ -151,8 +151,12 @@ func (pc ProviderConfig) StreamIdleTimeoutValue() (time.Duration, error) {
 // 1. ollama / bedrock cho phép không key;
 // 2. cấu hình có Type tường minh được coi là proxy tùy chỉnh, cho phép không key;
 // 3. provider còn lại mặc định yêu cầu key, giữ kiểm tra thận trọng cho interface host chính thức.
+//
+// So sánh tên provider không phân biệt hoa thường: llm.IsProviderRegistered và
+// tầng litellm đều ToLower trước khi tra registry, nên viết "Ollama" trong cấu hình
+// phải cho cùng kết quả — không thì bị chặn ở tầng cấu hình dù chạy được ở tầng LLM.
 func (pc ProviderConfig) RequiresAPIKey(name string) bool {
-	switch name {
+	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "ollama", "bedrock":
 		return false
 	}
@@ -365,7 +369,9 @@ func (c *Config) ValidateBase() error {
 		if err := validateConfigText(fmt.Sprintf("role %q model", role), rc.Model); err != nil {
 			return err
 		}
-		if !knownRoles[role] {
+		// host áp vai trò sau khi ToLower+TrimSpace (host.go), nên validate cũng vậy
+		// để "Writer" trong cấu hình không bị từ chối oan.
+		if !knownRoles[strings.ToLower(strings.TrimSpace(role))] {
 			return fmt.Errorf("role %q không xác định trong cấu hình roles (hợp lệ: architect/writer/editor/import_segment/import_analyze/import_synthesize): %w", role, errs.ErrConfig)
 		}
 		if rc.Provider == "" || rc.Model == "" {
