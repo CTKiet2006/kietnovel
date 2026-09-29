@@ -280,7 +280,7 @@ novels/<tên-truyện>/output/novel/
 └── meta/                # Checkpoint, tiến độ, nhật ký token
 ```
 
-> ⚠️ `NOVEL_DIR` đang được triển khai trong bản Việt hóa (xem Issues). Hiện tại mỗi thư mục làm việc (cwd) tương ứng một bộ truyện tại `{cwd}/output/novel/`.
+> Mỗi giá trị `NOVEL_DIR` là một bộ truyện riêng: văn phong (`style/`), checkpoint và tiến độ đi theo thư mục truyện, không lẫn nhau. Không đặt `NOVEL_DIR` thì dùng `./output/novel` theo thư mục làm việc như bản gốc.
 
 ## 7. Tính Năng Nâng Cao
 
