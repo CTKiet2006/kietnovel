@@ -78,7 +78,7 @@ func commandRegistryInstance() commandRegistry {
 					roleHint = args[0]
 					if normalizeRoleKey(roleHint) == "" {
 						m.applyEvent(host.Event{
-							Time: time.Now(), Category: "ERROR", 						Summary: "Vai trò không rõ: " + roleHint, Level: "error",
+							Time: time.Now(), Category: "ERROR", Summary: "Vai trò không rõ: " + roleHint, Level: "error",
 						})
 						m.refreshEventViewport()
 						return m, nil

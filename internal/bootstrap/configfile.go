@@ -1,4 +1,4 @@
-﻿package bootstrap
+package bootstrap
 
 import (
 	"encoding/json"
@@ -73,11 +73,18 @@ func LoadConfig() (Config, error) {
 
 	// 1. Cấu hình toàn cục. Nó là nền ưu tiên thấp nhất, file hỏng thì hạ thành cảnh báo chứ không chặn —
 	//    vì có thể bị project override; fail cứng sẽ chặn oan người dùng "global hỏng + project còn tốt".
+	//    NHƯNG: nếu không có project override thì nuốt lặng là sai — cấu hình rỗng sẽ đẩy người dùng
+	//    đi săn lỗi "thiếu provider" trong khi nguyên nhân thật là JSON sai cú pháp ở tầng trên
+	//    (issue #124). Vì vậy phải đợi biết kết quả project rồi mới quyết định nâng cảnh báo thành lỗi.
+	var globalErr error
+	var globalPath string
 	if p := DefaultConfigPath(); p != "" {
 		global, found, err := loadOptionalJSON(p)
+		globalPath, globalErr = p, err
 		switch {
 		case err != nil:
-			slog.Warn("Giải parse cấu hình toàn cục thất bại, đã bỏ qua (có thể bị project override)", "module", "config", "path", p, "err", err)
+			// xử lý sau, khi đã biết có project override cứu được không
+			slog.Warn("Giải parse cấu hình toàn cục thất bại, tạm bỏ qua (có thể được project override)", "module", "config", "path", p, "err", err)
 		case found:
 			cfg = global
 		}
@@ -91,6 +98,12 @@ func LoadConfig() (Config, error) {
 	}
 	if found {
 		cfg = mergeConfig(cfg, project)
+	}
+
+	// Không có project override thì cấu hình toàn cục là nguồn duy nhất: hỏng ở đây
+	// phải nói thẳng ra thay vì để người dùng đi tìm lỗi ở tầng dưới.
+	if globalErr != nil && !found {
+		return cfg, fmt.Errorf("giải parse cấu hình toàn cục %s thất bại và không có ./.ainovel/config.json để ghi đè (hãy kiểm tra cú pháp JSON): %w", globalPath, globalErr)
 	}
 
 	return cfg, nil
