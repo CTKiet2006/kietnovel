@@ -234,11 +234,11 @@ func TestConfigureModelsRejectsMissingRequiredAPIKeyForUnusedProvider(t *testing
 		Models:       []bootstrap.ModelConfig{{Name: "claude-test"}},
 		APIKeyAction: APIKeyKeep,
 	})
-	if err == nil || !strings.Contains(err.Error(), "必须配置 API Key") {
-		t.Fatalf("未使用但要求凭证的 Provider 也应拒绝空 Key，得到 %v", err)
+	if err == nil || !strings.Contains(err.Error(), "phải có API Key") {
+		t.Fatalf("Provider không dùng nhưng đòi chứng thực cũng phải từ chối key trống, được %v", err)
 	}
 	if _, exists := h.cfg.Providers["anthropic"]; exists {
-		t.Fatal("校验失败后不应修改运行时配置")
+		t.Fatal("Kiểm tra rớt thì không được đụng cấu hình runtime")
 	}
 }
 
@@ -289,7 +289,7 @@ func TestConfigureModelsSuggestsSwitchForNewProvider(t *testing.T) {
 		t.Fatalf("configure backup: %v", err)
 	}
 	event := <-h.events
-	if !strings.Contains(event.Summary, "使用 /model 切换") {
-		t.Fatalf("新增非当前 Provider 后应提示切换，event=%q", event.Summary)
+	if !strings.Contains(event.Summary, "dùng /model để chuyển") {
+		t.Fatalf("Thêm Provider mới không phải hiện tại thì phải gợi ý chuyển, event=%q", event.Summary)
 	}
 }

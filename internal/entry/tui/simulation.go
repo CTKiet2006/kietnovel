@@ -96,29 +96,29 @@ func (s *simulationState) refresh(contentW int) {
 	b.WriteString(titleStyle.Render(s.title))
 	b.WriteString("\n\n")
 	if s.source != "" {
-		b.WriteString(dimStyle.Render("来源 "))
+		b.WriteString(dimStyle.Render("Nguồn "))
 		b.WriteString(s.source)
 		b.WriteString("\n")
 	}
-	b.WriteString(dimStyle.Render("开始 "))
+	b.WriteString(dimStyle.Render("Bắt đầu "))
 	b.WriteString(formatReportTime(s.startedAt))
 	if !s.finishedAt.IsZero() {
-		b.WriteString(dimStyle.Render("  完成 "))
+		b.WriteString(dimStyle.Render("  Xong "))
 		b.WriteString(formatReportTime(s.finishedAt))
 	}
 	b.WriteString("\n\n")
 
-	b.WriteString(mutedStyle.Render("阶段 "))
+	b.WriteString(mutedStyle.Render("Giai đoạn "))
 	b.WriteString(stageStyle.Render(string(s.stage)))
 	if s.total > 0 {
-		b.WriteString(mutedStyle.Render("  进度 "))
+		b.WriteString(mutedStyle.Render("  Tiến độ "))
 		b.WriteString(fmt.Sprintf("%d/%d", s.current, s.total))
 	}
 	b.WriteString("\n\n")
 
-	b.WriteString(titleStyle.Render("流程日志"))
+	b.WriteString(titleStyle.Render("Nhật ký chạy"))
 	b.WriteString(" ")
-	b.WriteString(dimStyle.Render(fmt.Sprintf("(%d 条)", len(s.history))))
+	b.WriteString(dimStyle.Render(fmt.Sprintf("(%d dòng)", len(s.history))))
 	b.WriteString("\n")
 	for _, ln := range s.history {
 		b.WriteString("\n")
@@ -139,15 +139,15 @@ func (s *simulationState) refresh(contentW int) {
 	b.WriteString("\n\n")
 	switch {
 	case !s.done:
-		b.WriteString(dimStyle.Render("Esc 取消"))
+		b.WriteString(dimStyle.Render("Esc hủy"))
 	case s.err != nil:
-		b.WriteString(errStyle.Render("仿写画像处理失败"))
+		b.WriteString(errStyle.Render("Xử lý hồ sơ văn phong thất bại"))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("Esc 关闭面板"))
+		b.WriteString(dimStyle.Render("Esc đóng panel"))
 	default:
-		b.WriteString(okStyle.Render("仿写画像已就绪，后续 Agent 会从 novel_context 读取"))
+		b.WriteString(okStyle.Render("Hồ sơ văn phong đã sẵn sàng, Agent sau sẽ đọc từ novel_context"))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("Esc 关闭面板"))
+		b.WriteString(dimStyle.Render("Esc đóng panel"))
 	}
 
 	s.viewport.SetContent(b.String())
@@ -169,8 +169,8 @@ func renderSimulationModal(width, height int, s *simulationState) string {
 	if s.viewport.Height != boxH-4 {
 		s.viewport.Height = boxH - 4
 	}
-	hint := "  ↑↓ 滚动 · Esc 取消/关闭"
-	modal := renderPaddedModalFrame(boxW, boxH, "仿写画像", hint, strings.Split(s.viewport.View(), "\n"))
+	hint := "  ↑↓ cuộn · Esc hủy/đóng"
+	modal := renderPaddedModalFrame(boxW, boxH, "Hồ sơ văn phong", hint, strings.Split(s.viewport.View(), "\n"))
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)
 }
 
@@ -200,7 +200,7 @@ func (m Model) handleSimulationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func startSimulate(rt *host.Host, reqID int, args []string, width, height int) (*simulationState, tea.Cmd, error) {
 	if len(args) > 0 {
-		return nil, nil, fmt.Errorf("用法：/simulate")
+		return nil, nil, fmt.Errorf("Cách dùng: /simulate")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	ch, err := rt.Simulate(ctx)
@@ -208,13 +208,13 @@ func startSimulate(rt *host.Host, reqID int, args []string, width, height int) (
 		cancel()
 		return nil, nil, err
 	}
-	state := newSimulationState(reqID, "生成仿写画像", "./simulate", width, height, cancel)
+	state := newSimulationState(reqID, "Tạo hồ sơ văn phong", "./simulate", width, height, cancel)
 	return state, listenSimulationEvent(reqID, ch), nil
 }
 
 func startImportSimulation(rt *host.Host, reqID int, args []string, width, height int) (*simulationState, tea.Cmd, error) {
 	if len(args) != 1 {
-		return nil, nil, fmt.Errorf("用法：/importsim <profile.json>")
+		return nil, nil, fmt.Errorf("Cách dùng: /importsim <profile.json>")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	ch, err := rt.ImportSimulationProfile(ctx, args[0])
@@ -222,7 +222,7 @@ func startImportSimulation(rt *host.Host, reqID int, args []string, width, heigh
 		cancel()
 		return nil, nil, err
 	}
-	state := newSimulationState(reqID, "导入仿写画像", args[0], width, height, cancel)
+	state := newSimulationState(reqID, "Nhập hồ sơ văn phong", args[0], width, height, cancel)
 	return state, listenSimulationEvent(reqID, ch), nil
 }
 
