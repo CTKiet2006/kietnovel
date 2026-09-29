@@ -5,12 +5,12 @@ import (
 	"strings"
 )
 
-// Lint 内置产品底线检查：扫描正文中的机制残留，与用户规则无关，commit 时始终执行。
-// 与 Check 同契约——仅返事实（铁律一），不阻断流程，由评审/用户裁定。
+// Lint is the built-in product floor check: it scans the body for machinery residue, is unrelated to user rules, and always runs at commit time.
+// It shares Check's contract -- facts only (iron law one), no flow blocking, adjudicated by review/the user.
 //
-// 当前三类（全部来自真实长跑产物的实证缺陷）：
-//   - markdown_residue：正文残留 ** 加粗、首行之外的 # 标题行（导出 txt 会裸露符号）
-//   - non_cjk_fragments：连续拉丁字母片段（模型语言混杂，如中文正文裸混 "pattern"）
+// The current three kinds (all empirically observed defects from real long-run output):
+//   - markdown_residue: leftover ** bolding and # heading lines outside the first line (exporting to txt would expose the raw symbols)
+//   - non_cjk_fragments: runs of Latin letters (the model mixing languages, e.g. a bare "pattern" inside Chinese prose)
 func Lint(text string) []Violation {
 	var vs []Violation
 	vs = appendMarkdownResidue(vs, text)
@@ -34,7 +34,7 @@ func appendMarkdownResidue(vs []Violation, text string) []Violation {
 		if t == "" {
 			continue
 		}
-		// 第一个非空行的 # 标题是章文件的合法格式（不按行号写死，容忍前导空行）
+		// A # heading on the first non-empty line is legitimate chapter-file format (not keyed to a line number, so leading blank lines are tolerated)
 		first := !seenContent
 		seenContent = true
 		if !first && strings.HasPrefix(t, "#") {
@@ -54,8 +54,8 @@ func appendMarkdownResidue(vs []Violation, text string) []Violation {
 
 var latinFragmentRe = regexp.MustCompile(`[A-Za-z]{2,}`)
 
-// appendNonCJKFragments 报告拉丁字母片段的总次数与去重示例。
-// 现代题材的合法英文（品牌名/缩写）也会命中——warning 级事实，由评审按题材裁定。
+// appendNonCJKFragments reports the total count of Latin fragments plus deduplicated examples.
+// Legitimate English in contemporary settings (brand names, abbreviations) hits this too -- a warning-level fact that review adjudicates per genre.
 func appendNonCJKFragments(vs []Violation, text string) []Violation {
 	matches := latinFragmentRe.FindAllString(text, -1)
 	if len(matches) == 0 {

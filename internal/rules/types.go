@@ -1,27 +1,27 @@
-// Package rules 实现用户偏好的输入层（Policy）：把各来源的写作规则归一化、合并成
-// 本书快照（见 snapshot.go），运行时由 novel_context 注入、commit_chapter 机械检查。
+// Package rules implements the input layer of user preferences (Policy): it normalizes the writing rules of every source
+// and merges them into this book's snapshot (see snapshot.go), injected at runtime by novel_context and mechanically checked by commit_chapter.
 //
-// Rule 是第四类事实，跟 Progress / Checkpoint / Artifact 并列，但性质相反：
-// 前三类是系统输出，Rule 是用户意图的持久化输入。
+// Rule is the fourth kind of fact, alongside Progress / Checkpoint / Artifact, but of the opposite nature:
+// the first three are system output, whereas Rule is a persistent input of user intent.
 //
-// 设计约束（不可妥协）：
-//   - 工具只返事实，不返指令（Violation 是事实，由 editor 决定是否触发重写）
-//   - 不引入新的 verdict 路径（复用 PendingRewrites）
-//   - 不引入严格度字段（severity 由规则类型固定映射，editor 自主语义裁定）
-//   - 不动 Flow Router（rule 不参与路由）
+// Design constraints (non-negotiable):
+//   - the tool returns facts, not instructions (a Violation is a fact; the editor decides whether to trigger a rewrite)
+//   - no new verdict path is introduced (PendingRewrites is reused)
+//   - no strictness field is introduced (severity is a fixed mapping from rule type; the editor makes the semantic call)
+//   - the Flow Router is left alone (a rule takes no part in routing)
 package rules
 
-// SourceKind 标记规则文件来源，仅用于生成来源标签（如 global:my-style.md）。
+// SourceKind marks where a rules file came from and is only used to build the source label (e.g. global:my-style.md).
 type SourceKind int
 
 const (
-	// SourceGlobal — 用户全局偏好（~/.ainovel/rules/ 目录下所有 .md，按文件名字典序合并），跨书复用。
+	// SourceGlobal -- the user's global preferences (every .md under ~/.ainovel/rules/, merged in filename lexicographic order), reused across books.
 	SourceGlobal SourceKind = iota
-	// SourceProject — 本书规则（./.ainovel/rules/ 目录下所有 .md，按文件名字典序合并），优先级最高。
+	// SourceProject -- this book's rules (every .md under ./.ainovel/rules/, merged in filename lexicographic order), the highest priority.
 	SourceProject
 )
 
-// String 返回来源的可读名称，用于来源标签前缀。
+// String returns the source's readable name, used as the source-label prefix.
 func (k SourceKind) String() string {
 	switch k {
 	case SourceGlobal:
@@ -33,9 +33,9 @@ func (k SourceKind) String() string {
 	}
 }
 
-// Structured 装载机械可检的结构化规则字段（归一化各来源后的候选/合并结果）。
-// 章节字数刻意不在此列：多长算一章是叙事完整性问题，属语义裁量（writer/editor），
-// 数字化成机械硬线会诱导模型为跨线注水——字数意愿走 preferences 自然语言通道。
+// Structured holds the mechanically checkable structured rule fields (the candidate/merged result after each source is normalized).
+// Chapter word count is deliberately not among them: how long a chapter should be is a matter of narrative completeness, hence a
+// semantic judgement (writer/editor); freezing it into a mechanical hard line would push the model to pad just to cross it -- the intent travels through the natural-language preferences channel.
 type Structured struct {
 	Genre            string         `json:"genre,omitempty"`
 	ForbiddenChars   []string       `json:"forbidden_chars,omitempty"`
@@ -43,7 +43,7 @@ type Structured struct {
 	FatigueWords     map[string]int `json:"fatigue_words,omitempty"`
 }
 
-// IsEmpty 用于判定是否完全没有结构化规则；checker 可据此跳过。
+// IsEmpty reports whether there are no structured rules at all, letting the checker skip.
 func (s Structured) IsEmpty() bool {
 	return s.Genre == "" &&
 		len(s.ForbiddenChars) == 0 &&
@@ -51,12 +51,12 @@ func (s Structured) IsEmpty() bool {
 		len(s.FatigueWords) == 0
 }
 
-// Severity 标记 Violation 的严重等级。
-// 固定映射（用户不可配置）：
+// Severity marks how serious a Violation is.
+// Fixed mapping (not user-configurable):
 //
-//	forbidden_chars 出现             -> Error
-//	forbidden_phrases 出现           -> Error
-//	fatigue_words 超阈值             -> Warning
+//	forbidden_chars occurs            -> Error
+//	forbidden_phrases occurs          -> Error
+//	fatigue_words over threshold      -> Warning
 type Severity string
 
 const (
@@ -64,15 +64,15 @@ const (
 	SeverityError   Severity = "error"
 )
 
-// Violation 是 checker 的输出：本章违反了某条机械规则的事实陈述。
+// Violation is the checker's output: the factual statement that this chapter broke a mechanical rule.
 //
-// 注意：commit_chapter 把 violations 透传到返回 JSON，不阻断 commit；
-// editor 在审阅时把这些事实映射到现有七维（aesthetic/pacing/character/consistency），
-// 由 LLM 自主决定是否升级 verdict 触发 polish/rewrite。
+// Note: commit_chapter passes violations through into the returned JSON and does not block the commit;
+// the editor maps these facts onto the existing seven dimensions (aesthetic/pacing/character/consistency) when reviewing,
+// and the LLM freely decides whether to escalate the verdict to trigger polish/rewrite.
 type Violation struct {
 	Rule     string   `json:"rule"`             // forbidden_chars / forbidden_phrases / fatigue_words
-	Target   string   `json:"target,omitempty"` // 具体违规对象（哪个词/字符）
-	Limit    any      `json:"limit,omitempty"`  // 阈值；fatigue_words=int / forbidden_*=空
-	Actual   any      `json:"actual"`           // 实际值：出现次数
+	Target   string   `json:"target,omitempty"` // the concrete offender (which word/character)
+	Limit    any      `json:"limit,omitempty"`  // threshold; fatigue_words=int / forbidden_*=empty
+	Actual   any      `json:"actual"`           // the actual value: occurrence count
 	Severity Severity `json:"severity"`         // error / warning
 }

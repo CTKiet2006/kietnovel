@@ -388,8 +388,9 @@ func createModelFromConfig(providerKey, model string, pc ProviderConfig, cache m
 		llm.WithStreamIdleTimeout(streamIdle),
 		llm.WithProviderExtra(providerExtra),
 		llm.WithExtra(pc.ExtraBody),
-		// Một số upstream để tool_use id chứa ký tự '#', ':', ... trong khi kiểm tra trước khi phát chỉ nhận [A-Za-z0-9_-];
-		// sau chuẩn hóa thì tool_result viết lại thành cặp theo cùng ánh xạ.
+		// Some upstreams allow tool_use IDs containing '#', ':', ... while the
+		// pre-flight check only accepts [A-Za-z0-9_-]; normalising means the
+		// matching tool_result is rewritten through the same mapping.
 		llm.WithClientOptions(litellm.WithMessageRepair(litellm.RepairNormalizeToolUseIDs)),
 	)
 	if err != nil {

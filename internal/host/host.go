@@ -799,8 +799,8 @@ func (h *Host) arbiterModel() agentcore.ChatModel {
 	return newUsageTrackedModel(h.models.Default, "arbiter", h.usage.Record)
 }
 
-// Continue được gọi khi người dùng nhập ở ô nhập sau khi dừng: định đoạn can thiệp +
-// bảo đảm Engine chạy lại.
+// Continue is called when the user types in the input box after pausing: it locks
+// in the intervention and makes sure the Engine runs again.
 func (h *Host) Continue(text string) error {
 	text = strings.TrimSpace(text)
 	if text == "" {
@@ -926,10 +926,10 @@ func (h *Host) AdvanceOneChapter() error {
 	return nil
 }
 
-// Steer gửi can thiệp của người dùng (dùng được mọi lúc khi đang chạy; khi đã dừng
-// thì sau khi định đoạn, tùy hành động có kéo Engine lên hay không).
-// TUI chờ kết quả qua tea.Cmd nên nhận được lỗi định đoạn/lưu bền thật mà không
-// chặn giao diện.
+// Steer submits a user intervention (allowed at any point while running; once
+// paused, whether the Engine is pulled back up afterwards depends on the action).
+// The TUI waits on the result through a tea.Cmd, so it sees the real
+// lock-in/persist error without blocking the interface.
 func (h *Host) Steer(text string) error {
 	err, launched := h.runAsync(func() error {
 		h.emitEvent(Event{Time: time.Now(), Category: "USER", Summary: "[Can thiệp người dùng] " + text, Level: "info"})

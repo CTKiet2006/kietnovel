@@ -101,9 +101,9 @@ func Ingest(bookDir, sourcePath string, in Intent) (*Workspace, *Manifest, error
 // SourceUnit is a stable coordinate the model can reference (RFC §7.3).
 // ID is only for display and model references; every ordering/containment/increase check uses the numeric (Line, Part) order, and lexicographic comparison of ID strings is forbidden.
 type SourceUnit struct {
-	ID        string `json:"id"`   // L1257；超预算行拆为 L1257.1、L1257.2
-	Line      int    `json:"line"` // 1 起
-	Part      int    `json:"part"` // 0=整行；虚拟分片 1..N
+	ID        string `json:"id"`   // L1257; a line over budget splits into L1257.1, L1257.2
+	Line      int    `json:"line"` // starts at 1
+	Part      int    `json:"part"` // 0 = the whole line; virtual fragments 1..N
 	StartByte int    `json:"start_byte"`
 	EndByte   int    `json:"end_byte"`
 	Text      string `json:"text"`
@@ -143,7 +143,7 @@ func buildSourceUnits(normalized []byte, maxUnitBytes int) []SourceUnit {
 					for e > s && !utf8.RuneStart(normalized[e]) {
 						e--
 					}
-					if e == s { // 单个超长 rune 的极端兜底
+					if e == s { // an extreme fallback for a single oversized rune
 						e = s + maxUnitBytes
 					}
 				}

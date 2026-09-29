@@ -67,8 +67,8 @@ func TestKhongConTiengVietKhiSangEn(t *testing.T) {
 	m := newRenderableModel()
 	view := m.View()
 
-	// Cac cum tieng Viet bi loai khoi UI: tinh nang (feature) da duoc dich, con
-	// du lieu lai co the do host/dia de ve.
+	// Vietnamese words excluded on purpose: features are translated, but data
+	// pushed in by the host or the store may still be Vietnamese.
 	leaks := []string{"Đã lưu", "chương", "người", "được", "không", "chưa"}
 	var found []string
 	for _, w := range leaks {

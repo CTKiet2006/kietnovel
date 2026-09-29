@@ -48,7 +48,7 @@ func Scan(st *store.Store) ([]Change, error) {
 		if digest == record.ContentSHA256 {
 			continue
 		}
-		// 已接纳的正文为空时文件缺失不算改动；把非空正文删空则仍需用户处理。
+		// When the accepted body is empty, a missing file does not count as a change; emptying a non-empty body still needs the user.
 		if strings.TrimSpace(content) == "" {
 			return nil, fmt.Errorf("第 %d 章工作区正文为空，拒绝接纳", chapter)
 		}

@@ -203,7 +203,7 @@ func publishChapter(ctx context.Context, st *store.Store, commit ChapterCommitte
 func commitArgs(chapter int, f ImportedChapterFacts) map[string]any {
 	keyEvents := f.KeyEvents
 	if len(keyEvents) == 0 {
-		keyEvents = []string{f.CoreEvent} // core_event 已校验非空
+		keyEvents = []string{f.CoreEvent} // core_event is already validated as non-empty
 	}
 	args := map[string]any{
 		"chapter":         chapter,

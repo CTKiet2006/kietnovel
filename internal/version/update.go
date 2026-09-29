@@ -32,7 +32,7 @@ type UpdateResult struct {
 
 type release struct {
 	TagName string         `json:"tag_name"`
-	Body    string         `json:"body"` // release notes 原文（markdown），版本检查提醒展示用
+	Body    string         `json:"body"` // raw release notes (markdown), shown in the version-check reminder
 	Assets  []releaseAsset `json:"assets"`
 }
 
@@ -214,8 +214,8 @@ func download(ctx context.Context, client *http.Client, url, dst string, expecte
 	return nil
 }
 
-// verifyChecksum 校验 GoReleaser 生成的 SHA256 清单。清单与安装包必须来自同一个
-// release；缺项、格式错误或摘要不匹配均拒绝替换当前可执行文件。
+// verifyChecksum validates the SHA256 manifest produced by GoReleaser. The manifest and the install package must come from
+// the same release; a missing entry, a malformed one or a digest mismatch all refuse to replace the current executable.
 func verifyChecksum(archivePath, checksumPath, assetName string) error {
 	data, err := os.ReadFile(checksumPath)
 	if err != nil {

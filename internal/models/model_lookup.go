@@ -21,8 +21,8 @@ func normalizeModelLookupID(modelID string) string {
 	return strings.ReplaceAll(modelID, ".", "-")
 }
 
-// modelLookupMatches 精确匹配或带日期后缀的匹配。
-// e.g. "claude-sonnet-4" 匹配 "claude-sonnet-4-20250514"。
+// modelLookupMatches does exact matching, or matching with a date suffix.
+// e.g. "claude-sonnet-4" matches "claude-sonnet-4-20250514".
 func modelLookupMatches(knownID, targetID string) bool {
 	if knownID == targetID {
 		return true
@@ -36,7 +36,7 @@ func modelLookupMatches(knownID, targetID string) bool {
 	return false
 }
 
-// isDatedModelSuffix 判断字符串是否形如 "-20250514"（连字符 + 8 位数字）。
+// isDatedModelSuffix reports whether a string looks like "-20250514" (a hyphen plus 8 digits).
 func isDatedModelSuffix(s string) bool {
 	if len(s) != 9 || s[0] != '-' {
 		return false

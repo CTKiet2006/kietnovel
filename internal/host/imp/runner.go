@@ -17,10 +17,10 @@ import (
 
 // Each prompt/schema version is folded into its stage's InputDigest; bump it when upgrading a prompt contract so downstream artifacts are naturally invalidated.
 const (
-	segmentPromptVersion = "seg-v2" // v2：边界只落真实分隔处、标题逐字复制（配合标题回显校验）
+	segmentPromptVersion = "seg-v2" // v2: boundaries land only at real separators, titles are copied verbatim (paired with the title-echo validation)
 	analyzePromptVersion = "analyze-v1"
 	confirmMethodAuto    = "auto_authorized"
-	confirmMethodUser    = "user_confirmed" // TUI 预览后按 y 的显式人工确认
+	confirmMethodUser    = "user_confirmed" // explicit human confirmation by pressing y after the TUI preview
 )
 
 // Prompts holds the system prompts of the semantic functions. Synthesis has two stages: Synthesize produces the whole-book BookSynthesis,
@@ -61,9 +61,9 @@ func DefaultRunBudgets() RunBudgets {
 // It lets the budget pair scale naturally with context/completion and lets thinking be sent according to capability; on an all-zero value it falls back to the
 // conservative defaults, behaving exactly as before capability was wired in. Structured output does not send response_format based on provider capability (see the callProfile comment).
 type ModelRuntime struct {
-	ContextTokens   int                     // 输入上下文上限（token）
-	MaxOutputTokens int                     // 单次可见输出上限（token）
-	Thinking        agentcore.ThinkingLevel // 已按能力 resolve；ThinkingAuto("") 表示不显式发送
+	ContextTokens   int                     // input context cap (tokens)
+	MaxOutputTokens int                     // visible output cap for a single call (tokens)
+	Thinking        agentcore.ThinkingLevel // already resolved by capability; ThinkingAuto("") means it is not sent explicitly
 }
 
 // profile derives this runtime's call capability options (thinking).
@@ -85,7 +85,7 @@ func budgetsFromRuntime(rt ModelRuntime) RunBudgets {
 	if rt.ContextTokens <= 0 || rt.MaxOutputTokens <= 0 {
 		return DefaultRunBudgets()
 	}
-	const bytesPerToken = 3 // 中文 UTF-8 保守换算：token→字节（偏低估容量更安全）
+	const bytesPerToken = 3 // conservative CJK UTF-8 conversion: token->byte (underestimating capacity is the safer error)
 	out := rt.MaxOutputTokens
 	// Input budget: from the context window, subtract the visible output and a ~10% reasoning/system reserve, then convert to bytes.
 	reserve := rt.ContextTokens / 10
@@ -128,7 +128,7 @@ type Deps struct {
 	CommitChapter ChapterCommitter
 	Segment       Caller
 	Analyze       Caller
-	Synthesize    Caller // range digest 与 book synthesis 同档位（同一综合阶段）
+	Synthesize    Caller // the range digest and the book synthesis share the same tier (one synthesis stage)
 	Prompts       Prompts
 	Budgets       RunBudgets
 }
@@ -187,8 +187,8 @@ type runner struct {
 	opts   Options
 	events chan Event
 	ws     *Workspace
-	act    Action       // 当前执行动作，供失败工件标注阶段
-	log    *slog.Logger // 导入专属日志（logs/import.log）；nil 时回退默认 logger
+	act    Action       // the action currently being executed, so a failed artifact can be tagged with its stage
+	log    *slog.Logger // import-specific log (logs/import.log); falls back to the default logger when nil
 }
 
 func (r *runner) emit(stage Stage, current, total int, msg string, err error) {
@@ -206,7 +206,7 @@ func (r *runner) send(ev Event) {
 	}
 	select {
 	case r.events <- ev:
-	default: // 通道满时丢弃进度，绝不阻塞管线
+	default: // drop progress when the channel is full, never block the pipeline
 	}
 }
 
@@ -227,7 +227,7 @@ func (r *runner) logEvent(ev Event) {
 	level := slog.LevelInfo
 	switch {
 	case ev.Stage == StageError:
-		level = slog.LevelError // 失败终态是日志里最该被过滤出来的一条，不能落成 INFO
+		level = slog.LevelError // the failure terminal state is the one most worth filtering out of the log, it must not land as INFO
 	case ev.Level == "warn":
 		level = slog.LevelWarn
 	}
@@ -316,7 +316,7 @@ func (r *runner) checkSourceIdentity() error {
 	}
 	m, err := r.ws.LoadManifest()
 	if err != nil {
-		return nil // 身份三件套不可读走 ingest 的损坏诊断，不在此重复报错
+		return nil // an unreadable identity trio goes through the corruption diagnostic of ingest, do not report the error twice here
 	}
 	raw, err := os.ReadFile(r.opts.SourcePath)
 	if err != nil {
@@ -364,7 +364,7 @@ func (r *runner) run(ctx context.Context) {
 			err = r.segment(ctx)
 		case ActionAwaitConfirmation:
 			if !r.confirm() {
-				return // 交互模式：等待用户确认，停在此处
+				return // interactive mode: wait for the user to confirm, stop here
 			}
 		case ActionAnalyze:
 			err = r.analyze(ctx)
@@ -372,7 +372,7 @@ func (r *runner) run(ctx context.Context) {
 			err = r.synthesize(ctx)
 		case ActionAwaitStoryResolution:
 			if !r.resolveStoryStatus() {
-				return // 无显式裁定：停在此处，等待 --story=open|closed
+				return // no explicit verdict: stop here and wait for --story=open|closed
 			}
 		case ActionPublish:
 			err = r.publish(ctx)

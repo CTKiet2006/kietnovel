@@ -9,7 +9,7 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// Properties 返回完整章节事实共用的 JSON Schema 字段。
+// Properties returns the JSON Schema fields shared by complete chapter facts.
 func Properties(includeFeedback bool) []schema.Prop {
 	textList := func(description string) map[string]any {
 		return schema.Array(description, schema.String(description))
@@ -63,7 +63,7 @@ func Properties(includeFeedback bool) []schema.Prop {
 	return props
 }
 
-// Validate 校验普通提交与人工修订共用的确定性约束。
+// Validate checks the deterministic constraints shared by normal commits and manual revisions.
 func Validate(facts domain.ChapterFacts) error {
 	if strings.TrimSpace(facts.Title) == "" {
 		return fmt.Errorf("title is required")

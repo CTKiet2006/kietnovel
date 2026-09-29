@@ -33,8 +33,8 @@ type engine struct {
 
 	arbiterModel    agentcore.ChatModel
 	failurePrompt   string
-	planStartPrompt string // 启动裁定系统提示词:裁定从未完成时引擎据 StartPrompt 现场补裁
-	style           string // 风格名,补裁时传给 DecidePlanStart
+	planStartPrompt string // system prompt for the start verdict: when the verdict has never completed, the engine runs the verdict on the spot from StartPrompt
+	style           string // style name, passed to DecidePlanStart during the on-the-spot verdict
 	// reconsult sends an expired steer back through the host's full verdict path (persistence / audit / applying
 	// every action), asynchronously - the engine only discards expired dispatches and never runs a partial re-verdict itself.
 	reconsult func(text string)
@@ -42,18 +42,18 @@ type engine struct {
 	observer  *observer
 	budget    *BudgetSentinel
 	gate      *ChapterAdvanceGate
-	refresh   func() // 每次 writer 派发前刷新 RestorePack
+	refresh   func() // refresh RestorePack before every writer dispatch
 	emitEvent func(Event)
 	notify    func(kind, level, title, body string)
-	onPause   func(summary string) // 引擎自主暂停(僵局/失败裁定 abort):走 host 统一暂停语义(lifecycle=paused)
-	onDone    func()               // run 结束(任何原因);host 据 store 事实定终态
+	onPause   func(summary string) // engine-initiated pause (deadlock / failed verdict abort): goes through the host unified pause semantics (lifecycle=paused)
+	onDone    func()               // run ended (for any reason); the host decides the final state from the store facts
 
 	mu      sync.Mutex
 	wg      sync.WaitGroup
 	cancel  context.CancelFunc
 	running bool
-	pending []controlOp       // 干预的控制态动作,边界提交
-	next    *flow.Instruction // 下一轮优先执行的指令(plan_start / arbiter dispatch)
+	pending []controlOp       // control-state actions to intervene, committed at the boundary
+	next    *flow.Instruction // the instruction to execute first on the next round (plan_start / arbiter dispatch)
 	// deferGateForNext lives and dies with the next op: a hold+dispatch must first run the paired
 	// editor/writer so it establishes the rewrite queue, and only then can the Gate judge rewrites_drained.
 	deferGateForNext bool
@@ -250,7 +250,7 @@ func (e *engine) run(ctx context.Context) {
 			return
 		}
 		if inst == nil {
-			continue // 僵局裁定要求重算路由
+			continue // a deadlock verdict requires the route to be recomputed
 		}
 
 		err = e.runWorker(ctx, inst)
@@ -379,7 +379,7 @@ func (e *engine) precheck(inst *flow.Instruction) (*flow.Instruction, error) {
 	if progress != nil && progress.Phase == domain.PhaseComplete {
 		// the only legal exit during the completion phase is reopen (a steer action); any dispatch is dropped outright.
 		slog.Warn("完本期派发被丢弃", "module", "engine", "agent", inst.Agent)
-		return &flow.Instruction{}, nil // 置空:下轮 Route 归 nil 自然停机
+		return &flow.Instruction{}, nil // blanked: the next round sees Route return nil and stops on its own
 	}
 	if inst.Agent == "writer" {
 		if progress == nil || progress.Phase != domain.PhaseWriting {
@@ -770,7 +770,7 @@ func (e *engine) applyControlOp(ctx context.Context, op controlOp) error {
 			hold := domain.AdvanceHold{After: op.hold.After, TargetChapter: op.hold.TargetChapter, Reason: op.hold.Reason}
 			if err := e.store.RunMeta.SetAdvanceHold(hold); err != nil {
 				e.emitEvent(Event{Time: time.Now(), Category: "ERROR", Summary: "Đặt tạm dừng một lần thất bại: " + err.Error(), Level: "error"})
-				return err // hold 未落盘时关联 dispatch 不得执行
+				return err // the paired dispatch must not run while the hold is not persisted
 			}
 			e.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "Đã đặt tạm dừng một lần: " + op.hold.Reason, Level: "info"})
 		}

@@ -8,8 +8,8 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/utils"
 )
 
-// Tracker 按章节维护全书风格统计。首次载入每章一次；新增或重写时只分析变化章节。
-// Snapshot 会缓存派生结果，同一书状态下 Writer/Editor 的重复读取不再重算。
+// Tracker maintains the book-wide style statistics per chapter. On first load every chapter is analysed once; on append or rewrite only the changed chapters are.
+// Snapshot caches the derived results, so repeated Writer/Editor reads in the same book state are not recomputed.
 type Tracker struct {
 	mu sync.Mutex
 
@@ -48,7 +48,7 @@ func NewTracker() *Tracker {
 	}
 }
 
-// Upsert 新增或替换一章。正文未变化时不推进版本。
+// Upsert adds or replaces one chapter. The version is not bumped when the body text is unchanged.
 func (t *Tracker) Upsert(chapter int, text string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -67,7 +67,7 @@ func (t *Tracker) Upsert(chapter int, text string) {
 	t.cacheReady = false
 }
 
-// Remove 删除一章；不存在时无操作。
+// Remove deletes one chapter; a missing chapter is a no-op.
 func (t *Tracker) Remove(chapter int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -83,7 +83,7 @@ func (t *Tracker) Remove(chapter int) {
 	t.cacheReady = false
 }
 
-// Snapshot 返回与 Compute 等价的当前统计快照。
+// Snapshot returns a snapshot of the current statistics, equivalent to Compute.
 func (t *Tracker) Snapshot(titles, stopwords []string) *Stats {
 	t.mu.Lock()
 	defer t.mu.Unlock()

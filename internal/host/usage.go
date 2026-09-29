@@ -46,10 +46,10 @@ const (
 type UsageTracker struct {
 	mu       sync.Mutex
 	overall  agentTotals
-	perAgent map[string]*agentTotals // key 为 agentRoleName 归一后的 role 名
-	perModel map[string]*agentTotals // key 为 provider/model；provider 未知时退化为 model
+	perAgent map[string]*agentTotals // key is the role name after agentRoleName normalisation
+	perModel map[string]*agentTotals // key is provider/model; when the provider is unknown it degrades to model
 	modelSet *bootstrap.ModelSet
-	store    *storepkg.Store // 可为 nil（测试场景），nil 时所有持久化方法静默 noop
+	store    *storepkg.Store // may be nil (in tests); when nil every persistence method silently no-ops
 
 	// cacheTrack is the per-role cache-chain baseline (the previous call's prefix length / hit count / time),
 	// used for break detection. It is updated only on the live Record path - replaying history does not detect,
@@ -62,7 +62,7 @@ type UsageTracker struct {
 	// stays nil and every cumulative field stays at 0. The counter lets the UI tell the user directly "the
 	// upstream is not returning usage, nothing here is broken" instead of digging through cache panel code.
 	missingAssistantUsage int
-	loggedMissingUsage    bool // 整个会话只 warn 一次，避免 tui.log 被刷屏
+	loggedMissingUsage    bool // warn once per session so tui.log is not flooded
 
 	// saveCh is triggered non-blockingly by Record after accumulating; autoSaveLoop listens and writes to disk with a debounce.
 	// buffered=1: several consecutive Record calls collapse into a single save signal; when the buffer is full the signal is dropped and written together on the next tick.
@@ -110,7 +110,7 @@ type agentTotals struct {
 	Cost         float64
 	Saved        float64
 	CacheCapable bool
-	CacheBreaks  int // live 检测到的缓存链断裂次数（replay 不计）
+	CacheBreaks  int // number of cache-chain breaks detected live (replay is not counted)
 	samples      []usageSample
 	sampleIdx    int
 }
@@ -161,7 +161,7 @@ func (t *UsageTracker) Record(agentName, task string, msg agentcore.AgentMessage
 // an interval over TTL -> suspected expiry; a very short interval while the client bytes should be stable -> suspected server-side eviction or routing drift (a relay round-robining over upstreams is a common cause).
 func (t *UsageTracker) noteCacheBreak(role, task string, u agentcore.Usage) {
 	now := time.Now()
-	prefix := u.Input // litellm 各 provider 保证 Input 含 CacheRead
+	prefix := u.Input // every litellm provider guarantees that Input includes CacheRead
 
 	t.mu.Lock()
 	st := t.cacheTrack[role]

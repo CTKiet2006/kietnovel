@@ -18,12 +18,12 @@ const (
 	cacheTTL      = 24 * time.Hour
 	fetchTimeout  = 10 * time.Second
 	cacheFileName = "models-cache.json"
-	// maxModelAgeDays 与 gen_models.go 保持一致：超过这个年龄的模型视作过时、剔除。
+	// maxModelAgeDays is kept consistent with gen_models.go: a model older than this counts as outdated and is dropped.
 	maxModelAgeDays = 730
 )
 
-// providerMap 把 OpenRouter 的 vendor 前缀规范化成本地 provider 名。
-// 未列入的厂商会被忽略，避免拉回无法使用的条目。
+// providerMap normalizes OpenRouter's vendor prefixes into local provider names.
+// Vendors not listed here are ignored, so unusable entries are never pulled back in.
 var providerMap = map[string]string{
 	"anthropic":  "anthropic",
 	"openai":     "openai",
@@ -68,9 +68,9 @@ type modelCache struct {
 	Models    []ModelEntry `json:"models"`
 }
 
-// StartPricingRefresh 起后台 goroutine 刷新模型数据。
-// 先读磁盘缓存（24h TTL），过期或不存在则拉新数据并落盘。
-// cacheDir 为空时跳过磁盘缓存，仍会尝试网络拉取。
+// StartPricingRefresh starts a background goroutine that refreshes the model data.
+// It reads the disk cache first (24h TTL) and, when that is stale or missing, fetches fresh data and persists it.
+// An empty cacheDir skips the disk cache but still attempts a network fetch.
 func StartPricingRefresh(registry *ModelRegistry, cacheDir string) {
 	go func() {
 		models := loadCache(cacheDir)
@@ -171,7 +171,7 @@ func convertModel(m openRouterModel) (ModelEntry, bool) {
 		return ModelEntry{}, false
 	}
 	modelID := parts[1]
-	// 忽略变体后缀（如 :thinking / :free）
+	// ignore the variant suffix (e.g. :thinking / :free)
 	if strings.Contains(modelID, ":") {
 		return ModelEntry{}, false
 	}
@@ -197,8 +197,8 @@ func convertModel(m openRouterModel) (ModelEntry, bool) {
 	return entry, true
 }
 
-// isStaleModel 按 maxModelAgeDays 过滤过时模型。
-// 0 或负值视为数据缺失，按"老模型"处理直接剔除。
+// isStaleModel filters out outdated models by maxModelAgeDays.
+// A 0 or negative value means the data is missing, and the model is dropped as an old model.
 func isStaleModel(created int64) bool {
 	if created <= 0 {
 		return true
@@ -207,7 +207,7 @@ func isStaleModel(created int64) bool {
 	return age > maxModelAgeDays
 }
 
-// tokenToMillion 把 OpenRouter 返回的"每 token 美元价格"转成"每 1M token 美元价格"。
+// tokenToMillion converts OpenRouter's "USD per token" price into a "USD per 1M tokens" price.
 func tokenToMillion(s string) float64 {
 	if s == "" {
 		return 0

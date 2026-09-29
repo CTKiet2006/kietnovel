@@ -45,14 +45,14 @@ type jsonFieldExtractor struct {
 	cfg toolDisplay
 
 	state pState
-	stack []byte // 容器栈：'O' obj / 'A' arr
+	stack []byte // container stack: 'O' obj / 'A' arr
 
 	keyBuf strings.Builder
 
 	escape bool
 	uHex   []byte
 
-	started bool // 是否已 emit 过任何字符（用于 header 与 第一个 key 之间的换行）
+	started bool // whether any character has already been emitted (used for the newline between the header and the first key)
 
 	done bool
 }
@@ -61,17 +61,17 @@ type pState int
 
 const (
 	psRoot         pState = iota
-	psBeforeKey           // obj 内：等待下一个 key 或 }
-	psInKey               // obj 内：解析 key
-	psAfterKey            // obj 内：等待 :
-	psBeforeValue         // 等待 value 起始字符
-	psStringStream        // string 值，流式 emit cooked 字符
-	psStringSkip          // string 值，跳过（裸流模式下非目标字段）
-	psNumberStream        // 数字，流式 emit
-	psNumberSkip          // 数字，跳过
-	psPrimStream          // true/false/null，流式 emit
-	psPrimSkip            // true/false/null，跳过
-	psDone                // 顶层容器已闭合
+	psBeforeKey           // inside obj: waiting for the next key or }
+	psInKey               // inside obj: parsing the key
+	psAfterKey            // inside obj: waiting for :
+	psBeforeValue         // waiting for the first character of the value
+	psStringStream        // string value, streaming the cooked characters out
+	psStringSkip          // string value, skipped (a non-target field in bare-stream mode)
+	psNumberStream        // number, streamed out
+	psNumberSkip          // number, skipped
+	psPrimStream          // true/false/null, streamed out
+	psPrimSkip            // true/false/null, skipped
+	psDone                // the top-level container has closed
 )
 
 func newToolExtractor(tool string) *jsonFieldExtractor {

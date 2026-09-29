@@ -66,10 +66,10 @@ type ChapterAnalysisPayload struct {
 // AnalyzeBudget is the input/output budget pair for per-chapter analysis (RFC §9.2).
 // Input approximates the context window in bytes; output approximates the completion cap with a conservative fact allowance per chapter.
 type AnalyzeBudget struct {
-	ContextBytes     int // 输入预算（正文 + ledger + overhead）
-	MaxOutputTokens  int // 可见输出预算（completion 上限）
-	PerChapterOutput int // 每章保守输出预留
-	PromptOverhead   int // system/ledger 固定输入开销（字节）
+	ContextBytes     int // input budget (body + ledger + overhead)
+	MaxOutputTokens  int // visible output budget (the completion cap)
+	PerChapterOutput int // conservative output reservation per chapter
+	PromptOverhead   int // fixed input overhead of system/ledger (bytes)
 }
 
 func analysisPath(chapter int) string {
@@ -207,7 +207,7 @@ func buildLedger(prior []ImportedChapterFacts) string {
 func planBatch(chapters []ChapterSpan, start, ledgerBytes int, b AnalyzeBudget) int {
 	end := start + 1
 	if b.ContextBytes <= 0 || b.MaxOutputTokens <= 0 || b.PerChapterOutput <= 0 {
-		return end // 预算未配置：逐章
+		return end // budget not configured: one chapter at a time
 	}
 	inAcc := ledgerBytes + b.PromptOverhead + chapterBytes(chapters, start)
 	outAcc := b.PerChapterOutput
@@ -375,24 +375,24 @@ func salvagePrefix(raw string, seg *Segmentation, start int) []ImportedChapterFa
 		return nil
 	}
 	dec := json.NewDecoder(strings.NewReader(arr))
-	if _, err := dec.Token(); err != nil { // 消费 '['
+	if _, err := dec.Token(); err != nil { // consume the '['
 		return nil
 	}
 	var out []ImportedChapterFacts
 	for dec.More() {
 		var f ImportedChapterFacts
 		if err := dec.Decode(&f); err != nil {
-			break // 首个不完整对象，停止
+			break // the first incomplete object, stop
 		}
 		idx := start + len(out)
 		if idx >= len(seg.Chapters) || f.Chapter != seg.Chapters[idx].Number {
-			break // 跳号/越界
+			break // chapter number skipped or out of range
 		}
 		one := AnalysisBatchResult{Chapters: []ImportedChapterFacts{f}}
 		if err := validateBatch(&one, seg, idx, idx+1); err != nil {
 			break
 		}
-		out = append(out, one.Chapters[0]) // validateBatch 已就地归一化枚举，取校验后的值
+		out = append(out, one.Chapters[0]) // validateBatch has already normalised the enums in place, so take the validated value
 	}
 	return out
 }

@@ -45,7 +45,7 @@ func analyzeFixture(t *testing.T, n int) ([]byte, *Segmentation) {
 	norm := []byte(b.String())
 	units := buildSourceUnits(norm, 0)
 	var ds []BoundaryDecision
-	for i := 0; i < len(units); i += 2 { // 每 2 行一章（标题行 + 正文行）
+	for i := 0; i < len(units); i += 2 { // one chapter every 2 lines (title line + body line)
 		ds = append(ds, BoundaryDecision{UnitID: units[i].ID, Kind: kindChapter, Title: units[i].Text})
 	}
 	seg, err := resolveSegmentation(norm, units, ds)

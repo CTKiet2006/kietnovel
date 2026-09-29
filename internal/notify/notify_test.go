@@ -28,7 +28,7 @@ func TestAllowsFilter(t *testing.T) {
 	if nilN.allows(KindRunEnd) {
 		t.Error("nil Notifier 应拦截一切")
 	}
-	nilN.Send(Notification{Kind: KindRunEnd}) // 不应 panic
+	nilN.Send(Notification{Kind: KindRunEnd}) // must not panic
 }
 
 func TestKindsAreUniqueAndKnown(t *testing.T) {

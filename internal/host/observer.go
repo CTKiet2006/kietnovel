@@ -66,19 +66,19 @@ type observer struct {
 	emitEv  func(Event)
 	emitD   func(string)
 	emitC   func()
-	store   *storepkg.Store // 用于 runtime queue 持久化（ReplayQueue 消费）
+	store   *storepkg.Store // used for runtime queue persistence (consumed by ReplayQueue)
 	agents  map[string]*agentState
 	agentMu sync.Mutex
 
 	streamThinking      bool
-	lastThinkingByAgent map[string]string          // agent → 最近的累积 thinking 文本（用于提取增量 delta）
-	dispatchStarts      map[string]*activeCall     // dispatched agent → 进行中的 DISPATCH 调用
-	modelStarts         map[string]*activeCall     // agent → 进行中的模型响应
-	toolStarts          map[string]*activeCall     // agent → 进行中的 TOOL 调用
-	streamExtractors    map[string]*agentExtractor // agent → 当前工具调用 JSON 参数的内容抽取器
-	retryEvents         map[string]string          // retry scope → event ID，用同一行原地更新 (2/7)
-	streamHasContent    bool                       // 当前 streamRound 是否已输出过内容（判断是否需要段落分隔）
-	streamLastByte      byte                       // 最近一次流式输出的末字节（用于精确补齐换行）
+	lastThinkingByAgent map[string]string          // agent -> the most recent accumulated thinking text (used to extract the incremental delta)
+	dispatchStarts      map[string]*activeCall     // dispatched agent -> the in-flight DISPATCH call
+	modelStarts         map[string]*activeCall     // agent -> the in-flight model response
+	toolStarts          map[string]*activeCall     // agent -> the in-flight TOOL call
+	streamExtractors    map[string]*agentExtractor // agent -> the content extractor for the current tool call JSON argument
+	retryEvents         map[string]string          // retry scope -> event ID, updated in place on the same row (2/7)
+	streamHasContent    bool                       // whether the current streamRound has already emitted content (decides whether a paragraph break is needed)
+	streamLastByte      byte                       // last byte of the most recent streaming output (used to pad the newline exactly)
 }
 
 // agentExtractor records the tool name currently being extracted for a given agent, plus the extractor instance.
@@ -86,7 +86,7 @@ type observer struct {
 type agentExtractor struct {
 	tool       string
 	ext        *jsonFieldExtractor
-	emittedAny bool // 本 extractor 是否已经产出过内容；用于首次输出前补段落分隔
+	emittedAny bool // whether this extractor has already emitted content; used to insert a paragraph break before the first output
 }
 
 type agentState struct {

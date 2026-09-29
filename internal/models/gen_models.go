@@ -1,7 +1,7 @@
 //go:build ignore
 
-// gen_models.go 从 OpenRouter API 拉全量模型，生成编译期基线 models_generated.go。
-// 用法: go generate ./internal/models/...
+// gen_models.go pulls the full model list from the OpenRouter API and generates the compile-time baseline models_generated.go.
+// Usage: go generate ./internal/models/...
 package main
 
 import (
@@ -19,13 +19,13 @@ import (
 
 const (
 	openRouterURL = "https://openrouter.ai/api/v1/models"
-	// maxModelAgeDays 决定基线中保留多老的模型。超过这个年龄视作已过时（GPT-3.5、
-	// 原版 GPT-4、Llama 2、Mistral 7b 等），直接剔除以减小二进制体积和查询噪声。
-	// 同 pricing.go 的运行期过滤保持一致。
+	// maxModelAgeDays decides how old a model may be and still stay in the baseline. Anything older counts as
+	// outdated (GPT-3.5, the original GPT-4, Llama 2, Mistral 7b and the like) and is dropped outright, shrinking the binary and the query noise.
+	// Kept consistent with the runtime filter in pricing.go.
 	maxModelAgeDays = 730
 )
 
-// 与 pricing.go 保持一致。
+// Kept consistent with pricing.go.
 var providerMap = map[string]string{
 	"anthropic":  "anthropic",
 	"openai":     "openai",
@@ -147,8 +147,8 @@ func convert(m apiModel) (entry, bool) {
 	return e, true
 }
 
-// isTooOld 判断 created 时间戳是否超过 maxModelAgeDays。
-// 0 或负值视为数据缺失，按"老模型"处理直接剔除。
+// isTooOld reports whether the created timestamp is older than maxModelAgeDays.
+// A 0 or negative value means the data is missing, and the model is dropped as an old model.
 func isTooOld(created int64) bool {
 	if created <= 0 {
 		return true

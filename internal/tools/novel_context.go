@@ -29,11 +29,11 @@ type References struct {
 	ContentExpansion string
 	DialogueWriting  string
 	// V2
-	StyleReference   string // 风格补充参考（可为空）
-	LongformPlanning string // 通用长篇规划参考
-	Differentiation  string // 通用差异化设计参考
-	ArcTemplates     string // 题材弧型模板（按 style 加载，可为空）
-	AntiAITone       string // 去 AI 味判据库（writer/editor 共用，全程注入）
+	StyleReference   string // supplementary style reference (may be empty)
+	LongformPlanning string // general longform planning reference
+	Differentiation  string // general differentiation design reference
+	ArcTemplates     string // genre arc templates (loaded by style, may be empty)
+	AntiAITone       string // anti-AI-tone criteria library (shared by writer/editor, injected the whole way through)
 }
 
 // ContextTool assembles the context needed for the current chapter.
@@ -372,7 +372,7 @@ func (t *ContextTool) loadFilteredCharacters(result map[string]any, chapter int,
 			if matchCharacter(sceneText, c) {
 				filtered = append(filtered, c)
 			}
-		default: // core, important, 或未设置
+		default: // core, important, or not set
 			filtered = append(filtered, c)
 		}
 	}
@@ -456,7 +456,7 @@ func (t *ContextTool) writerReferences(chapter int) map[string]string {
 	add("consistency", t.refs.Consistency)
 	add("hook_techniques", t.refs.HookTechniques)
 	add("quality_checklist", t.refs.QualityChecklist)
-	add("anti_ai_tone", t.refs.AntiAITone) // 去 AI 味判据全程注入，不随章节裁剪
+	add("anti_ai_tone", t.refs.AntiAITone) // the anti-AI-tone criteria are injected the whole way through and are not trimmed per chapter
 	if chapter <= 3 {
 		add("chapter_guide", t.refs.ChapterGuide)
 		add("dialogue_writing", t.refs.DialogueWriting)
@@ -484,7 +484,7 @@ func (t *ContextTool) architectReferences() map[string]string {
 	add("differentiation", t.refs.Differentiation)
 	add("style_reference", t.refs.StyleReference)
 	add("arc_templates", t.refs.ArcTemplates)
-	add("anti_ai_tone", t.refs.AntiAITone) // architect 大纲去 AI 腔；亦兜 editor 走 Chapter=0 路径
+	add("anti_ai_tone", t.refs.AntiAITone) // the architect outline strips the AI tone as well; it also covers the editor on the Chapter=0 path
 	return refs
 }
 
@@ -665,7 +665,7 @@ func (t *ContextTool) selectStoryThreads(state contextBuildState) []domain.Recal
 	const maxThreads = 5
 	var items []domain.RecallItem
 	seen := make(map[string]struct{})
-	picked := make(map[string]struct{}) // 已选中的伏笔 ID，供账龄回填去重
+	picked := make(map[string]struct{}) // the IDs of the foreshadowing already picked, so the account-age backfill can dedupe against them
 	add := func(item domain.RecallItem) {
 		key := item.Kind + "|" + item.Key + "|" + item.Summary
 		if _, ok := seen[key]; ok {

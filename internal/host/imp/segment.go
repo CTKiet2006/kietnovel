@@ -52,8 +52,8 @@ type MatterSpan struct {
 type Segmentation struct {
 	Chapters  []ChapterSpan `json:"chapters"`
 	Matter    []MatterSpan  `json:"matter,omitempty"`    // group / front / back
-	Uncertain []int         `json:"uncertain,omitempty"` // 标记 uncertain 的章节号，供预览提示
-	Notes     []string      `json:"notes,omitempty"`     // 切分期需人工核对的说明（如空正文占位标题并入前段）
+	Uncertain []int         `json:"uncertain,omitempty"` // chapter numbers marked uncertain, so the preview can flag them
+	Notes     []string      `json:"notes,omitempty"`     // notes that need manual checking at segmentation time (e.g. a placeholder title with an empty body folded into the previous segment)
 }
 
 // Content returns the normalized body of chapter i (including the title line).
@@ -145,7 +145,7 @@ func resolveSegmentation(normalized []byte, units []SourceUnit, decisions []Boun
 	for i, p := range points {
 		start := p.byte
 		if i == 0 {
-			start = 0 // 首段吸收起始处的空白
+			start = 0 // the first segment absorbs the leading whitespace
 		}
 		end := len(normalized)
 		if i+1 < len(points) {
@@ -465,7 +465,7 @@ type chunkValidator struct {
 	projIDs, ownedIDs map[string]bool
 	unitByID          map[string]SourceUnit
 	normalized        []byte
-	coverStart        bool // 首块：文本起点前的非空文本必须有边界归属
+	coverStart        bool // first chunk: the non-empty text before the start of the text must be covered by a boundary
 }
 
 func (v chunkValidator) validate(bs []BoundaryDecision) error {
@@ -517,7 +517,7 @@ func (v chunkValidator) validate(bs []BoundaryDecision) error {
 	if v.coverStart {
 		head := first
 		if head < 0 {
-			head = len(v.normalized) // 首块一个 owned 边界都没报：全部起始文本未归属
+			head = len(v.normalized) // the first chunk reported no owned boundary at all: none of the leading text is covered
 		}
 		if head > 0 && strings.TrimSpace(string(v.normalized[:head])) != "" {
 			return fmt.Errorf("起始 %d 字节文本（%s…）未归属任何边界，请为文本开头补充边界（front_matter/chapter/group）",

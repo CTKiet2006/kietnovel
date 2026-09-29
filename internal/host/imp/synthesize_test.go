@@ -76,7 +76,7 @@ func TestAssembleFoundationHappyClosed(t *testing.T) {
 
 func TestAssembleFoundationTitleMismatch(t *testing.T) {
 	facts := factsN(2)
-	facts[1].Title = "" // 破坏标题一致性会在 FlattenOutline 校验失败？标题空但结构取自 facts，故一致。
+	facts[1].Title = "" // would breaking title consistency fail the FlattenOutline validation? the title is empty but the structure is taken from facts, so it is consistent.
 	// Create a real inconsistency that structural validation cannot cover: a wrong chapter count.
 	s := &BookSynthesis{
 		Synopsis: "无剧透简介", Premise: "# 故事前提", Characters: []domain.Character{{Name: "甲"}},
@@ -98,7 +98,7 @@ func TestImportedBookTitle(t *testing.T) {
 func TestPlanFactRangesSplits(t *testing.T) {
 	facts := factsN(20)
 	one := len(compactFact(facts[0]))
-	ranges := planFactRanges(facts, one*3) // 每区间约 3 章
+	ranges := planFactRanges(facts, one*3) // about 3 chapters per range
 	if len(ranges) < 2 {
 		t.Fatalf("应分多区间，得 %d", len(ranges))
 	}
@@ -145,7 +145,7 @@ func TestGroupDigestsByBudget(t *testing.T) {
 		{StartChapter: 16, EndChapter: 20, Plot: strings.Repeat("w", 200)},
 	}
 	per := len(mustJSON(t, ds[0]))
-	groups := groupDigestsByBudget(ds, per*2+10) // 每组约容纳 2 个
+	groups := groupDigestsByBudget(ds, per*2+10) // about 2 per group
 	if len(groups) != 2 || len(groups[0]) != 2 || len(groups[1]) != 2 {
 		t.Fatalf("应分 2 组各 2 个，得 %v", groups)
 	}

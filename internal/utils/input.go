@@ -5,8 +5,8 @@ import (
 	"unicode"
 )
 
-// CleanInputText 删除终端输入中没有业务意义的控制字符，保留用户可见文本。
-// 单行输入场景下，粘贴文本里的换行和制表符会被归一为空格。
+// CleanInputText removes control characters that carry no business meaning in terminal input, keeping the text the user can see.
+// In single-line input, newlines and tabs inside pasted text are normalized to spaces.
 func CleanInputText(s string) string {
 	return strings.Map(func(r rune) rune {
 		if r == '\n' || r == '\r' || r == '\t' {
@@ -19,7 +19,7 @@ func CleanInputText(s string) string {
 	}, s)
 }
 
-// CleanInputLine 清洗单行人工输入，并去掉首尾空白。
+// CleanInputLine cleans a single line of manual input and strips leading and trailing whitespace.
 func CleanInputLine(s string) string {
 	return strings.TrimSpace(CleanInputText(s))
 }

@@ -760,7 +760,7 @@ func TestEngine_PlanStartRetryFailurePauses(t *testing.T) {
 
 	var e *engine
 	arb := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
-		e.abort() // 模拟宿主取消持续失败的调用，失败路径由 context 明确结束。
+		e.abort() // simulate the host cancelling a persistently failing call; the failure path ends explicitly through the context.
 		return testTextMsg("这不是 JSON")
 	}}
 	e, events, done := newTestEngine(t, st, subagent.NewRunner(), arb)
