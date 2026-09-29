@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/voocel/agentcore"
-	"github.com/voocel/ainovel-cli/internal/llmcontract"
-	"github.com/voocel/ainovel-cli/internal/llmretry"
+	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
+	"github.com/CTKiet2006/kietnovel/internal/llmretry"
 	"github.com/voocel/litellm"
 )
 

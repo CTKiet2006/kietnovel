@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/voocel/ainovel-cli/internal/utils"
+	"github.com/CTKiet2006/kietnovel/internal/utils"
 )
 
 // Tracker 按章节维护全书风格统计。首次载入每章一次；新增或重写时只分析变化章节。

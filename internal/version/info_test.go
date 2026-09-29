@@ -10,7 +10,7 @@ func TestPrint(t *testing.T) {
 	var buf bytes.Buffer
 	Print(&buf, Info{Version: "1.2.3", Commit: "abc123", Date: "2026-06-20"})
 	got := buf.String()
-	for _, want := range []string{"ainovel-cli v1.2.3", "commit: abc123", "built: 2026-06-20"} {
+	for _, want := range []string{"kietnovel v1.2.3", "commit: abc123", "built: 2026-06-20"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Print missing %q in %q", want, got)
 		}

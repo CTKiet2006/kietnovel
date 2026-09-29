@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/voocel/agentcore/schema"
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/errs"
-	"github.com/voocel/ainovel-cli/internal/llmcontract"
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/errs"
+	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // AuditFoundationTool 接收 Architect 对已落盘基础设定的语义审查结论。

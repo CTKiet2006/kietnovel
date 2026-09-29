@@ -3,8 +3,8 @@ package flow
 import (
 	"fmt"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	storepkg "github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	storepkg "github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // LoadState 从 Store 读取 Route 所需的全部事实。

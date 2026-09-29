@@ -14,8 +14,8 @@ COPY . .
 
 RUN GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w" \
-    -o /out/ainovel-cli \
-    ./cmd/ainovel-cli
+    -o /out/kietnovel \
+    ./cmd/kietnovel
 
 FROM alpine:3.22
 
@@ -25,6 +25,6 @@ RUN apk add --no-cache \
 
 WORKDIR /workspace
 
-COPY --from=builder /out/ainovel-cli /usr/local/bin/ainovel-cli
+COPY --from=builder /out/kietnovel /usr/local/bin/kietnovel
 
-ENTRYPOINT ["ainovel-cli"]
+ENTRYPOINT ["kietnovel"]

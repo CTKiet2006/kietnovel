@@ -7,7 +7,7 @@ import (
 
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/schema"
-	"github.com/voocel/ainovel-cli/internal/llmcontract"
+	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 )
 
 // PlanStartDecision 启动裁定:选规划师并产出(必要时扩充过的)任务文本。

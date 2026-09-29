@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/voocel/agentcore"
-	"github.com/voocel/ainovel-cli/internal/models"
+	"github.com/CTKiet2006/kietnovel/internal/models"
 )
 
 func TestUsageTrackerReplaySessionsReadsWorkerLogs(t *testing.T) {

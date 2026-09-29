@@ -6,7 +6,7 @@
 // 当前支持 TXT 与 EPUB。
 package exp
 
-import "github.com/voocel/ainovel-cli/internal/store"
+import "github.com/CTKiet2006/kietnovel/internal/store"
 
 // Format 标识导出格式。
 type Format string

@@ -3,8 +3,8 @@ package host
 import (
 	"testing"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 func TestFillDetailsUsesCommittedTitleOnlyForCompletedChapters(t *testing.T) {

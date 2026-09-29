@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/rules"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/rules"
 )
 
 type contextBuildState struct {

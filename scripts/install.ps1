@@ -19,7 +19,7 @@ try {
         Write-Host 'Bo qua build (dung -SkipBuild)'
     } else {
         Write-Host 'Dang build...'
-        & $go build -o kietnovel.exe ./cmd/ainovel-cli
+        & $go build -o kietnovel.exe ./cmd/kietnovel
         if ($LASTEXITCODE -ne 0) { throw "Build that bai (exit $LASTEXITCODE)" }
     }
 

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
 func setupLayered(t *testing.T, volumes []domain.VolumeOutline) *Store {

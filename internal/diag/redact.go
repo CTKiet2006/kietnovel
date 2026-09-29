@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/voocel/agentcore"
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // SkelEvent 是一条会话消息脱敏后的行为骨架：保留结构信号（角色 / 工具 / 错误 /

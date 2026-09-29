@@ -10,7 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/voocel/ainovel-cli/internal/host/imp"
+	"github.com/CTKiet2006/kietnovel/internal/host/imp"
 )
 
 // TestImportHistoryCoalescesRetryLines giữ cập nhật tại chỗ của dòng thử lại: sự kiện liên tiếp cùng Key chỉ chiếm một dòng

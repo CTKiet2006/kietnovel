@@ -3,7 +3,7 @@ package store
 import (
 	"fmt"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
 // BuildCast 从接纳记录构建当前配角视图。

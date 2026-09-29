@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	storepkg "github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	storepkg "github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 func TestUpgradeProjectMigratesLegacyBook(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voocel/ainovel-cli/internal/errs"
-	"github.com/voocel/ainovel-cli/internal/notify"
+	"github.com/CTKiet2006/kietnovel/internal/errs"
+	"github.com/CTKiet2006/kietnovel/internal/notify"
 )
 
 func TestConfigResolveReasoningEffort(t *testing.T) {

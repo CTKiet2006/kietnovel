@@ -1,4 +1,4 @@
-module github.com/voocel/ainovel-cli
+module github.com/CTKiet2006/kietnovel
 
 go 1.25.5
 

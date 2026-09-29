@@ -66,7 +66,7 @@ Script build, chép binary vào `%LOCALAPPDATA%\kietnovel\bin\` và tự thêm t
 
 ```powershell
 cd kietnovel
-go build -o kietnovel.exe ./cmd/ainovel-cli
+go build -o kietnovel.exe ./cmd/kietnovel
 .\kietnovel.exe
 ```
 

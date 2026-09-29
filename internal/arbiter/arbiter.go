@@ -21,7 +21,7 @@ import (
 
 	"github.com/voocel/agentcore"
 	"github.com/voocel/agentcore/schema"
-	"github.com/voocel/ainovel-cli/internal/llmcontract"
+	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 )
 
 // decideMaxTokens 单次裁定的输出上限;裁定 JSON 很小,大头留给推理模型的思考预算

@@ -76,7 +76,7 @@ func Update(ctx context.Context, opts UpdateOptions) (*UpdateResult, error) {
 		return nil, err
 	}
 
-	tmp, err := os.MkdirTemp("", "ainovel-cli-update-*")
+	tmp, err := os.MkdirTemp("", "kietnovel-update-*")
 	if err != nil {
 		return nil, fmt.Errorf("create temp dir: %w", err)
 	}

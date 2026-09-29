@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/voocel/agentcore"
-	"github.com/voocel/ainovel-cli/internal/utils"
+	"github.com/CTKiet2006/kietnovel/internal/utils"
 )
 
 // handleToolUpdate 处理 Worker 的进度中继(ProgressPayload):TOOL 行、流式正文、

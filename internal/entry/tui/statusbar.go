@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/voocel/ainovel-cli/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
 // renderStatusBar vẽ thanh trạng thái usage dưới đáy màn hình, chiếm dòng trống cuối vốn có của vùng nhập (cao thêm bằng 0):

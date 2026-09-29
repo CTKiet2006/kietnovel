@@ -3,8 +3,8 @@ package tools
 import (
 	"testing"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // completedBook 构造一本已完结的 N 章小说（phase=complete，CompletedChapters=1..n）。

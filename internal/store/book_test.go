@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
 func TestBookStorePersistsCanonicalDataAndReadableProjection(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // ExportRelPath 是脱敏诊断文件相对 output 目录的固定位置（覆盖式一份）。

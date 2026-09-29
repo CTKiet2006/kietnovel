@@ -5,7 +5,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
 // SummaryStore 管理章节、弧、卷摘要。

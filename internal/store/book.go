@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
 // BookStore 管理作品对外信息，meta/book.json 是唯一事实源，book.md 是可读投影。

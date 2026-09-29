@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
 // analysisSchemaVersion 是逐章事实 schema 版本，纳入 InputDigest。

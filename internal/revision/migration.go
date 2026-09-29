@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voocel/ainovel-cli/internal/domain"
-	"github.com/voocel/ainovel-cli/internal/store"
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
 // MigrateLegacyBaseline 从旧版业务投影逆向生成章节记录。会话日志不是作品事实，

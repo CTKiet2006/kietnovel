@@ -5,7 +5,7 @@ import (
 
 	"github.com/voocel/agentcore"
 	corecontext "github.com/voocel/agentcore/context"
-	"github.com/voocel/ainovel-cli/internal/bootstrap"
+	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
 )
 
 // contextManagerConfig 聚合 ContextManager 的全部配置参数。
