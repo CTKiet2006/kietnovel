@@ -9,6 +9,11 @@
   // 省略或空字符串 = 不覆盖，沿用模型/provider 默认。
   "reasoning_effort": "medium",
 
+  // Ngôn ngữ sáng tác truyện: "vi" (Tiếng Việt, mặc định) hoặc "zh" (Tiếng Trung).
+  // Toàn bộ dàn ý, nhân vật, bối cảnh và nội dung chương sinh ra theo ngôn ngữ này.
+  // TUI, thanh trạng thái và thông báo lỗi luôn hiển thị bằng Tiếng Việt.
+  "language": "vi",
+
   // Provider 凭证库。key 自定义，用作上面 provider 字段引用的目标。
   // 已知 provider（openai/anthropic/gemini/openrouter/deepseek/qwen/glm/grok/mimo/ollama/bedrock）
   // 可省略 type；自定义代理必须显式声明 type 指明 API 协议。

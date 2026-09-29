@@ -143,6 +143,10 @@ func mergeConfig(base, overlay Config) Config {
 	if overlay.ReasoningEffort != "" {
 		base.ReasoningEffort = overlay.ReasoningEffort
 	}
+	// Ngôn ngữ sáng tác: project-level đè global khi khai báo tường minh.
+	if overlay.Language != "" {
+		base.Language = NormalizeLanguage(overlay.Language)
+	}
 	if overlay.Style != "" {
 		base.Style = overlay.Style
 	}

@@ -1,14 +1,15 @@
-## 写作标准
+## Quy chuẩn văn phong
 
-这些是质量准则，不要逐条生硬打卡。章节首先要自然成立，其次才是检查项齐全。
+Đây là tiêu chí chất lượng, đừng chấm điểm máy móc từng gạch đầu dòng. Chương truyện trước hết phải tự nhiên, rồi mới đối chiếu các tiêu chí.
 
-- 开头尽快建立冲突、悬念、欲望或异常感，少用抽象回顾。
-- 用动作、对话、感官细节推进情节，少用概述和总结。
-- 角色对话要有身份差异、潜台词和行动目的，不要说教。
-- 情绪用身体反应和选择呈现，不直接贴标签。
-- 关系变化要有事件触发，不要一章内从陌生跃迁到绝对信任。
-- 秘密分批释放，不提前解释大纲未要求的重大谜底。
-- 章末钩子可以是危机、选择、情绪余波、关系变化或未完成目标，不必每章都做夸张悬念。
-- **去 AI 味**：写作时规避 `reference_pack.references.anti_ai_tone` 列出的全部模式（结构/用词/描写/对话/节奏五类）。其中可机械枚举的疲劳词、套句阈值见 `working_memory.user_rules.structured`，commit 时强制检查。
-- **句式多样性**：`episodic_memory.style_stats`（如有）是代码对你已写正文的统计——你自己的口头禅镜像。本章主动压低其中的高频项；最常见的固化源是矫正句（"不是…而是…"）、单一计时量词（"几息/数息"）和同型明喻连用。章末收束形式（短句斩断/对话余音/场景余像/悬念提问）与近期章节轮换，开篇避免每章都用"夜里/清晨/醒来"式时间起手。
-- **前情不复述**：`episodic_memory` 中的摘要、伏笔、状态是已写入正文的备忘，用于对照衔接，不是本章待写素材；上一章已交代的信息，新章只在剧情需要时以新视角触及，禁止前情提要式重写（跨章逐字复读会被 style_stats 的 repeated_sentences 记录在案）。
+- Mở đầu chương dựng xung đột, bí ẩn, ham muốn hoặc cảm giác khác thường càng sớm càng tốt, hạn chế hồi tưởng trừu tượng.
+- Đẩy tình tiết bằng hành động, đối thoại và chi tiết giác quan, hạn chế tóm tắt, khái quát.
+- Lời thoại phải ra chất riêng của từng nhân vật, có hàm ý và mục đích hành động, không rao giảng đạo lý.
+- Cảm xúc thể hiện qua phản ứng cơ thể và lựa chọn của nhân vật, không dán nhãn trực tiếp.
+- Quan hệ nhân vật thay đổi phải có sự kiện kích hoạt, đừng để một chương đi từ xa lạ thành tin tưởng tuyệt đối.
+- Bí mật thả từng đợt, không giải thích sớm nút thắt lớn mà dàn ý chưa yêu cầu.
+- Móc câu cuối chương có thể là khủng hoảng, lựa chọn, dư âm cảm xúc, biến chuyển quan hệ hoặc mục tiêu dang dở, không cần chương nào cũng giật gân cường điệu.
+- **Chống văn AI sáo rỗng**: tránh toàn bộ mẫu trong `reference_pack.references.anti_ai_tone` (5 nhóm: cấu trúc / dùng từ / miêu tả / đối thoại / nhịp). Các từ gây mệt mỏi và ngưỡng câu sáo rỗng liệt kê trong `working_memory.user_rules.structured` sẽ bị kiểm tra bắt buộc khi commit.
+- **Cấm cụ thể (Tiếng Việt)**: không dùng các cụm rỗng như "ở một mức độ nào đó", "như thể", "bất giác", "không khỏi", "trong lòng không khỏi dấy lên", "ánh mắt phức tạp", "khóe miệng nhếch lên nụ cười...", "hít sâu một hơi" mở đầu mọi cảnh căng thẳng. Mỗi chương chỉ dùng tối đa 1 lần cho mỗi kiểu câu cảm thán khuôn mẫu.
+- **Đa dạng câu chữ**: `episodic_memory.style_stats` (nếu có) là thống kê từ chính văn bạn đã viết — chủ động ghìm các mục tần suất cao; nguồn rập khuôn thường gặp nhất là câu đính chính ("không phải... mà là..."), lượng từ thời gian đơn điệu, chuỗi so sánh cùng kiểu. Hình thức kết chương (câu ngắn chặt / dư âm thoại / dư ảnh cảnh / câu hỏi treo) luân phiên với các chương gần, mở đầu tránh kiểu "đêm khuya / sáng sớm / tỉnh dậy" lặp đi lặp lại.
+- **Không nhắc lại tình tiết cũ**: tóm tắt, phục bút, trạng thái trong `episodic_memory` là ghi nhớ những gì đã viết để đối chiếu mạch truyện, không phải nguyên liệu viết chương mới; thông tin chương trước đã nói thì chương mới chỉ chạm lại khi tình tiết cần, dưới góc nhìn mới — cấm viết lại kiểu tóm tắt tập trước (trùng chữ liên chương sẽ bị `style_stats.repeated_sentences` ghi nhận).

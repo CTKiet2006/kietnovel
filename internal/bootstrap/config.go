@@ -196,10 +196,31 @@ var knownRoles = map[string]bool{
 	"import_synthesize": true,
 }
 
+// Ngôn ngữ sáng tác truyện: "vi" (Tiếng Việt, mặc định) hoặc "zh" (Tiếng Trung).
+// TUI, thanh trạng thái và thông báo lỗi luôn hiển thị bằng Tiếng Việt.
+const (
+	LangVietnamese = "vi"
+	LangChinese    = "zh"
+)
+
+// NormalizeLanguage chuẩn hóa mã ngôn ngữ về "vi"/"zh".
+// Chuỗi trống (cấu hình cũ chưa có trường language) được coi là "vi".
+func NormalizeLanguage(lang string) string {
+	switch lang {
+	case LangChinese:
+		return LangChinese
+	default:
+		return LangVietnamese
+	}
+}
+
 // Config 小说应用配置。
 type Config struct {
 	// 运行时字段（不序列化到 JSON）
 	OutputDir string `json:"-"` // 输出根目录
+
+	// Ngôn ngữ sáng tác: "vi" (mặc định) hoặc "zh". Trống = "vi" (tương thích cấu hình cũ).
+	Language string `json:"language,omitempty"`
 
 	// 默认 LLM 配置
 	Provider  string `json:"provider"` // 默认 provider（Providers map 中的 key）
@@ -267,6 +288,11 @@ func (c *Config) ValidateBase() error {
 	}
 	if c.ModelName == "" {
 		return fmt.Errorf("model is required: %w", errs.ErrConfig)
+	}
+
+	// Ngôn ngữ sáng tác chỉ chấp nhận "vi" hoặc "zh" (trống = "vi").
+	if c.Language != "" && NormalizeLanguage(c.Language) != c.Language {
+		return fmt.Errorf("language must be %q or %q (got %q): %w", LangVietnamese, LangChinese, c.Language, errs.ErrConfig)
 	}
 
 	// 默认 provider 必须有凭证
@@ -418,6 +444,9 @@ func (c *Config) FillDefaults() {
 	if c.OutputDir == "" {
 		c.OutputDir = filepath.Join("output", "novel")
 	}
+	// Ngôn ngữ sáng tác mặc định là Tiếng Việt; cấu hình cũ không có
+	// trường language vẫn chạy như trước mà không cần sửa file.
+	c.Language = NormalizeLanguage(c.Language)
 	if c.Providers == nil {
 		c.Providers = make(map[string]ProviderConfig)
 	}
