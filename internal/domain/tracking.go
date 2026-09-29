@@ -1,11 +1,11 @@
 package domain
 
-// StateChange 角色/实体状态变化记录。
+// StateChange is a record of a character/entity state change.
 type StateChange struct {
 	Chapter  int    `json:"chapter"`
-	Entity   string `json:"entity"`              // 角色名或实体名
-	Field    string `json:"field"`               // 变化属性：realm/location/status/power/relation 等
-	OldValue string `json:"old_value,omitempty"` // 变化前（首次出现可空）
-	NewValue string `json:"new_value"`           // 变化后
-	Reason   string `json:"reason,omitempty"`    // 变化原因
+	Entity   string `json:"entity"`              // the character name or the entity name
+	Field    string `json:"field"`               // the changed attribute: realm/location/status/power/relation etc.
+	OldValue string `json:"old_value,omitempty"` // before the change (may be empty on the first appearance)
+	NewValue string `json:"new_value"`           // after the change
+	Reason   string `json:"reason,omitempty"`    // the reason for the change
 }

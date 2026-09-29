@@ -7,7 +7,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/stylestat"
 )
 
-// Outcome 是单个 case 的门禁结论。
+// Outcome is the gate verdict for a single case.
 type Outcome string
 
 const (
@@ -16,7 +16,7 @@ const (
 	Fail Outcome = "FAIL"
 )
 
-// Issue 是门禁判定中的一条记录。
+// Issue is one record in a gate decision.
 type Issue struct {
 	Kind     string `json:"kind"`               // hard_fail / warning / passed
 	Source   string `json:"source"`             // runtime / finding:<rule> / contract:<name>
@@ -24,7 +24,7 @@ type Issue struct {
 	Detail   string `json:"detail"`
 }
 
-// Metrics 是从 diag.Stats 直接借来的概览指标——eval 不重算。
+// Metrics are overview metrics borrowed straight from diag.Stats — eval does not recompute them.
 type Metrics struct {
 	CompletedChapters int              `json:"completed_chapters"`
 	TotalChapters     int              `json:"total_chapters"`
@@ -43,8 +43,8 @@ type Metrics struct {
 	Stylestat         *stylestat.Stats `json:"stylestat,omitempty"`
 }
 
-// Result 是单个 case 的完整评测结果。对齐设计稿三层模型：
-// HardFails（阻塞）/ Warnings（回归，WARN）/ Notes（信息性，不影响门禁）。
+// Result is the complete evaluation result of a single case. It follows the design's three-layer model:
+// HardFails (blocking) / Warnings (regression, WARN) / Notes (informational, no effect on gating).
 type Result struct {
 	CaseID    string  `json:"case_id"`
 	Category  string  `json:"category"`
@@ -60,8 +60,8 @@ type Result struct {
 	Dir       string  `json:"dir"`
 }
 
-// Grade 把采集结果按 case 契约与 diag Finding 严重度映射成门禁结论。这是 MVP 的核心：
-// 确定性证据决定 PASS/WARN/FAIL，不掺主观判断。
+// Grade maps the collected result onto a gate verdict via the case contract and the diag Finding severities. This is the core of the MVP:
+// deterministic evidence decides PASS/WARN/FAIL, with no subjective judgement mixed in.
 func Grade(c Case, col Collected) Result {
 	r := Result{
 		CaseID:   c.ID,
@@ -71,22 +71,22 @@ func Grade(c Case, col Collected) Result {
 		Metrics:  metricsFrom(col),
 	}
 
-	// 1. 运行时错误：headless 返回 error 直接 hard fail（失败显式暴露）。
+	// 1. Runtime error: an error returned by headless is an immediate hard fail (failures are surfaced explicitly).
 	if col.RuntimeErr != "" {
 		r.HardFails = append(r.HardFails, Issue{
 			Kind: "hard_fail", Source: "runtime", Detail: "运行时错误: " + col.RuntimeErr,
 		})
 	}
 
-	// 1b. 工件读取失败：契约依赖的事实读不到，宁可 hard fail 也不 false pass（fail-loud）。
+	// 1b. Artifact read failure: when a contract-dependent fact cannot be read, hard fail rather than false pass (fail-loud).
 	for _, le := range col.LoadErrors {
 		r.HardFails = append(r.HardFails, Issue{
 			Kind: "hard_fail", Source: "load", Detail: "工件读取失败: " + le,
 		})
 	}
 
-	// 2. diag Findings 三层映射（rank 越小越严重）：
-	//    超过 max_severity → hard fail；等于 → warning（回归）；低于 → note（信息性，不影响门禁）。
+	// 2. Three-layer mapping of diag Findings (the smaller the rank, the more severe):
+	//    above max_severity → hard fail; equal → warning (regression); below → note (informational, no effect on gating).
 	maxRank := severityRank(c.Gate.MaxSeverity)
 	for _, f := range col.Report.Findings {
 		sev := string(f.Severity)
@@ -104,10 +104,10 @@ func Grade(c Case, col Collected) Result {
 		}
 	}
 
-	// 3. case 契约断言：薄断言，只验本 case 强相关的预期。
+	// 3. Case contract assertions: thin assertions that only check the expectations strongly tied to this case.
 	gradeContracts(c, col, &r)
 
-	// 4. 汇总结论。
+	// 4. Overall verdict.
 	switch {
 	case len(r.HardFails) > 0:
 		r.Outcome = Fail
@@ -119,7 +119,7 @@ func Grade(c Case, col Collected) Result {
 	return r
 }
 
-// Delta 描述 variant 相对 baseline 的确定性差异。
+// Delta describes the deterministic differences of a variant relative to the baseline.
 type Delta struct {
 	Outcome   Outcome      `json:"outcome"`
 	HardFails []Issue      `json:"hard_fails,omitempty"`
@@ -148,7 +148,7 @@ type StyleDelta struct {
 	TitleMixedDelta      int     `json:"title_mixed_delta,omitempty"`
 }
 
-// GradeDelta 只比较确定性事实：variant 比 baseline 是否更差。
+// GradeDelta only compares deterministic facts: whether the variant got worse than the baseline.
 func GradeDelta(c Case, baseline, variant Result) Delta {
 	d := Delta{Metrics: deltaMetrics(baseline, variant)}
 
@@ -398,7 +398,7 @@ func metricsFrom(col Collected) Metrics {
 	return m
 }
 
-// phaseOf 优先取 progress 的 phase，回落到 diag.Stats（两者同源）。
+// phaseOf prefers the phase from progress and falls back to diag.Stats (both come from the same source).
 func phaseOf(col Collected) string {
 	if col.Progress != nil {
 		return string(col.Progress.Phase)
@@ -413,7 +413,7 @@ func findingDetail(f diag.Finding) string {
 	return f.Title
 }
 
-// ── 严重度 ─────────────────────────────────────────────
+// ── Severity ──────────────────────────────────────────
 
 var severityRanks = map[string]int{"critical": 0, "warning": 1, "info": 2}
 
@@ -422,7 +422,7 @@ func validSeverity(s string) bool {
 	return ok
 }
 
-// severityRank 越小越严重；未知严重度按最不严重处理，避免误判 hard fail。
+// The smaller severityRank the more severe; an unknown severity is treated as the least severe, to avoid a mistaken hard fail.
 func severityRank(s string) int {
 	if r, ok := severityRanks[s]; ok {
 		return r

@@ -10,7 +10,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/utils"
 )
 
-// InvalidPendingRewrites 检测返工队列里混入未完成章节。
+// InvalidPendingRewrites detects an unfinished chapter that slipped into the rework queue.
 func InvalidPendingRewrites(snap *Snapshot) []Finding {
 	if snap.Progress == nil || len(snap.Progress.PendingRewrites) == 0 {
 		return nil
@@ -42,7 +42,7 @@ func InvalidPendingRewrites(snap *Snapshot) []Finding {
 	}}
 }
 
-// RewritePendingPressure 检测存在待改写章节（当前仅检测状态存在，不判定停滞）。
+// RewritePendingPressure detects the existence of chapters pending a rewrite (currently it only detects that the state exists, it does not judge stagnation).
 func RewritePendingPressure(snap *Snapshot) []Finding {
 	if snap.Progress == nil {
 		return nil
@@ -69,13 +69,13 @@ func RewritePendingPressure(snap *Snapshot) []Finding {
 	}}
 }
 
-// OrphanedSteer 检测未消费的用户转向指令。
+// OrphanedSteer detects a user steering instruction that was never consumed.
 func OrphanedSteer(snap *Snapshot) []Finding {
 	if snap.RunMeta == nil || snap.RunMeta.PendingSteer == "" {
 		return nil
 	}
 	if snap.Progress != nil && snap.Progress.Flow == domain.FlowSteering {
-		return nil // 正在处理中，不算孤立
+		return nil // return nil // it is being processed, so it does not count as orphaned
 	}
 	return []Finding{{
 		Rule:       "OrphanedSteer",
@@ -90,7 +90,7 @@ func OrphanedSteer(snap *Snapshot) []Finding {
 	}}
 }
 
-// PhaseFlowMismatch 检测阶段与流程状态不匹配。
+// PhaseFlowMismatch detects a mismatch between the phase and the flow state.
 func PhaseFlowMismatch(snap *Snapshot) []Finding {
 	if snap.Progress == nil {
 		return nil
@@ -115,7 +115,7 @@ func PhaseFlowMismatch(snap *Snapshot) []Finding {
 	}}
 }
 
-// ChapterGaps 检测已完成章节列表中的跳号。
+// ChapterGaps detects a gap in the list of completed chapters.
 func ChapterGaps(snap *Snapshot) []Finding {
 	if snap.Progress == nil || len(snap.Progress.CompletedChapters) < 2 {
 		return nil

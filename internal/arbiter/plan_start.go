@@ -10,10 +10,10 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// PlanStartDecision 启动裁定:选规划师并产出(必要时扩充过的)任务文本。
+// PlanStartDecision is a start-up arbitration: pick a planner and produce the (possibly expanded) task text.
 type PlanStartDecision struct {
 	Planner string `json:"planner"` // architect_long | architect_short
-	Task    string `json:"task"`    // 交给规划师的完整任务(含扩充后的需求)
+	Task    string `json:"task"`    // the full task handed to the planner (including the expanded requirements)
 	Reason  string `json:"reason"`
 }
 
@@ -30,7 +30,7 @@ func (d *PlanStartDecision) Validate() error {
 	return nil
 }
 
-// planStartContract 紧邻 PlanStartDecision:字段全 required,planner 是封闭枚举。
+// planStartContract sits next to PlanStartDecision: all fields are required and planner is a closed enum.
 var planStartContract = llmcontract.Contract{
 	Name:        "arbiter_plan_start",
 	Description: "启动裁定:选规划师并产出完整任务文本",
@@ -41,15 +41,15 @@ var planStartContract = llmcontract.Contract{
 	),
 }
 
-// planStartPayload 是 plan_start 的用户负载(事实即输入,无 store 状态——新书)。
+// planStartPayload is the user payload of plan_start (the facts are the input, there is no store state — a new book).
 type planStartPayload struct {
 	Requirement string `json:"requirement"`
 	Style       string `json:"style,omitempty"`
 }
 
-// DecidePlanStart 启动裁定:根据用户需求选规划师;需求过短(<20 字)时在 task 里
-// 自主补充差异化方向、目标读者与核心消费点、至少一个非常规钩子。
-// 失败语义:返回 error → 调用方显式报错中止启动(启动期用户在场,报错优于猜测)。
+// DecidePlanStart arbitrates the start-up: pick a planner from the user requirements; when the requirement is too short (<20 characters) it autonomously
+// adds differentiating directions, the target reader and core consumption hook, and at least one unconventional hook to the task.
+// Failure semantics: returning an error → the caller raises the error explicitly and aborts the start-up (the user is present at start-up, so an error beats a guess).
 func DecidePlanStart(ctx context.Context, model agentcore.ChatModel, systemPrompt, requirement, style string) (PlanStartDecision, error) {
 	payload, err := marshalPayload(planStartPayload{Requirement: requirement, Style: style})
 	if err != nil {

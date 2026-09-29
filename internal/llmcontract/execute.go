@@ -11,7 +11,7 @@ import (
 	"github.com/voocel/agentcore"
 )
 
-// FailureKind 区分不可由同一次结构化反馈修复的失败边界。
+// FailureKind distinguishes failure boundaries that the same structured feedback cannot fix.
 type FailureKind string
 
 const (
@@ -22,7 +22,7 @@ const (
 	FailureContract FailureKind = "contract"
 )
 
-// Failure 保留失败类别和模型原始输出，供调用方决定日志、工件和 UI 表达。
+// Failure keeps the failure kind and the raw model output, so the caller can decide the log, artifact and UI wording.
 type Failure struct {
 	Kind     FailureKind
 	Contract string
@@ -45,7 +45,7 @@ func (e *Failure) Error() string {
 
 func (e *Failure) Unwrap() error { return e.Err }
 
-// Correction 描述一次模型可修复的输出错误。Attempt 是刚失败的调用序号。
+// Correction describes one output error that the model can fix. Attempt is the call number that just failed.
 type Correction struct {
 	Attempt int
 	Layer   string
@@ -54,15 +54,15 @@ type Correction struct {
 	Err     error
 }
 
-// Hooks 只负责可观测性，不改变执行语义。
+// Hooks only handle observability, they do not change execution semantics.
 type Hooks struct {
 	Resolved     func(Resolution)
 	RequestRetry func(llmretry.Event)
 	Correction   func(Correction)
 }
 
-// Request 定义一次直接结构化返回。Contract 是结构的单一来源，Validate 只处理
-// JSON Schema 无法表达的业务约束。
+// Request defines one direct structured return. Contract is the single source of truth for the structure, Validate only handles
+// business constraints that JSON Schema cannot express.
 type Request[T any] struct {
 	Contract     Contract
 	SystemPrompt string
@@ -76,9 +76,9 @@ type Request[T any] struct {
 const promptCorrection = "上面的输出不符合 JSON Schema。请根据错误修正，并只输出完整 JSON 对象，不要解释或 Markdown 围栏。"
 const semanticCorrection = "上面的 JSON 结构合法但字段取值未通过业务校验。请根据错误修正，并重新输出完整 JSON 对象。"
 
-// Execute 统一完成协议选择、提示词准备、请求重试、停止原因分类、Schema/DTO
-// 解码和业务反馈自愈。prompt 模式的格式/Schema 错误以及两种模式的业务错误会
-// 持续反馈给模型，直到成功或 context 结束；原生契约违约会立即暴露。
+// Execute uniformly handles protocol selection, prompt preparation, request retry, stop-reason classification, Schema/DTO
+// decoding and business feedback self-healing. Format/Schema errors in prompt mode and business errors in both modes are
+// fed back to the model continuously until it succeeds or the context ends; a native contract violation is surfaced immediately.
 func Execute[T any](ctx context.Context, model llmretry.Generator, req Request[T]) (T, error) {
 	var zero T
 	if model == nil {
@@ -151,8 +151,8 @@ func Execute[T any](ctx context.Context, model llmretry.Generator, req Request[T
 		} else {
 			var out T
 			if err := json.Unmarshal([]byte(body), &out); err != nil {
-				// Schema 已通过而 DTO 无法解码，说明静态契约与 Go 类型不一致，
-				// 继续要求模型重写无法修复代码缺陷。
+				// The Schema passed but the DTO cannot be decoded, which means the static contract disagrees with the Go type,
+				// asking the model to rewrite again cannot fix a code defect.
 				return zero, &Failure{Kind: FailureContract, Contract: req.Contract.Name, Raw: raw, Err: fmt.Errorf("schema 与 DTO 不一致: %w", err)}
 			}
 			if req.Validate == nil {
@@ -183,7 +183,7 @@ func Execute[T any](ctx context.Context, model llmretry.Generator, req Request[T
 	}
 }
 
-// ExtractJSONObject 返回文本中的第一个平衡 JSON 对象，字符串中的花括号不计入层级。
+// ExtractJSONObject returns the first balanced JSON object in the text, braces inside strings do not count toward nesting level.
 func ExtractJSONObject(raw string) string {
 	start := strings.IndexByte(raw, '{')
 	if start < 0 {

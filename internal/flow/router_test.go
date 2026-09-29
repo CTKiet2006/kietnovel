@@ -70,7 +70,7 @@ func TestLoadStateOnlyPrioritizesExternalRevisionFeedback(t *testing.T) {
 	}
 }
 
-// helper：构造一个处于 Writing 阶段、分层模式的 Progress。
+// helper: build a Progress in the Writing phase, in layered mode.
 func writingProgress(completed []int, flow domain.FlowState) *domain.Progress {
 	return &domain.Progress{
 		Phase:             domain.PhaseWriting,
@@ -309,7 +309,7 @@ func TestRoute_NonLayeredOutlineExhaustedDispatchesArchitect(t *testing.T) {
 }
 
 func TestRoute_ArcEndNonLayeredSkipsBoundary(t *testing.T) {
-	// 非 Layered 模式即使 ArcBoundary 非 nil 也不走弧末分支
+	// In non-Layered mode the arc-end branch is not taken even when ArcBoundary is non-nil
 	p := &domain.Progress{
 		Phase:             domain.PhaseWriting,
 		Flow:              domain.FlowWriting,
@@ -337,7 +337,7 @@ func contains(s, sub string) bool {
 	return false
 }
 
-// 规划期补齐:设定缺项 + 规划师可判定 → 照缺项续派同一规划师。
+// Planning-phase completion: settings missing + planner determinable → keep dispatching the same planner for what is missing.
 func TestRoute_PlanningFillDispatchesSamePlanner(t *testing.T) {
 	base := State{
 		Progress:          &domain.Progress{Phase: domain.PhaseOutline},
@@ -369,13 +369,13 @@ func TestRoute_PlanningFillDispatchesSamePlanner(t *testing.T) {
 		t.Fatalf("book 缺失时应指示 save_book,got %+v", got)
 	}
 
-	// 首次规划未落盘任何设定(tier 空)→ 选型是语义判断,交 LLM
+	// The first planning round persisted no settings (tier empty) → choosing is a semantic judgement, hand it to the LLM
 	unknown := base
 	if got := Route(unknown); got != nil {
 		t.Fatalf("tier 未知时应交 LLM 裁定,got %+v", got)
 	}
 
-	// 缺项已齐 → 无补齐指令(等 phase 推进)
+	// Nothing missing → no completion instruction (wait for phase to advance)
 	done := base
 	done.PlanningTier = domain.PlanningTierLong
 	done.FoundationMissing = nil

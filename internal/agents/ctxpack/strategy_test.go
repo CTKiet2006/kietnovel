@@ -200,8 +200,8 @@ func toolGroup(id, name, result string) []agentcore.AgentMessage {
 	}
 }
 
-// Writer 一次运行只有一条任务消息，其余全是工具组：压缩必须落在工具循环内部，
-// 摘要来自 store 事实，任务文本跟着摘要走，再次压缩也不能丢。
+// A Writer's single run has only one task message; everything else is tool groups: compaction must land inside the tool loop,
+// the summary comes from store facts, the task text travels with the summary, and it must not be lost on another compaction.
 func TestStoreSummaryCompactCompactsToolLoop(t *testing.T) {
 	const task = "返工第 3 章：结尾要承接第二章的仓库线索\n\n补充：结尾留一个钩子"
 	strategy := NewStoreSummaryCompact(StoreSummaryCompactConfig{
@@ -245,7 +245,7 @@ func TestStoreSummaryCompactCompactsToolLoop(t *testing.T) {
 	}
 	compact(append(first, toolGroup("t7", "read_chapter", strings.Repeat("a", 1600))...))
 
-	// 中间经过 FullSummary：LLM 摘要按 WriterSummaryPrompt 格式重写，任务仍在固定一节
+	// FullSummary happens in between: the LLM summary is rewritten in the WriterSummaryPrompt format, with the task still in its fixed section
 	llmSummary := corecontext.ContextSummary{Summary: taskHeading + task + "\n\n## 当前进度\n第 3 章进行中"}
 	compact(append([]agentcore.AgentMessage{llmSummary}, msgs[1:]...))
 }

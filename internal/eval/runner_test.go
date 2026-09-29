@@ -9,9 +9,9 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
-// fakeEngine 模拟 host：Abort 后像 waitDone 那样向 done 发送一次。done 带 1 缓冲，
-// 测试据此断言 drive 是否 drain 了 Done（len(done)==0 即已消费）——这是防 send-on-closed-channel
-// panic 的关键不变量。
+// fakeEngine mimics the host: after Abort it sends to done once, just like waitDone. done has a buffer of 1,
+// so the test can assert whether drive drained Done (len(done)==0 means it was consumed) — this is the key invariant
+// against send-on-closed-channel panics.
 type fakeEngine struct {
 	events chan host.Event
 	stream chan string
@@ -44,7 +44,7 @@ func (f *fakeEngine) Abort() bool {
 	f.mu.Lock()
 	f.aborted = true
 	f.mu.Unlock()
-	select { // 模拟 waitDone：abort 触发后向 done 发送一次
+	select { // mimic waitDone: after abort fires, send to done once
 	case f.done <- struct{}{}:
 	default:
 	}
@@ -57,8 +57,8 @@ func (f *fakeEngine) wasAborted() bool {
 	return f.aborted
 }
 
-// 超时路径必须 Abort 后 drain 到 Done 再返回超时错误——否则 RunCase 的 Close 会与
-// waitDone 竞争关闭 done 通道而 panic（Codex review #1）。
+// The timeout path must Abort and then drain to Done before returning the timeout error — otherwise RunCase's Close would
+// race with waitDone over closing the done channel and panic (Codex review #1).
 func TestDriveTimeoutDrainsToDone(t *testing.T) {
 	f := newFakeEngine()
 	err := drive(f, 1, RunOptions{Timeout: 30 * time.Millisecond})
@@ -73,13 +73,13 @@ func TestDriveTimeoutDrainsToDone(t *testing.T) {
 	}
 }
 
-// 达到章数上限：Abort 后 drain 到 Done，返回 nil（正常截停，不是超时）。
+// Chapter ceiling reached: Abort, drain to Done, and return nil (a normal capped stop, not a timeout).
 func TestDriveCapStopsAndDrains(t *testing.T) {
 	f := newFakeEngine()
 	f.mu.Lock()
 	f.snap = host.UISnapshot{CompletedCount: 1}
 	f.mu.Unlock()
-	f.events <- host.Event{Category: "SYSTEM", Summary: "committed"} // 触发 cap 检查
+	f.events <- host.Event{Category: "SYSTEM", Summary: "committed"} // trigger the cap check
 
 	err := drive(f, 1, RunOptions{Timeout: time.Second})
 	if err != nil {
@@ -93,7 +93,7 @@ func TestDriveCapStopsAndDrains(t *testing.T) {
 	}
 }
 
-// 引擎自然 Done（书写完）：无需 Abort，返回 nil。
+// The engine reaches Done on its own (the book is written): no Abort needed, returns nil.
 func TestDriveNaturalDoneReturnsNil(t *testing.T) {
 	f := newFakeEngine()
 	f.done <- struct{}{}

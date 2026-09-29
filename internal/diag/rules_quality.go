@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// ChronicLowDimension 检测某评审维度跨多章持续低分。
+// ChronicLowDimension detects a review dimension that stays low across many chapters.
 func ChronicLowDimension(snap *Snapshot) []Finding {
 	if len(snap.Reviews) < 2 {
 		return nil
@@ -47,7 +47,7 @@ func ChronicLowDimension(snap *Snapshot) []Finding {
 	return findings
 }
 
-// ContractMissPattern 检测合同履约率过低。
+// ContractMissPattern detects a contract fulfilment rate that is too low.
 func ContractMissPattern(snap *Snapshot) []Finding {
 	if len(snap.Reviews) == 0 {
 		return nil
@@ -82,7 +82,7 @@ func ContractMissPattern(snap *Snapshot) []Finding {
 	}}
 }
 
-// HookWeakChain 检测章节 hook 评分连续偏弱。
+// HookWeakChain detects chapter hook scores that stay weak in a row.
 func HookWeakChain(snap *Snapshot) []Finding {
 	if len(snap.Reviews) < ThresholdHookWeakChain {
 		return nil
@@ -128,7 +128,7 @@ func HookWeakChain(snap *Snapshot) []Finding {
 	}}
 }
 
-// PayoffMissPattern 检测带 payoff_points 的章节长期未兑现。
+// PayoffMissPattern detects a chapter with payoff_points that is not fulfilled for a long time.
 func PayoffMissPattern(snap *Snapshot) []Finding {
 	var total, missed int
 	var details []string
@@ -167,7 +167,7 @@ func PayoffMissPattern(snap *Snapshot) []Finding {
 	}}
 }
 
-// ExcessiveRewrites 检测改写率过高。
+// ExcessiveRewrites detects a rewrite rate that is too high.
 func ExcessiveRewrites(snap *Snapshot) []Finding {
 	if len(snap.Reviews) < 2 {
 		return nil
@@ -200,7 +200,7 @@ func ExcessiveRewrites(snap *Snapshot) []Finding {
 	}}
 }
 
-// WordCountAnomaly 检测章节字数异常。
+// WordCountAnomaly detects an abnormal chapter word count.
 func WordCountAnomaly(snap *Snapshot) []Finding {
 	if snap.Progress == nil || len(snap.Progress.ChapterWordCounts) < 3 {
 		return nil

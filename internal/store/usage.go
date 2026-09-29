@@ -6,14 +6,14 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
-// UsageStore 持久化 token / cost 累计用量到 meta/usage.json。
-// 写入走 IO 的 atomic write（tmp + rename），Save 路径每次完整覆盖整个 state。
+// UsageStore persists the accumulated token / cost usage in meta/usage.json.
+// The write goes through the IO atomic write (tmp + rename); the Save path overwrites the whole state every time.
 type UsageStore struct{ io *IO }
 
 func NewUsageStore(io *IO) *UsageStore { return &UsageStore{io: io} }
 
-// Load 读取 usage.json。文件不存在或 schema 版本不匹配时返回 (nil, nil)，
-// 由调用方决定是否走 session replay 一次性回填。
+// Load reads usage.json. It returns (nil, nil) when the file is missing or the schema version does not match,
+// and the caller decides whether to backfill in one go via session replay.
 func (s *UsageStore) Load() (*domain.UsageState, error) {
 	var state domain.UsageState
 	if err := s.io.ReadJSON("meta/usage.json", &state); err != nil {
@@ -28,7 +28,7 @@ func (s *UsageStore) Load() (*domain.UsageState, error) {
 	return &state, nil
 }
 
-// Save 把 state 完整覆盖落盘。调用方负责 debounce / 节流。
+// Save overwrites the whole state on disk. The caller is responsible for debouncing / throttling.
 func (s *UsageStore) Save(state domain.UsageState) error {
 	state.Schema = domain.UsageSchemaVersion
 	return s.io.WriteJSON("meta/usage.json", state)

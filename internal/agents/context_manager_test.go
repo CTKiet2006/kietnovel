@@ -37,8 +37,8 @@ func toolCallResult(id, name, args, result string) []agentcore.AgentMessage {
 	}
 }
 
-// Worker 一次运行只有一条任务消息，其余全是工具组。Editor 的章节原文不走微压缩，
-// 只能靠全量摘要，它必须在这种形态里真的切开，且最新原文原样留在尾部。
+// A Worker's single run has only one task message; everything else is tool groups. The Editor's raw chapter text does not go through micro-compaction,
+// so only a full summary can cut it: it must genuinely split under this shape, with the newest raw text left intact at the tail.
 func TestRoleContextManagerSummarizesToolLoop(t *testing.T) {
 	msgs := []agentcore.AgentMessage{agentcore.UserMsg("生成第 1 卷卷摘要")}
 	msgs = append(msgs, toolCallResult("ctx", "novel_context", `{}`, strings.Repeat("x", 8000))...)

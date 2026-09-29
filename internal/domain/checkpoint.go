@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// ScopeKind 标识 checkpoint 的作用域类型。
+// ScopeKind identifies the scope type of a checkpoint.
 type ScopeKind string
 
 const (
@@ -15,7 +15,7 @@ const (
 	ScopeGlobal  ScopeKind = "global"
 )
 
-// Scope 定位一条 checkpoint 所属的创作范围。
+// Scope locates the writing scope a checkpoint belongs to.
 type Scope struct {
 	Kind    ScopeKind `json:"kind"`
 	Chapter int       `json:"chapter,omitempty"`
@@ -23,22 +23,22 @@ type Scope struct {
 	Arc     int       `json:"arc,omitempty"`
 }
 
-// ChapterScope 构造一个章节级 Scope。
+// ChapterScope builds a chapter-level Scope.
 func ChapterScope(chapter int) Scope {
 	return Scope{Kind: ScopeChapter, Chapter: chapter}
 }
 
-// ArcScope 构造一个弧级 Scope。
+// ArcScope builds an arc-level Scope.
 func ArcScope(volume, arc int) Scope {
 	return Scope{Kind: ScopeArc, Volume: volume, Arc: arc}
 }
 
-// VolumeScope 构造一个卷级 Scope。
+// VolumeScope builds a volume-level Scope.
 func VolumeScope(volume int) Scope {
 	return Scope{Kind: ScopeVolume, Volume: volume}
 }
 
-// GlobalScope 构造一个全局 Scope。
+// GlobalScope builds a global Scope.
 func GlobalScope() Scope {
 	return Scope{Kind: ScopeGlobal}
 }
@@ -56,7 +56,7 @@ func (s Scope) String() string {
 	}
 }
 
-// Matches 判断两个 Scope 是否相同。
+// Matches reports whether two Scopes are the same.
 func (s Scope) Matches(other Scope) bool {
 	if s.Kind != other.Kind {
 		return false
@@ -73,8 +73,8 @@ func (s Scope) Matches(other Scope) bool {
 	}
 }
 
-// Checkpoint 记录某个 step 成功完成的事实。
-// 由工具在原子落盘后追加到 JSONL，是恢复和观察的唯一事实来源。
+// Checkpoint records the fact that a certain step completed successfully.
+// A tool appends it to the JSONL after an atomic write; it is the single source of truth for recovery and observation.
 type Checkpoint struct {
 	Seq        int64     `json:"seq"`
 	Scope      Scope     `json:"scope"`

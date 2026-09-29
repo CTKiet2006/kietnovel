@@ -10,7 +10,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/stylestat"
 )
 
-// writerSmokeCase 是一个典型的 writer 第一章 smoke case，用于门禁测试。
+// writerSmokeCase is a typical writer chapter-1 smoke case, used for gate testing.
 func writerSmokeCase() Case {
 	c := Case{
 		ID:          "writer_first_chapter",
@@ -25,11 +25,11 @@ func writerSmokeCase() Case {
 			NoPending:            []string{"pending_commit", "pending_steer"},
 		},
 	}
-	_ = c.Validate() // 填默认 max_severity
+	_ = c.Validate() // fill in the default max_severity
 	return c
 }
 
-// cleanCollected 构造一个"一章正常完成"的采集结果（无 findings、无残留、契约齐备）。
+// cleanCollected builds a collected result where "one chapter completed normally" (no findings, no residue, all contracts present).
 func cleanCollected() Collected {
 	return Collected{
 		Dir:      "/fake",
@@ -54,10 +54,10 @@ func TestGradePassesCleanRun(t *testing.T) {
 	}
 }
 
-// 核心假设：writer 跳过 commit 必须被拦下。
+// Core assumption: the writer skipping commit must be caught.
 func TestGradeCatchesMissingCommit(t *testing.T) {
 	col := cleanCollected()
-	col.Checkpoints = col.Checkpoints[:2] // 去掉 commit
+	col.Checkpoints = col.Checkpoints[:2] // drop commit
 	r := Grade(writerSmokeCase(), col)
 	if r.Outcome != Fail {
 		t.Fatalf("缺 commit 应 FAIL，得到 %s", r.Outcome)
@@ -67,7 +67,7 @@ func TestGradeCatchesMissingCommit(t *testing.T) {
 	}
 }
 
-// 核心假设：pending 残留必须被拦下。
+// Core assumption: a residual pending must be caught.
 func TestGradeCatchesPendingResidual(t *testing.T) {
 	col := cleanCollected()
 	col.Pending["pending_commit"] = true
@@ -80,10 +80,10 @@ func TestGradeCatchesPendingResidual(t *testing.T) {
 	}
 }
 
-// 核心假设：phase 不符必须被拦下。
+// Core assumption: a mismatched phase must be caught.
 func TestGradeCatchesPhaseMismatch(t *testing.T) {
 	col := cleanCollected()
-	col.Progress.Phase = domain.PhaseOutline // 还没进入 writing
+	col.Progress.Phase = domain.PhaseOutline // writing has not been entered yet
 	r := Grade(writerSmokeCase(), col)
 	if r.Outcome != Fail {
 		t.Fatalf("phase 不符应 FAIL，得到 %s", r.Outcome)
@@ -102,7 +102,7 @@ func TestGradeMinChaptersNotMet(t *testing.T) {
 	}
 }
 
-// critical finding 触发 hard fail；warning finding 仅 WARN（默认 max_severity=warning）。
+// A critical finding triggers a hard fail; a warning finding only produces WARN (the default is max_severity=warning).
 func TestGradeFindingSeverity(t *testing.T) {
 	crit := cleanCollected()
 	crit.Report.Findings = []diag.Finding{{Rule: "PhaseFlowMismatch", Severity: diag.SevCritical, Title: "状态机异常"}}
@@ -117,7 +117,7 @@ func TestGradeFindingSeverity(t *testing.T) {
 		t.Fatalf("warning finding 应 WARN，得到 %s", r.Outcome)
 	}
 
-	// info finding 是信息性 Note，不应把干净的 case 推成 WARN。
+	// An info finding is an informational Note and must not push a clean case up to WARN.
 	info := cleanCollected()
 	info.Report.Findings = []diag.Finding{{Rule: "GhostCharacter", Severity: diag.SevInfo, Title: "角色长期未出场"}}
 	ri := Grade(writerSmokeCase(), info)
@@ -138,7 +138,7 @@ func TestGradeRuntimeErrorFails(t *testing.T) {
 	}
 }
 
-// 契约依赖工件读坏不能 false pass，必须 hard fail（fail-loud）。
+// A corrupt contract-dependent artifact must not false pass, it must hard fail (fail-loud).
 func TestGradeLoadErrorFails(t *testing.T) {
 	col := cleanCollected()
 	col.LoadErrors = []string{"pending_commit: unexpected end of JSON input"}
@@ -276,7 +276,7 @@ func cleanResult() Result {
 	return r
 }
 
-// TestCollectReadsCheckpoints 验证真实 store 读取路径：写入 checkpoint 后 Collect 能命中契约。
+// TestCollectReadsCheckpoints verifies the real store read path: after writing a checkpoint, Collect can match the contract.
 func TestCollectReadsCheckpoints(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)

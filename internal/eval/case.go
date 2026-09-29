@@ -1,11 +1,11 @@
-// Package eval 是 ainovel-cli 的离线评测 harness。
+// Package eval is ainovel-cli's offline evaluation harness.
 //
-// 设计立足点：评测器（确定性诊断 diag、全书文体 stylestat、七维 rubric）项目里已经
-// 存在，eval 只做薄薄一层——批量驱动 case、采集产出、把 diag Finding 与 case 契约映射
-// 成门禁、聚合报告。一份事实定义，不在评测层重写一遍判断。详见 docs/evaluation-system.md。
+// The design starting point: the evaluators (the deterministic diagnostics diag, the whole-book stylestat, the seven-dimension
+// rubric) already exist in the project, so eval is only a thin layer — it drives cases in batches, collects the output, and maps
+// diag Findings and case contracts onto gates, then aggregates a report. One definition of the facts, never re-judged in the evaluation layer. See docs/evaluation-system.md.
 //
-// 当前已覆盖确定性主线：单路门禁、baseline/variant A/B delta、repeat 聚合与 stylestat 回归。
-// LLM Judge 仍是可选后续层，不能污染确定性门禁。
+// The deterministic mainline currently covered: single-path gates, baseline/variant A/B deltas, repeat aggregation and stylestat regression.
+// LLM Judge remains an optional later layer and must not pollute the deterministic gates.
 package eval
 
 import (
@@ -19,46 +19,46 @@ import (
 	"strings"
 )
 
-// caseIDPattern 限制 case id 为安全字符：id 会拼进输出目录并被 RunCase 的 RemoveAll 清理，
-// 禁止 . / 等路径字符，杜绝 "../" 路径穿越删到工作区外。
+// caseIDPattern restricts the case id to safe characters: the id is concatenated into the output directory and cleaned by RunCase's RemoveAll,
+// so path characters like . and / are forbidden, ruling out "../" path traversal that would delete outside the workspace.
 var caseIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
 const defaultDeltaRatio = 0.3
 
-// Case 是一个评测样本：一段创作需求 + 一组事实层断言。
+// Case is one evaluation sample: a writing requirement plus a set of fact-level assertions.
 type Case struct {
 	ID            string   `json:"id"`
-	Category      string   `json:"category"`       // 评测层：smoke/workflow/quality/longform/recovery/steering
-	Role          string   `json:"role,omitempty"` // 被测角色：writer/architect/editor（与 Category 正交）
+	Category      string   `json:"category"`       // evaluation layer: smoke/workflow/quality/longform/recovery/steering
+	Role          string   `json:"role,omitempty"` // role under test: writer/architect/editor (orthogonal to Category)
 	Description   string   `json:"description,omitempty"`
-	Prompt        string   `json:"prompt"`                   // 用户创作需求
-	Style         string   `json:"style,omitempty"`          // 覆盖配置风格
-	MaxChapters   int      `json:"max_chapters"`             // 章数上限；0 表示只跑到规划完成（进入 writing）
-	TargetPrompts []string `json:"target_prompts,omitempty"` // 本 case 主要验证的 prompt 文件（信息性）
-	Rubric        string   `json:"rubric,omitempty"`         // LLM Judge 评分表（Phase 3 启用）
+	Prompt        string   `json:"prompt"`                   // the user's writing requirement
+	Style         string   `json:"style,omitempty"`          // the config style being overridden
+	MaxChapters   int      `json:"max_chapters"`             // chapter ceiling; 0 means run only until planning completes (entering writing)
+	TargetPrompts []string `json:"target_prompts,omitempty"` // the prompt files this case mainly exercises (informational)
+	Rubric        string   `json:"rubric,omitempty"`         // LLM Judge scorecard (enabled in Phase 3)
 	Expect        Expect   `json:"expect"`
 	Gate          Gate     `json:"gate"`
 }
 
-// Expect 是 case 级契约断言——只声明 diag 通用规则覆盖不到、与本 case 强相关的预期。
+// Expect holds the case-level contract assertions — it only declares the expectations that diag's general rules cannot cover and that are strongly tied to this case.
 type Expect struct {
-	Phase                string   `json:"phase,omitempty"`                  // 期望最终 phase
-	MinCompletedChapters int      `json:"min_completed_chapters,omitempty"` // 至少完成的章数
-	RequiredCheckpoints  []string `json:"required_checkpoints,omitempty"`   // 形如 "chapter:1:commit" / "arc:1:1:arc_summary" / "global:layered_outline"
-	NoPending            []string `json:"no_pending,omitempty"`             // 结束时应清空的信号：pending_commit/pending_steer/last_commit/last_review
+	Phase                string   `json:"phase,omitempty"`                  // the expected final phase
+	MinCompletedChapters int      `json:"min_completed_chapters,omitempty"` // the minimum number of chapters that must complete
+	RequiredCheckpoints  []string `json:"required_checkpoints,omitempty"`   // of the form "chapter:1:commit" / "arc:1:1:arc_summary" / "global:layered_outline"
+	NoPending            []string `json:"no_pending,omitempty"`             // signals that must be cleared at the end: pending_commit/pending_steer/last_commit/last_review
 }
 
-// Gate 是本 case 的门禁阈值。本期只用 MaxSeverity；其余字段为 A/B（regression）阶段预留，
-// 解析但不参与门禁——保留是为了 case 文件能按 docs/evaluation-system.md 的完整 schema 书写。
+// Gate holds this case's gate thresholds. Only MaxSeverity is used in this phase; the remaining fields are reserved for the A/B (regression) phase,
+// they are parsed but do not take part in gating — they are kept so case files can be written against the full schema in docs/evaluation-system.md.
 type Gate struct {
-	MaxSeverity string `json:"max_severity,omitempty"` // diag Finding 允许的最高严重度（默认 warning）：超过即 hard fail
+	MaxSeverity string `json:"max_severity,omitempty"` // the highest severity a diag Finding may have (default warning): anything above it is a hard fail
 
 	MaxCostDeltaRatio     *float64 `json:"max_cost_delta_ratio,omitempty"`
 	MaxToolCallDeltaRatio *float64 `json:"max_tool_call_delta_ratio,omitempty"`
 	StylestatRegression   string   `json:"stylestat_regression,omitempty"`
 }
 
-// Validate 校验 case 必填字段。
+// Validate checks the case's required fields.
 func (c *Case) Validate() error {
 	if strings.TrimSpace(c.ID) == "" {
 		return fmt.Errorf("case 缺少 id")
@@ -101,7 +101,7 @@ func validStylestatGate(s string) bool {
 	}
 }
 
-// LoadCases 从单个 .json 文件或目录加载 case。目录下所有 *.json 递归加载，按 id 排序。
+// LoadCases loads cases from a single .json file or from a directory. Under a directory every *.json is loaded recursively, sorted by id.
 func LoadCases(path string) ([]Case, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -153,7 +153,7 @@ func loadCaseFile(path string) (Case, error) {
 	}
 	var c Case
 	dec := json.NewDecoder(strings.NewReader(string(data)))
-	dec.DisallowUnknownFields() // 拼错字段直接报错，避免静默忽略
+	dec.DisallowUnknownFields() // a mistyped field errors out immediately instead of being silently ignored
 	if err := dec.Decode(&c); err != nil {
 		return Case{}, fmt.Errorf("解析 case %s: %w", path, err)
 	}

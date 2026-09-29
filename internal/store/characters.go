@@ -8,17 +8,17 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
-// CharacterStore 管理角色档案和状态快照。
+// CharacterStore manages character profiles and state snapshots.
 type CharacterStore struct {
 	io      *IO
-	outline *OutlineStore // 只读依赖，用于快照遍历
+	outline *OutlineStore // read-only dependency, used to walk the snapshots
 }
 
 func NewCharacterStore(io *IO, outline *OutlineStore) *CharacterStore {
 	return &CharacterStore{io: io, outline: outline}
 }
 
-// Save 同时保存 characters.json 和 characters.md（原子写入）。
+// Save writes both characters.json and characters.md (atomically).
 func (s *CharacterStore) Save(chars []domain.Character) error {
 	return s.io.WithWriteLock(func() error {
 		if err := s.io.WriteJSONUnlocked("characters.json", chars); err != nil {
@@ -28,7 +28,7 @@ func (s *CharacterStore) Save(chars []domain.Character) error {
 	})
 }
 
-// Load 从 characters.json 读取角色档案。
+// Load reads the character profiles from characters.json.
 func (s *CharacterStore) Load() ([]domain.Character, error) {
 	var chars []domain.Character
 	if err := s.io.ReadJSON("characters.json", &chars); err != nil {
@@ -40,12 +40,12 @@ func (s *CharacterStore) Load() ([]domain.Character, error) {
 	return chars, nil
 }
 
-// SaveSnapshots 保存角色状态快照到 meta/snapshots/v{vol}a{arc}.json。
+// SaveSnapshots writes the character state snapshot to meta/snapshots/v{vol}a{arc}.json.
 func (s *CharacterStore) SaveSnapshots(volume, arc int, snapshots []domain.CharacterSnapshot) error {
 	return s.io.WriteJSON(fmt.Sprintf("meta/snapshots/v%02da%02d.json", volume, arc), snapshots)
 }
 
-// LoadSnapshots 读取指定卷弧的角色快照。
+// LoadSnapshots reads the character snapshot of a given volume/arc.
 func (s *CharacterStore) LoadSnapshots(volume, arc int) ([]domain.CharacterSnapshot, error) {
 	var snapshots []domain.CharacterSnapshot
 	if err := s.io.ReadJSON(fmt.Sprintf("meta/snapshots/v%02da%02d.json", volume, arc), &snapshots); err != nil {
@@ -57,10 +57,10 @@ func (s *CharacterStore) LoadSnapshots(volume, arc int) ([]domain.CharacterSnaps
 	return snapshots, nil
 }
 
-// LoadLatestSnapshots 加载最近一次角色快照（按卷弧倒序查找）。
+// LoadLatestSnapshots loads the most recent character snapshot (searching volume/arc in reverse order).
 func (s *CharacterStore) LoadLatestSnapshots() ([]domain.CharacterSnapshot, error) {
-	// 大纲缺失→(nil,nil) 已在 LoadLayeredOutline 内消化;损坏必须上抛，否则角色快照
-	// 会随分层大纲损坏一起静默消失，写作丢失角色连续性却无人知晓。
+	// A missing outline -> (nil, nil) is already absorbed inside LoadLayeredOutline; corruption must bubble up, otherwise the character snapshot
+	// silently disappears together with the corrupted layered outline and the writing loses character continuity without anyone noticing.
 	volumes, err := s.outline.LoadLayeredOutline()
 	if err != nil {
 		return nil, err

@@ -12,7 +12,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 )
 
-// Store 是状态管理的组合根，持有所有子存储。
+// Store is the composition root of the state management and holds every sub-store.
 type Store struct {
 	dir string
 
@@ -35,7 +35,7 @@ type Store struct {
 	ChapterRecords *ChapterRecordStore
 	Revisions      *RevisionStore
 
-	crossMu sync.Mutex // 串行化跨域协调；不代表多个文件具备事务原子性
+	crossMu sync.Mutex // serializes cross-domain coordination; it does not make multiple files transactionally atomic
 }
 
 const (
@@ -49,7 +49,7 @@ type projectFormat struct {
 	Version int `json:"version"`
 }
 
-// NewStore 创建状态管理器，dir 为小说输出根目录。
+// NewStore creates the state manager, where dir is the novel output root directory.
 func NewStore(dir string) *Store {
 	io := newIO(dir)
 	outline := NewOutlineStore(io)
@@ -76,11 +76,11 @@ func NewStore(dir string) *Store {
 	}
 }
 
-// Dir 返回输出根目录。
+// Dir returns the output root directory.
 func (s *Store) Dir() string { return s.dir }
 
-// LoadProjectFormatVersion 返回作品目录的数据格式版本。旧作品没有版本文件，
-// 视为 v1，由启动迁移统一升级，业务代码无需保留旧格式分支。
+// LoadProjectFormatVersion returns the data-format version of the work directory. An older work has no version file,
+// so it counts as v1 and is upgraded uniformly by the startup migration; business code needs no legacy-format branch.
 func (s *Store) LoadProjectFormatVersion() (int, error) {
 	var format projectFormat
 	if err := s.Progress.io.ReadJSON(projectFormatPath, &format); err != nil {
@@ -95,7 +95,7 @@ func (s *Store) LoadProjectFormatVersion() (int, error) {
 	return format.Version, nil
 }
 
-// SaveProjectFormatVersion 在一次迁移全部完成后原子更新项目格式版本。
+// SaveProjectFormatVersion atomically updates the project format version once the whole migration has finished.
 func (s *Store) SaveProjectFormatVersion(version int) error {
 	if version <= 0 {
 		return fmt.Errorf("项目格式版本必须大于 0: %d", version)
@@ -103,11 +103,11 @@ func (s *Store) SaveProjectFormatVersion(version int) error {
 	return s.Progress.io.WriteJSON(projectFormatPath, projectFormat{Version: version})
 }
 
-// CheckConsistency 对事实层做一次浅层校验，用于启动/恢复时生成 warning。
-// 纯只读：不修正数据，仅返回可读的问题描述。调用方决定如何展示（log / UI）。
-// 为避免扫全目录带来的 IO 开销，只校验 Progress 的关键点：
-//   - 最后一个完成章节必须在 chapters/ 下存在终稿
-//   - Layered 模式下，当前 Volume/Arc 必须能在 layered_outline 中找到
+// CheckConsistency does one shallow validation pass over the fact layer, used at startup/recovery to produce warnings.
+// Purely read-only: it fixes nothing and only returns a readable description of the problems. The caller decides how to surface it (log / UI).
+// To avoid the IO cost of scanning the whole directory, only the key points of Progress are validated:
+//   - the last completed chapter must have a final text under chapters/
+//   - in Layered mode the current Volume/Arc must be findable in layered_outline
 func (s *Store) CheckConsistency() []string {
 	var warnings []string
 	progress, err := s.Progress.Load()
@@ -151,9 +151,9 @@ func (s *Store) CheckConsistency() []string {
 	return warnings
 }
 
-// FoundationMissing 返回初始规划中尚缺的作品信息与基础设定，顺序稳定。
-// 长篇模式（已有 layered_outline）额外要求 compass。读取失败必须原样返回，不能把
-// 损坏或无权限读取的工件误判成“尚未创建”，否则调用方可能覆盖真实数据。
+// FoundationMissing returns the work information and foundation still missing from the initial planning, in a stable order.
+// Long-form mode (layered_outline already exists) additionally requires the compass. A read failure must be returned as is; a
+// corrupted or unreadable artifact must never be mistaken for "not created yet", or the caller could overwrite real data.
 func (s *Store) FoundationMissing() ([]string, error) {
 	var missing []string
 	book, err := s.Book.Load()
@@ -204,9 +204,9 @@ func (s *Store) FoundationMissing() ([]string, error) {
 			missing = append(missing, "compass")
 		}
 	}
-	// 新书只有经过模型对已落盘工件的显式语义审查，才允许从规划进入写作。
-	// PhaseWriting/Complete 代表旧书或已审查的新书，保持历史项目兼容；审查本身
-	// 是一个动作而非文件缺失，因此只在其它工件齐全时追加。
+	// A new book may only move from planning into writing after the model has explicitly semantically reviewed the already persisted artifacts.
+	// PhaseWriting/Complete stands for an old book or an already reviewed new book, keeping historical projects compatible; the review itself
+	// is an action rather than a missing file, so it is only appended when the other artifacts are all present.
 	if len(missing) == 0 {
 		progress, err := s.Progress.Load()
 		if err != nil {
@@ -219,9 +219,9 @@ func (s *Store) FoundationMissing() ([]string, error) {
 	return missing, nil
 }
 
-// FoundationFingerprint 返回当前基础设定工件的内容指纹。Architect 必须把
-// novel_context 读到的这个值原样交回审查工具，确保结论针对的是实际落盘版本，
-// 而不是会话中尚未保存或已经过期的内容。
+// FoundationFingerprint returns the content fingerprint of the current foundation artifacts. The Architect must hand
+// back exactly this value, as read from novel_context, to the review tool, so that the verdict targets the version actually on disk
+// and not something unsaved or already stale in the session.
 func (s *Store) FoundationFingerprint() (string, error) {
 	files := []string{"meta/book.json", "premise.md", "outline.json", "characters.json", "world_rules.json"}
 	layered, err := s.Outline.LoadLayeredOutline()
@@ -246,7 +246,7 @@ func (s *Store) FoundationFingerprint() (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// Init 创建所需的子目录结构。
+// Init creates the required sub-directory structure.
 func (s *Store) Init() error {
 	if err := s.Checkpoints.InitError(); err != nil {
 		return fmt.Errorf("load checkpoints: %w", err)
@@ -256,16 +256,16 @@ func (s *Store) Init() error {
 	})
 }
 
-// ── 跨域协调方法 ──
+// ── Cross-domain coordination methods ──
 
-// ArcPosition 是由分层大纲故事顺序确定的卷弧位置。
+// ArcPosition is the volume/arc position determined by the story order of the layered outline.
 type ArcPosition struct {
 	Volume int
 	Arc    int
 }
 
-// ExpandNextArc 展开当前已完成弧之后的下一弧（Outline + Progress 联动）。
-// 目标由已落盘进度和大纲共同确定，模型只负责创作内容。
+// ExpandNextArc expands the next arc after the currently completed one (Outline + Progress move together).
+// The target is determined jointly by the persisted progress and the outline; the model is only responsible for the creative content.
 func (s *Store) ExpandNextArc(expansion domain.ArcExpansion) (ArcPosition, error) {
 	s.crossMu.Lock()
 	defer s.crossMu.Unlock()
@@ -305,7 +305,7 @@ func (s *Store) ExpandNextArc(expansion domain.ArcExpansion) (ArcPosition, error
 	return position, nil
 }
 
-// AppendVolume 追加新卷到分层大纲末尾（Outline + Progress 联动）。
+// AppendVolume appends a new volume at the end of the layered outline (Outline + Progress move together).
 func (s *Store) AppendVolume(vol domain.VolumeOutline) (domain.VolumeOutline, error) {
 	s.crossMu.Lock()
 	defer s.crossMu.Unlock()
@@ -335,9 +335,9 @@ func (s *Store) AppendVolume(vol domain.VolumeOutline) (domain.VolumeOutline, er
 	return saved, nil
 }
 
-// ReviseOutline 从 fromChapter 起替换尚未发生的计划尾段。
-// 扁平大纲替换全书尾段；分层大纲只替换目标章所在弧的尾段。这个定义让同一载荷
-// 重放仍得到同一结果，同时避免 JSON Patch 和 insert/delete 等操作枚举。
+// ReviseOutline replaces the not-yet-happened planned tail starting at fromChapter.
+// The flat outline replaces the tail of the whole book; the layered outline replaces only the tail of the arc that holds the target chapter. This definition lets a replay
+// of the same payload produce the same result, while avoiding operation enumerations such as JSON Patch and insert/delete.
 func (s *Store) ReviseOutline(fromChapter int, replacement []domain.OutlineEntry) (int, error) {
 	if fromChapter <= 0 {
 		return 0, fmt.Errorf("from_chapter must be > 0: %w", errs.ErrToolArgs)
@@ -393,9 +393,9 @@ func (s *Store) ReviseOutline(fromChapter int, replacement []domain.OutlineEntry
 	return p.TotalChapters, nil
 }
 
-// ClearHandledSteer 清除 PendingSteer 并重置旧版 FlowSteering 状态。
-// 两个文件无法组成文件系统事务，因此先写可重复的 Progress，最后才删除恢复意图；
-// 任一步失败都至少保留 PendingSteer，下一次 Resume 可以安全重放。
+// ClearHandledSteer clears PendingSteer and resets the legacy FlowSteering state.
+// Two files cannot form a filesystem transaction, so the repeatable Progress is written first and the recovery intent is deleted last;
+// if any step fails, PendingSteer survives at the very least and the next Resume can safely replay.
 func (s *Store) ClearHandledSteer() error {
 	s.crossMu.Lock()
 	defer s.crossMu.Unlock()

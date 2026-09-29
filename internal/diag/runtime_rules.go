@@ -7,15 +7,15 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
-// 运行时检测阈值。
+// runtime detection thresholds.
 const (
-	repeatCritical = 8 // 近端重复达到此次数升为 critical
-	streamIdleWarn = 3 // stream_idle 累计告警阈值
+	repeatCritical = 8 // escalating to critical once the near-term repeats reach this count
+	streamIdleWarn = 3 // the threshold at which accumulated stream_idle warns
 )
 
-// RuntimeRuleFunc 是运行时诊断规则的统一签名（对应创作侧的 RuleFunc）。
-// 入参是脱敏聚合后的 RuntimeCapture，产出报告型 Finding——全部 AutoNone，
-// 只诊断、不产 Action（观察者纪律，见 architecture.md §2.3）。
+// RuntimeRuleFunc is the unified signature of a runtime diagnostic rule (the counterpart of RuleFunc on the writing side).
+// It takes the redacted, aggregated RuntimeCapture and produces report-style Findings - all AutoNone,
+// diagnosing only and producing no Action (the observer discipline, see architecture.md §2.3).
 type RuntimeRuleFunc func(rc *RuntimeCapture) []Finding
 
 var runtimeRules = []RuntimeRuleFunc{
@@ -24,7 +24,7 @@ var runtimeRules = []RuntimeRuleFunc{
 	streamIdleStorm,
 }
 
-// runtimeFindings 跑全部运行时规则。
+// runtimeFindings runs every runtime rule.
 func runtimeFindings(rc *RuntimeCapture) []Finding {
 	var out []Finding
 	for _, rule := range runtimeRules {
@@ -33,9 +33,9 @@ func runtimeFindings(rc *RuntimeCapture) []Finding {
 	return out
 }
 
-// Diagnose 是 /diag 的完整诊断入口：创作诊断 + 运行时信号 + 运行时检测，
-// 返回合并后的 Report 与原始 RuntimeCapture（供导出复用，避免重复抓取）。
-// 运行时 Finding 仅并入 Findings 供展示，不改 Actions——保持纯观察。
+// Diagnose is the full diagnosis entry point of /diag: writing diagnosis + runtime signals + runtime detection,
+// returning the merged Report and the raw RuntimeCapture (reused by the export to avoid a second capture).
+// The runtime Findings are only merged into Findings for display and never change Actions - it stays a pure observer.
 func Diagnose(s *store.Store) (Report, RuntimeCapture) {
 	rep := Analyze(s)
 	rc := CaptureRuntime(s)
@@ -44,9 +44,9 @@ func Diagnose(s *store.Store) (Report, RuntimeCapture) {
 	return rep, rc
 }
 
-// repeatedErrors 只把"近端反复出现的错误 / 参数无效"判成 Finding。
-// 不碰普通工具重复——subagent/novel_context/read_chapter 等在长跑里天然
-// 高频，累计次数不是循环信号；真正的"反复而不推进"由 stuckStep 兜住。
+// repeatedErrors judges only a "repeatedly occurring near-term error / invalid argument" as a Finding.
+// It does not touch ordinary tool repeats - subagent/novel_context/read_chapter are naturally
+// high-frequency during a long run and the accumulated count is not a loop signal; the real "repeating without progress" is caught by stuckStep.
 func repeatedErrors(rc *RuntimeCapture) []Finding {
 	var out []Finding
 	for _, r := range rc.Repeats {
@@ -61,7 +61,7 @@ func repeatedErrors(rc *RuntimeCapture) []Finding {
 			title = "参数反复无法解析"
 			sugg = "模型发来的参数无法解析却不断重试；看 agentcore 是否对该类型做了宽松强转（参见 #34）。"
 		default:
-			continue // 普通工具重复不产 Finding
+			continue // continue // an ordinary tool repeat produces no Finding
 		}
 		sev := SevWarning
 		if r.Count >= repeatCritical {
@@ -82,7 +82,7 @@ func repeatedErrors(rc *RuntimeCapture) []Finding {
 	return out
 }
 
-// stuckStep 检测 checkpoint 连续停在同一 step。
+// stuckStep detects a checkpoint that stays on the same step in a row.
 func stuckStep(rc *RuntimeCapture) []Finding {
 	if rc.StuckStep == "" {
 		return nil
@@ -104,7 +104,7 @@ func stuckStep(rc *RuntimeCapture) []Finding {
 	}}
 }
 
-// streamIdleStorm 检测流式中断频发（#32）。
+// streamIdleStorm detects frequent stream interruptions (#32).
 func streamIdleStorm(rc *RuntimeCapture) []Finding {
 	n := rc.LogKinds["stream_idle"]
 	if n < streamIdleWarn {

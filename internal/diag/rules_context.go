@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// GhostCharacter 检测 core/important 角色长期未出现。
+// GhostCharacter detects a core/important role that has not appeared for a long time.
 func GhostCharacter(snap *Snapshot) []Finding {
 	if snap.Progress == nil || len(snap.Characters) == 0 || len(snap.Summaries) == 0 {
 		return nil
@@ -15,7 +15,7 @@ func GhostCharacter(snap *Snapshot) []Finding {
 		return nil
 	}
 
-	// 计算每个角色最后出现的章节号
+	// compute the chapter number of each role's last appearance
 	lastSeen := make(map[string]int)
 	for ch, s := range snap.Summaries {
 		for _, name := range s.Characters {
@@ -38,7 +38,7 @@ func GhostCharacter(snap *Snapshot) []Finding {
 		}
 		seen, ok := lastSeen[c.Name]
 		if !ok {
-			// 也检查别名
+			// also check the aliases
 			for _, alias := range c.Aliases {
 				if s, exists := lastSeen[alias]; exists && s > seen {
 					seen = s
@@ -69,7 +69,7 @@ func GhostCharacter(snap *Snapshot) []Finding {
 	}}
 }
 
-// TimelineGaps 检测已完成章节缺少时间线事件。
+// TimelineGaps detects a completed chapter that is missing a timeline event.
 func TimelineGaps(snap *Snapshot) []Finding {
 	if snap.Progress == nil || len(snap.Progress.CompletedChapters) == 0 {
 		return nil
@@ -88,7 +88,7 @@ func TimelineGaps(snap *Snapshot) []Finding {
 		}}
 	}
 
-	// 建立章节→事件映射
+	// build the chapter -> event mapping
 	chaptersWithEvents := make(map[int]bool)
 	for _, e := range snap.Timeline {
 		chaptersWithEvents[e.Chapter] = true
@@ -100,7 +100,7 @@ func TimelineGaps(snap *Snapshot) []Finding {
 			missing = append(missing, ch)
 		}
 	}
-	// 允许少量缺失（某些过渡章可能确实无重大事件）
+	// a few missing events are allowed (some transitional chapters may indeed have no major event)
 	if len(missing) == 0 || float64(len(missing))/float64(snap.CompletedCount()) < ThresholdTimelineGapRate {
 		return nil
 	}
@@ -117,7 +117,7 @@ func TimelineGaps(snap *Snapshot) []Finding {
 	}}
 }
 
-// RelationshipStagnation 检测关系数据停止更新。
+// RelationshipStagnation detects relation data that has stopped being updated.
 func RelationshipStagnation(snap *Snapshot) []Finding {
 	if snap.Progress == nil || len(snap.Relationships) == 0 {
 		return nil
@@ -127,7 +127,7 @@ func RelationshipStagnation(snap *Snapshot) []Finding {
 		return nil
 	}
 
-	// 找到关系数据的最新章节
+	// find the newest chapter of the relation data
 	latestRelCh := 0
 	for _, r := range snap.Relationships {
 		if r.Chapter > latestRelCh {
@@ -135,7 +135,7 @@ func RelationshipStagnation(snap *Snapshot) []Finding {
 		}
 	}
 
-	// 如果最新关系数据在前 1/3，判定为停滞
+	// if the newest relation data is in the first third, judge it as stagnant
 	cutoff := snap.LatestCompleted() - completed/3
 	if latestRelCh >= cutoff {
 		return nil

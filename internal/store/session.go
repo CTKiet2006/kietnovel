@@ -14,25 +14,25 @@ import (
 	"github.com/voocel/agentcore"
 )
 
-// SessionStore 追加式记录 LLM 对话历史到 JSONL 文件。
-// 大体积内容（小说正文、完整上下文）用 [session_compact: ...] 占位标记替代。
+// SessionStore records the LLM conversation history into a JSONL file in append-only fashion.
+// Large payloads (novel body text, full context) are replaced by a [session_compact: ...] placeholder marker.
 type SessionStore struct {
 	io      *IO
 	mu      sync.Mutex
-	seq     map[string]int    // agent 运行序号（无法提取章节号时用）
-	taskKey map[string]string // "agentName|task" → suffix，同一 run 复用同一文件
+	seq     map[string]int    // agent run sequence number (used when no chapter number can be extracted)
+	taskKey map[string]string // "agentName|task" -> suffix, the same run reuses the same file
 }
 
 func NewSessionStore(io *IO) *SessionStore {
 	return &SessionStore{io: io, seq: make(map[string]int), taskKey: make(map[string]string)}
 }
 
-// ModelLookup 在 logger 写入时按 agent 名查"当时生效"的 provider/model。
-// 用 func 类型而不是 interface，方便调用方用闭包注入归一规则（如 architect_short → architect）。
-// 返回空字符串表示未知，调用方仍照常写入但不带 _meta，replay 时退回 ModelSet fallback。
+// ModelLookup resolves the provider/model "in effect at the time" by agent name while the logger writes.
+// It is a func type rather than an interface so that the caller can inject the normalization rule as a closure (e.g. architect_short -> architect).
+// An empty string means unknown: the caller still writes as usual but without _meta, and replay falls back to ModelSet.
 type ModelLookup func(agentName string) (provider, model string)
 
-// SubAgentLogger 返回子代理的 OnMessage 回调。
+// SubAgentLogger returns the OnMessage callback of a sub-agent.
 func (s *SessionStore) SubAgentLogger(lookup ModelLookup) func(agentName, task string, msg agentcore.AgentMessage) {
 	return func(agentName, task string, msg agentcore.AgentMessage) {
 		rel, err := s.subAgentPath(agentName, task)
@@ -58,9 +58,9 @@ func lookupMeta(lookup ModelLookup, agentName string) *sessionLogMeta {
 	return &sessionLogMeta{Provider: provider, Model: model}
 }
 
-// LogCoCreate 追加一条共创对话日志到 meta/sessions/cocreate.jsonl。
-// 共创阶段还没绑定具体小说，统一落到 OutputDir 默认根（output/novel）下，
-// 与正式创作的 agents/* 同位，方便排查。
+// LogCoCreate appends one co-creation conversation log to meta/sessions/cocreate.jsonl.
+// During the co-creation phase no concrete novel is bound yet, so everything lands under the OutputDir default root (output/novel),
+// at the same level as agents/* of the real writing, which makes troubleshooting easy.
 func (s *SessionStore) LogCoCreate(entry any) error {
 	data, err := json.Marshal(entry)
 	if err != nil {
@@ -70,16 +70,16 @@ func (s *SessionStore) LogCoCreate(entry any) error {
 	return s.io.AppendLine("meta/sessions/cocreate.jsonl", data)
 }
 
-// Log 追加一条消息到指定路径，自动压缩大内容。
-// 不携带 _meta；仅 cocreate 等无角色路径使用。
+// Log appends one message to the given path, compacting large content automatically.
+// It carries no _meta; only role-less paths such as cocreate use it.
 func (s *SessionStore) Log(rel string, msg agentcore.AgentMessage) error {
 	return s.logEntry(rel, msg, nil)
 }
 
-// sessionLogEntry 嵌入 agentcore.Message + 可选 _meta。
-// agentcore.Message 是 plain struct（无 MarshalJSON），嵌入后 json marshal
-// 自动展开到顶层；_meta 通过 omitempty 控制——只有 assistant + Usage != nil
-// 时才注入，user/tool 消息不带 _meta，旧 jsonl 解析时 _meta=nil 是 noop。
+// sessionLogEntry embeds agentcore.Message plus an optional _meta.
+// agentcore.Message is a plain struct (no MarshalJSON), so once embedded the json marshal
+// expands it to the top level automatically; _meta is governed by omitempty - it is injected only when
+// assistant + Usage != nil, user/tool messages carry no _meta, and _meta=nil while parsing old jsonl is a no-op.
 type sessionLogEntry struct {
 	agentcore.Message
 	Meta *sessionLogMeta `json:"_meta,omitempty"`
@@ -90,13 +90,13 @@ type sessionLogMeta struct {
 	Model    string `json:"model,omitempty"`
 }
 
-// logEntry 序列化消息并按需附加 _meta。lookupMeta 已计算好的 meta 传进来；
-// 函数内部判断只对"产生了 LLM 用量"的消息（assistant + Usage != nil）写入 meta，
-// 其它消息保持纯净 agentcore.Message 序列化形态。
+// logEntry serializes a message and appends _meta when needed. The meta already computed by lookupMeta is passed in;
+// the function itself writes the meta only for messages that "consumed LLM usage" (assistant + Usage != nil),
+// while every other message keeps the pure agentcore.Message serialization shape.
 func (s *SessionStore) logEntry(rel string, msg agentcore.AgentMessage, meta *sessionLogMeta) error {
 	m, ok := msg.(agentcore.Message)
 	if !ok {
-		return nil // 非 LLM 消息（如自定义类型）跳过
+		return nil // non-LLM messages (e.g. custom types) are skipped
 	}
 	compacted := compactMessage(m)
 	entry := sessionLogEntry{Message: compacted}
@@ -124,7 +124,7 @@ func usageMeta(usage *agentcore.Usage) *sessionLogMeta {
 	}
 }
 
-// subAgentPath 根据 agentName+task 生成文件路径。
+// subAgentPath builds the file path from agentName+task.
 func (s *SessionStore) subAgentPath(agentName, task string) (string, error) {
 	suffix := extractChapter(task)
 	if suffix != "" {
@@ -187,7 +187,7 @@ func extractChapter(task string) string {
 	return fmt.Sprintf("ch%02d", n)
 }
 
-// compactMessage 克隆消息并替换大内容。
+// compactMessage clones the message and replaces large content.
 func compactMessage(m agentcore.Message) agentcore.Message {
 	if len(m.Content) == 0 {
 		return m
@@ -221,7 +221,7 @@ func toolNameFromMeta(meta map[string]any) string {
 	return ""
 }
 
-// compactText 压缩 tool result 的 text content。
+// compactText compacts the text content of a tool result.
 func compactText(role agentcore.Role, toolName, text string) string {
 	if role != agentcore.RoleTool || len(text) < 4096 {
 		return text
@@ -242,7 +242,7 @@ func compactText(role agentcore.Role, toolName, text string) string {
 	}
 }
 
-// compactToolCall 压缩 tool call 的 args 中大内容字段。
+// compactToolCall compacts the large content fields in the args of a tool call.
 func compactToolCall(tc *agentcore.ToolCall) *agentcore.ToolCall {
 	switch tc.Name {
 	case "draft_chapter":
@@ -265,7 +265,7 @@ func compactArgsContent(tc *agentcore.ToolCall, label, ref string) *agentcore.To
 	}
 	var content string
 	if err := json.Unmarshal(contentRaw, &content); err != nil {
-		// content 不是字符串（可能是 JSON 对象），用字节数
+		// content is not a string (it may be a JSON object), so the byte size is used
 		placeholder := fmt.Sprintf("[session_compact: %s %dB | 见 %s]", label, len(contentRaw), ref)
 		args["content"], _ = json.Marshal(placeholder)
 	} else {
@@ -304,7 +304,7 @@ func compactFoundationArgs(tc *agentcore.ToolCall) *agentcore.ToolCall {
 	return &clone
 }
 
-// extractJSONField 从 JSON 字符串中提取指定字段的字符串值。
+// extractJSONField extracts the string value of a given field from a JSON string.
 func extractJSONField(jsonStr, field string) string {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
@@ -337,5 +337,5 @@ func extractJSONFieldInt(data json.RawMessage, field string) int {
 	return val
 }
 
-// CompactTag 是占位标记前缀，方便搜索和还原。
+// CompactTag is the prefix of the placeholder marker, which makes searching and restoring easy.
 const CompactTag = "[session_compact:"

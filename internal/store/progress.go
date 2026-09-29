@@ -9,12 +9,12 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 )
 
-// ProgressStore 管理创作进度状态。
+// ProgressStore manages the writing-progress state.
 type ProgressStore struct{ io *IO }
 
 func NewProgressStore(io *IO) *ProgressStore { return &ProgressStore{io: io} }
 
-// Load 读取 meta/progress.json。不存在时返回 nil。
+// Load reads meta/progress.json. It returns nil when the file does not exist.
 func (s *ProgressStore) Load() (*domain.Progress, error) {
 	s.io.mu.RLock()
 	defer s.io.mu.RUnlock()
@@ -32,7 +32,7 @@ func (s *ProgressStore) loadUnlocked() (*domain.Progress, error) {
 	return &p, nil
 }
 
-// Save 保存进度。
+// Save stores the progress.
 func (s *ProgressStore) Save(p *domain.Progress) error {
 	s.io.mu.Lock()
 	defer s.io.mu.Unlock()
@@ -43,7 +43,7 @@ func (s *ProgressStore) saveUnlocked(p *domain.Progress) error {
 	return s.io.WriteJSONUnlocked("meta/progress.json", p)
 }
 
-// Init 创建初始进度。
+// Init creates the initial progress.
 func (s *ProgressStore) Init(totalChapters int) error {
 	return s.Save(&domain.Progress{
 		Phase:         domain.PhaseInit,
@@ -51,7 +51,7 @@ func (s *ProgressStore) Init(totalChapters int) error {
 	})
 }
 
-// SetTotalChapters 更新大纲容量：非分层模式为详细章数，分层模式为内部估算。
+// SetTotalChapters updates the outline capacity: the exact chapter count in non-layered mode, an internal estimate in layered mode.
 func (s *ProgressStore) SetTotalChapters(n int) error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -66,7 +66,7 @@ func (s *ProgressStore) SetTotalChapters(n int) error {
 	})
 }
 
-// UpdatePhase 更新创作阶段。
+// UpdatePhase updates the writing phase.
 func (s *ProgressStore) UpdatePhase(phase domain.Phase) error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -84,8 +84,8 @@ func (s *ProgressStore) UpdatePhase(phase domain.Phase) error {
 	})
 }
 
-// AdvancePhase 将创作阶段至少推进到 phase；已经到达更后阶段时保持不变。
-// 适用于可重复保存的阶段工件，避免修订旧工件被误判为阶段回退。
+// AdvancePhase advances the writing phase at least up to phase; when a later phase has already been reached it stays unchanged.
+// Meant for phase artifacts that may be saved repeatedly, so that rewriting an older artifact is never mistaken for a phase rollback.
 func (s *ProgressStore) AdvancePhase(phase domain.Phase) error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -106,8 +106,8 @@ func (s *ProgressStore) AdvancePhase(phase domain.Phase) error {
 	})
 }
 
-// StartChapter 标记某章进入写作中状态。它不能承担阶段迁移职责；调用方必须先由
-// foundation/import 流程把 Progress 明确推进到 writing，避免错误派单绕过规划阶段。
+// StartChapter marks a chapter as being written. It cannot carry the phase-transition duty; the caller must first have
+// the foundation/import flow advance Progress explicitly to writing, so a wrong dispatch cannot bypass the planning phase.
 func (s *ProgressStore) StartChapter(chapter int) error {
 	if chapter <= 0 {
 		return fmt.Errorf("chapter must be > 0")
@@ -135,8 +135,8 @@ func (s *ProgressStore) StartChapter(chapter int) error {
 	})
 }
 
-// IsChapterCompleted 检查章节是否已提交完成。读取失败显式返回，不能把损坏的
-// progress 当成“未完成”后继续覆盖章节。
+// IsChapterCompleted checks whether a chapter has been committed as complete. A read failure is returned explicitly; a corrupted
+// progress must not be treated as "not completed" and then keep overwriting chapters.
 func (s *ProgressStore) IsChapterCompleted(chapter int) (bool, error) {
 	p, err := s.Load()
 	if err != nil {
@@ -148,7 +148,7 @@ func (s *ProgressStore) IsChapterCompleted(chapter int) (bool, error) {
 	return slices.Contains(p.CompletedChapters, chapter), nil
 }
 
-// MarkChapterComplete 标记章节完成，原子性更新进度。
+// MarkChapterComplete marks a chapter complete and updates the progress atomically.
 func (s *ProgressStore) MarkChapterComplete(chapter, wordCount int, hookType, dominantStrand string) error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -204,7 +204,7 @@ func (s *ProgressStore) MarkChapterComplete(chapter, wordCount int, hookType, do
 	})
 }
 
-// MarkComplete 标记全书创作完成，并清除重开返工标记（完结即不再处于返工态）。
+// MarkComplete marks the writing of the whole book as finished and clears the reopened-rework flag (a finished book is no longer in the rework state).
 func (s *ProgressStore) MarkComplete() error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -223,10 +223,10 @@ func (s *ProgressStore) MarkComplete() error {
 	})
 }
 
-// Reopen 把已完结的书重新打开进入返工态：phase complete→writing + 目标章入队 + flow=rewriting，
-// 在一次写锁内原子完成。这是 phaseOrder“只前进”约束的唯一豁免出口——故意不走
-// ValidatePhaseTransition；回退的合法性收敛在本方法、且受 phase=complete 前置守卫保护，
-// 避免误用导致状态机失控。改完队列后 commit_chapter 会自动重新收尾完结。
+// Reopen reopens an already finished book into the rework state: phase complete->writing + the target chapter is queued + flow=rewriting,
+// all done atomically inside a single write lock. This is the one exempt exit from the phaseOrder "only moves forward" constraint - deliberately it does not go through
+// ValidatePhaseTransition; the legality of the rollback is confined to this method and is protected by the phase=complete precondition,
+// so that misuse cannot let the state machine run away. Once the queue has been fixed, commit_chapter automatically finishes the book again.
 func (s *ProgressStore) Reopen(chapters []int, reason string) error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -243,19 +243,19 @@ func (s *ProgressStore) Reopen(chapters []int, reason string) error {
 		if err != nil {
 			return err
 		}
-		p.Phase = domain.PhaseWriting // 唯一合法回退，受上面 complete 前置约束保护
+		p.Phase = domain.PhaseWriting // the only legal rollback, protected by the complete precondition described above
 		p.PendingRewrites = normalized
 		p.RewriteReason = reason
 		p.Flow = domain.FlowRewriting
-		p.ReopenedFromComplete = true // 排空后按结构完整重新完结，见 commit_chapter drain 块
+		p.ReopenedFromComplete = true // finish again with the structure intact after the queue is drained, see the commit_chapter drain block
 		return s.saveUnlocked(p)
 	})
 }
 
-// ReopenContinue 把已完结的书重开为续写态：仅 phase complete→writing，不入返工队列、
-// 不置 ReopenedFromComplete（那是"返工排空后按原结构自动重新完结"的 drain 语义，
-// 续写重开恰恰要扩展结构）。与 Reopen 同为 phaseOrder"只前进"约束的豁免出口，
-// 同受 phase=complete 前置守卫保护；重开后由卷末路由派发架构师续卷。
+// ReopenContinue reopens an already finished book as continue-writing: only phase complete->writing, no entry into the rework queue,
+// and ReopenedFromComplete stays unset (that flag carries the drain semantics of "finish again automatically with the original structure once the rework is drained",
+// whereas a continue-writing reopen is precisely meant to extend the structure). Like Reopen it is an exempt exit from the phaseOrder "only moves forward" constraint,
+// equally protected by the phase=complete precondition; after reopening, the end-of-volume router dispatches the architect to continue with a new volume.
 func (s *ProgressStore) ReopenContinue() error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -269,12 +269,12 @@ func (s *ProgressStore) ReopenContinue() error {
 			return fmt.Errorf("重开仅适用于已完结的书（当前 phase=%s）: %w", p.Phase, errs.ErrToolPrecondition)
 		}
 		p.Phase = domain.PhaseWriting
-		p.ReopenCount++ // 审计 + 保证再完结的 progress digest 与上次不同（见字段注释）
+		p.ReopenCount++ // auditing + it guarantees that the progress digest of the new finish differs from the previous one (see the field comment)
 		return s.saveUnlocked(p)
 	})
 }
 
-// ClearInProgress 清除进度中间状态。
+// ClearInProgress clears the transient progress state.
 func (s *ProgressStore) ClearInProgress() error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -290,7 +290,7 @@ func (s *ProgressStore) ClearInProgress() error {
 	})
 }
 
-// UpdateVolumeArc 更新当前卷弧位置。
+// UpdateVolumeArc updates the current volume/arc position.
 func (s *ProgressStore) UpdateVolumeArc(volume, arc int) error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -306,7 +306,7 @@ func (s *ProgressStore) UpdateVolumeArc(volume, arc int) error {
 	})
 }
 
-// SetLayered 设置分层模式标志。
+// SetLayered sets the layered-mode flag.
 func (s *ProgressStore) SetLayered(layered bool) error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -321,7 +321,7 @@ func (s *ProgressStore) SetLayered(layered bool) error {
 	})
 }
 
-// SetFlow 更新当前流程状态。
+// SetFlow updates the current flow state.
 func (s *ProgressStore) SetFlow(flow domain.FlowState) error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -339,8 +339,8 @@ func (s *ProgressStore) SetFlow(flow domain.FlowState) error {
 	})
 }
 
-// SetPendingRewrites 设置待重写章节队列和原因。
-// PendingRewrites 只允许包含已完成章节；未完成章节还没有终稿，不能进入重写/打磨队列。
+// SetPendingRewrites sets the queue of chapters pending a rewrite together with the reason.
+// PendingRewrites may only contain completed chapters; an unfinished chapter has no final text yet and must not enter the rewrite/polish queue.
 func (s *ProgressStore) SetPendingRewrites(chapters []int, reason string) error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -360,8 +360,8 @@ func (s *ProgressStore) SetPendingRewrites(chapters []int, reason string) error 
 	})
 }
 
-// ApplyReviewOutcome 原子应用审阅产生的流程状态。审阅语义由上层决定；Store 只负责
-// 校验 Flow 迁移和返工章节，并保证 Flow、PendingRewrites、RewriteReason 不出现中间态。
+// ApplyReviewOutcome applies the flow state produced by a review atomically. The review semantics are decided by the layer above; the Store only
+// validates the Flow transition and the reworked chapters, and guarantees that Flow, PendingRewrites and RewriteReason never show an intermediate state.
 func (s *ProgressStore) ApplyReviewOutcome(flow domain.FlowState, chapters []int, reason string) (*domain.Progress, error) {
 	var latest *domain.Progress
 	err := s.io.WithWriteLock(func() error {
@@ -401,7 +401,7 @@ func (s *ProgressStore) ApplyReviewOutcome(flow domain.FlowState, chapters []int
 	return latest, err
 }
 
-// ValidatePendingRewrites 校验章节列表是否可进入返工队列，不修改状态。
+// ValidatePendingRewrites checks whether a chapter list may enter the rework queue; it does not modify any state.
 func (s *ProgressStore) ValidatePendingRewrites(chapters []int) error {
 	s.io.mu.RLock()
 	defer s.io.mu.RUnlock()
@@ -418,7 +418,7 @@ func (s *ProgressStore) ValidatePendingRewrites(chapters []int) error {
 	return err
 }
 
-// CompleteRewrite 从待重写队列中移除已完成的章节。
+// CompleteRewrite removes a finished chapter from the pending-rewrite queue.
 func (s *ProgressStore) CompleteRewrite(chapter int) error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -446,7 +446,7 @@ func (s *ProgressStore) CompleteRewrite(chapter int) error {
 	})
 }
 
-// ClearPendingRewrites 强制清空重写队列。
+// ClearPendingRewrites forcibly empties the rewrite queue.
 func (s *ProgressStore) ClearPendingRewrites() error {
 	return s.io.WithWriteLock(func() error {
 		p, err := s.loadUnlocked()
@@ -466,9 +466,9 @@ func (s *ProgressStore) ClearPendingRewrites() error {
 	})
 }
 
-// ValidateChapterWork 校验当前章节是否允许被规划或提交。
-// Writer 只能在 writing 阶段工作；打磨/重写流程下，只允许处理 PendingRewrites
-// 中的章节。阶段约束在 Store 边界再守一次，避免错误的 Arbiter 派单绕过 Router。
+// ValidateChapterWork checks whether the current chapter may be planned or committed.
+// The Writer may only work in the writing phase; under the polish/rewrite flow it may only touch chapters that are in
+// PendingRewrites. The phase constraint is enforced once more at the Store boundary so that a wrong Arbiter dispatch cannot bypass the Router.
 func (s *ProgressStore) ValidateChapterWork(chapter int) error {
 	p, err := s.Load()
 	if err != nil {
