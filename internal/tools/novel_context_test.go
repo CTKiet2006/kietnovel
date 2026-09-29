@@ -819,16 +819,16 @@ func TestContextToolSelectedMemoryRecallsStoryThreadsAndReviewLessons(t *testing
 	}
 }
 
-// 久挂未回收的伏笔即使与当前章关键词无关，也应被账龄回填进 story_threads——
-// 这正是相关性召回的盲区（独自悬挂太久、却没在本章撞上关键词的那根线）。
-// 近期埋下的伏笔（账龄 < 阈值）不应被误标为"未回收"。
+// A foreshadowing item left hanging and unresolved should be backfilled into story_threads by age even when it is unrelated to the current chapter's keywords --
+// this is exactly the blind spot of relevance recall (the thread hanging alone for too long without hitting a keyword in this chapter).
+// A recently planted foreshadowing item (age < threshold) must not be mislabelled as "unresolved".
 func TestContextToolSelectedMemorySurfacesAgingForeshadow(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
 	}
-	// 当前章主题与所有伏笔都不沾边，确保相关性召回为空，只剩账龄回填生效。
+	// The current chapter's theme connects to none of the foreshadowing items, ensuring relevance recall is empty and only the age backfill is in play.
 	if err := s.Outline.SaveOutline([]domain.OutlineEntry{
 		{Chapter: 50, Title: "瘟疫", CoreEvent: "林砚在城南医馆救治瘟疫病患", Scenes: []string{"熬药", "封锁街巷"}},
 	}); err != nil {
@@ -837,7 +837,7 @@ func TestContextToolSelectedMemorySurfacesAgingForeshadow(t *testing.T) {
 	if err := s.Progress.Init(60); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
-	// 6 条满足召回阈值；前两条账龄 ≥30（久挂），后四条账龄 <30（近期）。
+	// 6 items meet the recall threshold; the first two have age >=30 (left hanging), the last four age <30 (recent).
 	if err := s.World.SaveForeshadowLedger([]domain.ForeshadowEntry{
 		{ID: "ancient_seal", Description: "上古封印的裂隙", PlantedAt: 3, Status: "planted"},
 		{ID: "lost_bloodline", Description: "主角失落的血脉来历", PlantedAt: 5, Status: "advanced"},
@@ -868,7 +868,7 @@ func TestContextToolSelectedMemorySurfacesAgingForeshadow(t *testing.T) {
 		t.Fatalf("Unmarshal: %v", err)
 	}
 
-	// 两条久挂伏笔应被回填，且带"未回收"账龄标注。
+	// The two long-hanging items should be backfilled, carrying the "unresolved" age annotation.
 	if !containsRecallSummary(payload.Selected.StoryThreads, "上古封印的裂隙") {
 		t.Fatalf("expected aging foreshadow to surface despite no relevance, got %+v", payload.Selected.StoryThreads)
 	}
@@ -878,7 +878,7 @@ func TestContextToolSelectedMemorySurfacesAgingForeshadow(t *testing.T) {
 	if !containsRecallSummary(payload.Selected.StoryThreads, "未回收") {
 		t.Fatalf("expected aging item to carry overdue annotation, got %+v", payload.Selected.StoryThreads)
 	}
-	// 近期伏笔（账龄 <30 且不相关）不应被回填。
+	// Recent items (age <30 and unrelated) should not be backfilled.
 	if containsRecallSummary(payload.Selected.StoryThreads, "昨夜集市的口角") {
 		t.Fatalf("recent foreshadow must not be labeled overdue, got %+v", payload.Selected.StoryThreads)
 	}
@@ -1182,8 +1182,8 @@ func TestContextToolLoadsArcReviewAffectingEarlierChapter(t *testing.T) {
 }
 
 func TestContextToolDoesNotInjectUserDirectives(t *testing.T) {
-	// save_directive 已移除：novel_context 不再注入 working_memory.user_directives，
-	// 长期写作要求统一走 user_rules。锁死这条，防止回归。
+	// save_directive has been removed: novel_context no longer injects working_memory.user_directives,
+	// long-term writing requirements all go through user_rules. Locking this down prevents a regression.
 	dir := t.TempDir()
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
@@ -1211,7 +1211,7 @@ func TestContextToolDoesNotInjectUserDirectives(t *testing.T) {
 		if _, exists := working["user_directives"]; exists {
 			t.Errorf("[%s] working_memory 不应再有 user_directives（已统一到 user_rules）", name)
 		}
-		// user_rules 仍应稳定注入
+		// user_rules should still be injected stably
 		if _, ok := working["user_rules"].(map[string]any); !ok {
 			t.Errorf("[%s] working_memory.user_rules 应稳定注入", name)
 		}
@@ -1254,7 +1254,7 @@ func TestContextToolComputesRuleViolationsFromAcceptedContent(t *testing.T) {
 		t.Fatalf("rule_violations 必须注入章节上下文, got %v", result["rule_violations"])
 	}
 
-	// 规则改变后，同一接纳正文应立即按新规则重算，不保留旧结果。
+	// After the rules change, the same accepted body text should immediately be recomputed under the new rules, keeping no old result.
 	updated := rules.BuildSnapshot([]rules.Candidate{{Source: "test"}})
 	if err := st.UserRules.Save(&updated); err != nil {
 		t.Fatalf("update rules: %v", err)

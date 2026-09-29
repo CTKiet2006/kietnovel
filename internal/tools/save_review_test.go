@@ -201,8 +201,8 @@ func TestSaveReviewRejectsIssueOutsideChapterScope(t *testing.T) {
 	}
 }
 
-// TestSaveReviewKeepsModelDefinedDimension 验证工具不再把文学评价维度和分数阈值
-// 写死在 Go 中；Editor 可以按当前任务补充更准确的评价面。
+// TestSaveReviewKeepsModelDefinedDimension verifies that the tool no longer hardcodes the literary evaluation dimensions and the score thresholds
+// in Go; the Editor may supplement a more accurate evaluation surface for the current task.
 func TestSaveReviewKeepsModelDefinedDimension(t *testing.T) {
 	s := store.NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
@@ -309,10 +309,10 @@ func TestSaveReviewRejectsIssueWithoutEvidence(t *testing.T) {
 	}
 }
 
-// TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition 防回归：返工排空中途
-// （Flow=rewriting、PendingRewrites=[8,9]）对已重写章复审得到 polish 时，
-// Flow=polishing 与 rewriting 构成非法迁移。ApplyReviewOutcome 必须在同一次写锁中
-// 完成校验和写入，非法迁移时队列保持不变。
+// TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition guards against regression: partway through draining rework
+// (Flow=rewriting, PendingRewrites=[8,9]), re-reviewing an already rewritten chapter and getting polish means
+// Flow=polishing, which is an illegal transition from rewriting. ApplyReviewOutcome must, inside the same write lock,
+// perform both the validation and the write, leaving the queue unchanged on an illegal transition.
 func TestSaveReviewDoesNotDirtyQueueOnIllegalFlowTransition(t *testing.T) {
 	s := store.NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
@@ -385,7 +385,7 @@ func TestSaveReviewKeepsOutcomeWhenReviewArtifactWriteFails(t *testing.T) {
 	if err := s.Progress.MarkChapterComplete(3, 3000, "", ""); err != nil {
 		t.Fatalf("MarkChapterComplete: %v", err)
 	}
-	// 让目标文件路径成为目录，稳定触发原子 rename 失败。
+	// Make the target file path into a directory, which reliably triggers an atomic rename failure.
 	if err := os.MkdirAll(filepath.Join(dir, "reviews", "03.json"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -452,7 +452,7 @@ func setupArcReviewStore(t *testing.T) *store.Store {
 			t.Fatal(err)
 		}
 	}
-	// 第一弧已经完整收尾，因此 Router 当前唯一待补工件是第二弧评审。
+	// The first arc has already been fully wrapped up, so the Router's only outstanding artifact is the second arc's review.
 	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 2, Scope: "arc", Verdict: "accept", Summary: "第一弧评审"}); err != nil {
 		t.Fatal(err)
 	}

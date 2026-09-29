@@ -8,9 +8,9 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
-// requireAggregateTarget 将 Editor 的新聚合写入绑定到 Router 当前唯一待补的工件。
-// 目标完全由已落盘事实推导，不依赖任务文案，也不信任模型自填的章节/卷弧号；
-// 已落盘同内容的幂等收尾由各工具在调用本函数前识别。
+// requireAggregateTarget binds the Editor's new aggregate write to the only artifact the Router currently has outstanding.
+// The target is derived purely from persisted facts: it does not rely on the task wording and does not trust chapter/volume/arc numbers the model filled in itself;
+// an idempotent wrap-up that would write content already on disk is recognised by each tool before it calls this function.
 func requireAggregateTarget(st *store.Store, kind flow.AggregateKind, volume, arc, endChapter int) error {
 	state, err := flow.LoadState(st)
 	if err != nil {
@@ -27,7 +27,7 @@ func requireAggregateTarget(st *store.Store, kind flow.AggregateKind, volume, ar
 	case flow.AggregateVolumeSummary:
 		targetMismatch = targetMismatch || due.Volume != volume
 	case flow.AggregateGlobalReview:
-		// 全局评审没有卷弧坐标，只由 kind 和截止章节定位。
+		// A global review has no volume/arc coordinates; it is located only by kind and the end chapter.
 	}
 	endMismatch := endChapter > 0 && due.EndChapter != endChapter
 	if targetMismatch || endMismatch {

@@ -16,7 +16,7 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// SaveReviewTool 保存 Editor 的审阅结果。
+// SaveReviewTool saves the Editor's review result.
 type SaveReviewTool struct {
 	store *store.Store
 }
@@ -33,7 +33,7 @@ func (t *SaveReviewTool) Description() string {
 }
 func (t *SaveReviewTool) Label() string { return "保存审阅" }
 
-// 写工具（同时更新 reviews/ 与 Progress 的 PendingRewrites/Flow），禁止并发。
+// A writing tool (it updates both reviews/ and Progress's PendingRewrites/Flow); concurrency is forbidden.
 func (t *SaveReviewTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *SaveReviewTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 func (t *SaveReviewTool) StrictSchema() bool                     { return true }
@@ -129,8 +129,8 @@ func (t *SaveReviewTool) Execute(_ context.Context, args json.RawMessage) (json.
 		}
 	}
 
-	// 先原子应用控制状态，再保存审阅工件。若第二步失败，返工意图仍然存在；
-	// Writer 排空队列后，路由会因审阅工件缺失而重新派发 Editor，不会跳过审阅。
+	// First apply the control state atomically, then save the review artifact. If the second step fails the rework intent still exists;
+	// once the Writer drains the queue, routing re-dispatches the Editor because the review artifact is missing, so the review is never skipped.
 	latest, err := t.store.Progress.ApplyReviewOutcome(reviewOutcome, affected, r.Summary)
 	if err != nil {
 		return nil, fmt.Errorf("apply review outcome: %w", err)
@@ -152,7 +152,7 @@ func (t *SaveReviewTool) finishReview(
 		return nil, fmt.Errorf("checkpoint review: %w", err)
 	}
 
-	// 使用原子更新返回的 Progress 快照作为事实，避免二次读取产生新的失败窗口。
+	// Use the Progress snapshot returned by the atomic update as the fact, to avoid a second read opening a new failure window.
 	nextFlow := string(domain.FlowWriting)
 	nextChapter := 0
 	if progress != nil {
@@ -276,8 +276,8 @@ func uniqueSortedChapters(chapters []int) []int {
 	return result
 }
 
-// reviewFlow 是文学裁定与持久化协议之间唯一的映射点。verdict 由 Editor 决定；
-// 这里只接受 Router 能恢复的三种控制结果。
+// reviewFlow is the only mapping point between the literary verdict and the persistence protocol. The verdict is decided by the Editor;
+// only the three control outcomes the Router can recover from are accepted here.
 func reviewFlow(verdict string) (domain.FlowState, error) {
 	switch verdict {
 	case "accept":

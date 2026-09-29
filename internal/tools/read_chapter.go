@@ -9,7 +9,7 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// ReadChapterTool 读取章节原文，让 Agent 能回读自己和前文的文字。
+// ReadChapterTool reads a chapter's raw text, so the Agent can re-read its own writing and the preceding text.
 type ReadChapterTool struct {
 	store *store.Store
 }
@@ -24,7 +24,7 @@ func (t *ReadChapterTool) Description() string {
 }
 func (t *ReadChapterTool) Label() string { return "读取章节" }
 
-// 纯读工具，可被并发调度（editor 审阅时常一次读多章）。
+// A pure read tool, so it can be scheduled concurrently (an editor reviewing often reads several chapters at once).
 func (t *ReadChapterTool) ReadOnly(_ json.RawMessage) bool        { return true }
 func (t *ReadChapterTool) ConcurrencySafe(_ json.RawMessage) bool { return true }
 
@@ -55,7 +55,7 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 		return nil, fmt.Errorf("source must be final or draft")
 	}
 
-	// 模式 1：提取角色对话
+	// Mode 1: extract character dialogue
 	if a.Character != "" {
 		var warnings []string
 		warn := func(scope string, err error) {
@@ -94,7 +94,7 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 		return json.Marshal(result)
 	}
 
-	// 模式 2：范围读取
+	// Mode 2: range read
 	if a.From > 0 && a.To > 0 {
 		maxRunes := a.MaxRunes
 		if maxRunes <= 0 {
@@ -129,7 +129,7 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 		})
 	}
 
-	// 模式 3：单章读取
+	// Mode 3: single-chapter read
 	if a.Chapter <= 0 {
 		return nil, fmt.Errorf("chapter is required")
 	}
@@ -162,7 +162,7 @@ func (t *ReadChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 	})
 }
 
-// maxCompletedChapter 返回已完成章节列表中的最大章节号。
+// maxCompletedChapter returns the largest chapter number in the list of completed chapters.
 func maxCompletedChapter(completed []int) int {
 	m := 0
 	for _, ch := range completed {

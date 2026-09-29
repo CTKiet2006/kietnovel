@@ -7,7 +7,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
-// completedBook 构造一本已完结的 N 章小说（phase=complete，CompletedChapters=1..n）。
+// completedBook builds an N-chapter novel that is already finished (phase=complete, CompletedChapters=1..n).
 func completedBook(t *testing.T, n int) *store.Store {
 	t.Helper()
 	s := store.NewStore(t.TempDir())
@@ -52,7 +52,7 @@ func TestReopenBookReopensCompletedBook(t *testing.T) {
 }
 
 func TestReopenBookRejectsNonCompleteBook(t *testing.T) {
-	// 写作中（未完结）的书不能 reopen
+	// A book that is still being written (not complete) cannot be reopened
 	s := store.NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
 		t.Fatalf("Init: %v", err)
@@ -71,11 +71,11 @@ func TestReopenBookRejectsNonCompleteBook(t *testing.T) {
 func TestReopenBookRejectsUnwrittenChapters(t *testing.T) {
 	s := completedBook(t, 3)
 
-	// 第 5 章不存在 → 拒绝（属续写/越界，应走篇幅调整）
+	// Chapter 5 does not exist -> rejected (that is a continuation / out-of-range write, so adjust the length instead)
 	if err := ReopenBook(s, []int{2, 5}, ""); err == nil {
 		t.Fatal("expected reopen to be rejected for unwritten chapter")
 	}
-	// 空 chapters → 拒绝
+	// Empty chapters -> rejected
 	if err := ReopenBook(s, nil, ""); err == nil {
 		t.Fatal("expected reopen to be rejected for empty chapters")
 	}

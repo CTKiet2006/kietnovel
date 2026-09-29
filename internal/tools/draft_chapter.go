@@ -12,8 +12,8 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// DraftChapterTool 写入整章草稿，替代旧的 write_scene + polish_chapter 流水线。
-// Agent 自主决定一次写完还是分批续写。
+// DraftChapterTool writes a whole chapter draft, replacing the old write_scene + polish_chapter pipeline.
+// The Agent decides on its own whether to write it in one go or continue in batches.
 type DraftChapterTool struct {
 	store *store.Store
 }
@@ -28,14 +28,14 @@ func (t *DraftChapterTool) Description() string {
 }
 func (t *DraftChapterTool) Label() string { return "写入章节" }
 
-// 写工具，禁止并发（读-改-写竞态）。
+// A writing tool; concurrency is forbidden (read-modify-write race).
 func (t *DraftChapterTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *DraftChapterTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
 func (t *DraftChapterTool) Schema() map[string]any {
-	// mode 标 required 是为了兼容 OpenAI strict tool calling——strict 模式
-	// 要求所有 properties 都在 required 列表中。原来的"省略 mode 走 write
-	// 默认"行为现在需要模型显式传 mode="write"，Execute 的 default 分支不变。
+	// mode is marked required for compatibility with OpenAI strict tool calling -- strict mode
+	// requires every properties entry to appear in the required list. The old "omit mode and take the write
+	// default" behaviour now needs the model to pass mode="write" explicitly; Execute's default branch is unchanged.
 	return schema.Object(
 		schema.Property("chapter", schema.Int("章节号")).Required(),
 		schema.Property("content", schema.String("章节正文")).Required(),
@@ -43,7 +43,7 @@ func (t *DraftChapterTool) Schema() map[string]any {
 	)
 }
 
-// StrictSchema 要求 Provider 保证工具参数符合 schema。
+// StrictSchema requires the Provider to guarantee that the tool arguments conform to the schema.
 func (t *DraftChapterTool) StrictSchema() bool { return true }
 
 func (t *DraftChapterTool) Execute(_ context.Context, args json.RawMessage) (json.RawMessage, error) {
@@ -72,7 +72,7 @@ func (t *DraftChapterTool) Execute(_ context.Context, args json.RawMessage) (jso
 		return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, err)
 	}
 	if completed {
-		// 打磨/重写路径：章节虽已完成，但仍在 pending_rewrites 中，允许覆盖草稿
+		// Polish/rewrite path: the chapter is already complete but is still in pending_rewrites, so overwriting the draft is allowed
 		progress, err := t.store.Progress.Load()
 		if err != nil {
 			return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, err)

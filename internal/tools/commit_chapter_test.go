@@ -233,9 +233,9 @@ func TestCommitChapterAllowsPendingRewrite(t *testing.T) {
 	}
 }
 
-// TestCommitChapterRewriteKeepsOwnForeshadowPlant 锁死 issue #112：重写伏笔的"种植章"时，
-// Writer 看到账本里该伏笔已存在，自然只写 advance；旧实现整条覆盖章节记录，plant 随之丢失，
-// Projector 全量重放时报"推进未知伏笔"并把返工队列锁死。种植事实必须被保留。
+// TestCommitChapterRewriteKeepsOwnForeshadowPlant locks down issue #112: when rewriting the "planting chapter" of a foreshadowing item,
+// the Writer sees that the foreshadowing item already exists in the ledger and naturally only writes an advance; the old implementation overwrote the whole chapter record, so the plant was lost with it,
+// and a full replay by the Projector then reported "advancing an unknown foreshadowing item" and deadlocked the rework queue. The planting fact must be preserved.
 func TestCommitChapterRewriteKeepsOwnForeshadowPlant(t *testing.T) {
 	const foreshadowID = "f_spillway_photo"
 	s := store.NewStore(t.TempDir())
@@ -245,7 +245,7 @@ func TestCommitChapterRewriteKeepsOwnForeshadowPlant(t *testing.T) {
 	if err := s.Progress.Init(10); err != nil {
 		t.Fatalf("InitProgress: %v", err)
 	}
-	// 第 2 章首次提交后的落盘状态：记录里是 plant，账本里已建起条目。
+	// The persisted state after chapter 2's first commit: the record holds a plant and the ledger has an entry.
 	if _, err := s.ChapterRecords.Accept(2, domain.ChapterOriginGenerated, "旧版正文。", domain.ChapterFacts{
 		Title: "第二章", Summary: "埋下线索", KeyEvents: []string{"发现旧照"},
 		ForeshadowUpdates: []domain.ForeshadowUpdate{{ID: foreshadowID, Action: "plant", Description: "泄洪道旧照"}},
@@ -322,8 +322,8 @@ func TestCommitChapterRewriteRepairsPlantLostByPreviousFailure(t *testing.T) {
 	if err := s.Progress.Init(10); err != nil {
 		t.Fatal(err)
 	}
-	// 模拟旧版本第一次返工失败后的状态：派生账本仍保留正确的种植事实，
-	// 但章节记录已被 advance 覆盖，缺少同章 plant。
+	// Simulate the state after the first rework failed on an older version: the derived ledger still holds the correct planting fact,
+	// but the chapter record has been overwritten by the advance and the same-chapter plant is missing.
 	oldContent := "旧版本失败后留下的终稿。"
 	if _, err := s.ChapterRecords.Accept(2, domain.ChapterOriginGenerated, oldContent, domain.ChapterFacts{
 		Title: "第二章", Summary: "损坏记录", KeyEvents: []string{"推进线索"},
@@ -445,10 +445,10 @@ func TestCommitChapterRewriteValidatesRecordSetBeforeWriting(t *testing.T) {
 	}
 }
 
-// TestCommitChapterRewriteRejectsForwardForeshadowReference 与上一个用例同源（issue #112）：
-// 账本是全书投影，重写早期章节时里面还躺着后续章节才种下的伏笔。旧实现放行 → Projector
-// 按章序重放时报"推进未知伏笔"，且此时章节记录已被覆盖，返工队列就此锁死。
-// 必须在落盘前挡下，并把"种植于第几章"讲清楚，模型才改得动。
+// TestCommitChapterRewriteRejectsForwardForeshadowReference has the same origin as the previous case (issue #112):
+// the ledger is a whole-book projection, so when an early chapter is rewritten it still holds foreshadowing that only later chapters planted. The old implementation let those through -> the Projector
+// replays in chapter order and reports "advancing an unknown foreshadowing item", and by then the chapter record has already been overwritten, so the rework queue deadlocks.
+// It must be stopped before anything is persisted, and "which chapter was it planted in" must be spelled out, otherwise the model cannot fix it.
 func TestCommitChapterRewriteRejectsForwardForeshadowReference(t *testing.T) {
 	s := store.NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
@@ -497,7 +497,7 @@ func TestCommitChapterRewriteRejectsForwardForeshadowReference(t *testing.T) {
 	if !strings.Contains(err.Error(), "种植于第 7 章") {
 		t.Fatalf("报错须指明种植章，模型才能自行修正，实际: %v", err)
 	}
-	// 关键：拦在落盘之前——章节记录和返工队列都不得被这次失败污染。
+	// Key point: blocked before anything is persisted -- neither the chapter record nor the rework queue may be polluted by this failure.
 	if pending, err := s.Signals.LoadPendingCommit(); err != nil || pending != nil {
 		t.Fatalf("校验失败不得留下 pending commit: pending=%+v err=%v", pending, err)
 	}
@@ -716,7 +716,7 @@ func TestCommitChapterProjectsCastFromRecords(t *testing.T) {
 	if err := s.Progress.UpdatePhase(domain.PhaseWriting); err != nil {
 		t.Fatalf("UpdatePhase: %v", err)
 	}
-	// 设定核心角色档案（这些不应进入配角视图）。
+	// Define the core character profiles (these must not end up in the supporting cast view).
 	if err := s.Characters.Save([]domain.Character{
 		{Name: "林墨", Role: "主角", Tier: "core"},
 		{Name: "李清砚", Role: "导师", Tier: "important"},
@@ -726,7 +726,7 @@ func TestCommitChapterProjectsCastFromRecords(t *testing.T) {
 	if err := s.Drafts.SaveDraft(1, "第一章正文，林墨遇到客栈老板老周与小厮阿云。"); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
-	// 旧版派生文件即使损坏，也不应参与当前提交或配角视图。
+	// A corrupt legacy derived file must still take no part in the current commit or in the supporting cast view.
 	if err := os.WriteFile(filepath.Join(dir, "meta", "cast_ledger.json"), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -817,7 +817,7 @@ func TestCommitChapterReplayAfterPartialCommitDoesNotDuplicateWorldState(t *test
 		Description: "黑影身份",
 	}}
 
-	// 模拟 commit_chapter 已写入世界状态，但尚未 MarkChapterComplete 时进程崩溃。
+	// Simulate the process crashing after commit_chapter wrote the world state but before MarkChapterComplete.
 	if err := s.World.AppendTimelineEvents(timeline); err != nil {
 		t.Fatalf("AppendTimelineEvents seed: %v", err)
 	}
@@ -851,7 +851,7 @@ func TestCommitChapterReplayAfterPartialCommitDoesNotDuplicateWorldState(t *test
 	}
 
 	tool := newTestCommitChapterTool(s)
-	// 模拟重启后的 Writer 重新生成了不同参数；恢复必须忽略它，使用 persistedArgs。
+	// Simulate the Writer after the restart having regenerated different parameters; recovery must ignore them and use persistedArgs.
 	args, _ := json.Marshal(map[string]any{
 		"chapter":         1,
 		"title":           "错误标题",
@@ -957,10 +957,10 @@ func TestCommitChapterRecoversProgressMarkedWindowWithExactOutput(t *testing.T) 
 	}
 }
 
-// TestCommitChapterRejectsPolishWithoutDraftChange 验证：已完成章节进入打磨/重写队列后，
-// 若正文和标题都没有变化，commit_chapter 必须拒绝空返工。
-// TestCommitChapterNonLayeredRecompletesAfterRework 验证非分层书完本后经 reopen 返工，
-// 改完章节 commit、队列排空时能自动重新回到 complete（补 drain 后判完结的非分层分支）。
+// TestCommitChapterRejectsPolishWithoutDraftChange verifies that once a completed chapter has entered the polish/rewrite queue,
+// if neither the body nor the title changed, commit_chapter must reject the empty rework.
+// TestCommitChapterNonLayeredRecompletesAfterRework verifies that for a non-layered book that was completed and then reworked via reopen,
+// committing the reworked chapter and draining the queue automatically returns the book to complete (the non-layered branch that determines completion after the drain).
 func TestCommitChapterNonLayeredRecompletesAfterRework(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -971,7 +971,7 @@ func TestCommitChapterNonLayeredRecompletesAfterRework(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	// 两章写完并完结。第 2 章备齐 drafts/chapters，供返工提交。
+	// Two chapters written and completed. Chapter 2 has both drafts/chapters ready, for the rework commit.
 	ch1 := "第一章原始正文。"
 	ch2 := "第二章原始正文，用于模拟已提交终稿。"
 	if err := s.Drafts.SaveFinalChapter(1, ch1); err != nil {
@@ -995,12 +995,12 @@ func TestCommitChapterNonLayeredRecompletesAfterRework(t *testing.T) {
 		t.Fatalf("MarkComplete: %v", err)
 	}
 
-	// reopen 第 2 章 → phase 回 writing、PendingRewrites=[2]、flow=rewriting
+	// reopen chapter 2 -> phase back to writing, PendingRewrites=[2], flow=rewriting
 	if err := s.Progress.Reopen([]int{2}, "返工"); err != nil {
 		t.Fatalf("Reopen: %v", err)
 	}
 
-	// 返工提交（草稿需与终稿不同才放行）
+	// The rework commit (the draft must differ from the final version to be let through)
 	if err := s.Drafts.SaveDraft(2, ch2+"\n\n返工新增段落。"); err != nil {
 		t.Fatalf("SaveDraft (reworked): %v", err)
 	}
@@ -1033,11 +1033,11 @@ func TestCommitChapterNonLayeredRecompletesAfterRework(t *testing.T) {
 	}
 }
 
-// TestCommitChapterLayeredReopenRecompletesDespiteOpenThread 验证收口：分层书经 reopen
-// 返工后，即便 compass 仍有未收束长线（返工可能扰动），排空后也按"结构完整"重新完结——
-// 不卡在 writing，杜绝终卷末越界续写死循环（§6.5 / known_outline_exhaustion 家族）。
-// 反证：若 reopen 路径仍用质量级 layeredBookComplete，本例 open thread 会让其返 false、
-// book_complete 为假，测试即失败。
+// TestCommitChapterLayeredReopenRecompletesDespiteOpenThread verifies the closing case: after a layered book is reworked via reopen,
+// even if the compass still has unresolved long threads (the rework may have disturbed them), it still re-completes on "structurally complete" after the drain --
+// it does not get stuck in writing, which rules out the out-of-range continuation livelock at the end of the final volume (§6.5 / the known_outline_exhaustion family).
+// Counter-proof: if the reopen path still used the quality-level layeredBookComplete, the open thread in this case would make it return false,
+// making book_complete false and the test would fail.
 func TestCommitChapterLayeredReopenRecompletesDespiteOpenThread(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1048,7 +1048,7 @@ func TestCommitChapterLayeredReopenRecompletesDespiteOpenThread(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	// 单卷单弧两章，全部展开
+	// A single volume, a single arc, two chapters, all expanded
 	foundation := NewSaveFoundationTool(s)
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
@@ -1068,7 +1068,7 @@ func TestCommitChapterLayeredReopenRecompletesDespiteOpenThread(t *testing.T) {
 		t.Fatalf("Execute layered: %v", err)
 	}
 
-	// 两章写完落盘并完结
+	// Both chapters written, persisted and completed
 	ch2 := "第二章原始正文，模拟已提交终稿。"
 	for ch, body := range map[int]string{1: "第一章正文。", 2: ch2} {
 		if err := s.Drafts.SaveDraft(ch, body); err != nil {
@@ -1086,12 +1086,12 @@ func TestCommitChapterLayeredReopenRecompletesDespiteOpenThread(t *testing.T) {
 		t.Fatalf("MarkComplete: %v", err)
 	}
 
-	// 模拟"返工扰动了长线"：compass 仍有未收束的 open thread
+	// Simulate "the rework disturbed a long thread": the compass still has an unresolved open thread
 	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "主角归乡", OpenThreads: []string{"宿敌未除"}}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}
 
-	// reopen 第 2 章 → 返工提交（草稿需与终稿不同才放行）
+	// reopen chapter 2 -> the rework commit (the draft must differ from the final version to be let through)
 	if err := s.Progress.Reopen([]int{2}, "返工"); err != nil {
 		t.Fatalf("Reopen: %v", err)
 	}
@@ -1132,7 +1132,7 @@ func TestCommitChapterRejectsPolishWithoutDraftChange(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	// 模拟第 2 章已正常完成：drafts 与 chapters 内容相同。
+	// Simulate chapter 2 having completed normally: drafts and chapters have identical content.
 	original := "第二章原始正文内容，用于模拟已提交终稿。"
 	if err := s.Drafts.SaveDraft(2, original); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
@@ -1147,7 +1147,7 @@ func TestCommitChapterRejectsPolishWithoutDraftChange(t *testing.T) {
 		t.Fatalf("SaveSummary: %v", err)
 	}
 
-	// 进入打磨队列：Flow=Polishing, PendingRewrites=[2]
+	// Enter the polish queue: Flow=Polishing, PendingRewrites=[2]
 	if err := s.Progress.SetPendingRewrites([]int{2}, "测试打磨"); err != nil {
 		t.Fatalf("SetPendingRewrites: %v", err)
 	}
@@ -1168,7 +1168,7 @@ func TestCommitChapterRejectsPolishWithoutDraftChange(t *testing.T) {
 		t.Fatal("expected commit to be rejected when drafts equals final content")
 	}
 
-	// 再写一版不同的草稿 → 应该通过
+	// Write a different draft version -> it should pass
 	polished := original + "\n\n打磨后新增段落。"
 	if err := s.Drafts.SaveDraft(2, polished); err != nil {
 		t.Fatalf("SaveDraft (polished): %v", err)
@@ -1239,9 +1239,9 @@ func TestCommitChapterAllowsTitleOnlyRewrite(t *testing.T) {
 	}
 }
 
-// TestCommitChapterLayeredRejectsOutOfRangeChapter 验证分层模式下，
-// 章号越出 layered_outline 的 commit 必须硬失败，而不是 slog.Warn 放行。
-// 这是阻止"裁定误判后 writer 一路裸跑"的物理刹车（《凡骨》ch204..347 案例）。
+// TestCommitChapterLayeredRejectsOutOfRangeChapter verifies that in layered mode a commit whose
+// chapter number falls outside layered_outline must hard-fail rather than being waved through by slog.Warn.
+// This is the physical brake against "a misjudgement lets the writer run on all the way" (the 《凡骨》ch204..347 case).
 func TestCommitChapterLayeredRejectsOutOfRangeChapter(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1252,7 +1252,7 @@ func TestCommitChapterLayeredRejectsOutOfRangeChapter(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	// 建一份 layered_outline，只有 1 卷 1 弧 1 章
+	// Build a layered_outline with only 1 volume, 1 arc and 1 chapter
 	foundation := NewSaveFoundationTool(s)
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
@@ -1272,7 +1272,7 @@ func TestCommitChapterLayeredRejectsOutOfRangeChapter(t *testing.T) {
 	}
 	_ = s.Progress.UpdatePhase(domain.PhaseWriting)
 
-	// 越界章节 2 的 commit 必须硬失败
+	// The commit of out-of-range chapter 2 must hard-fail
 	if err := s.Drafts.SaveDraft(2, "越界章节正文，必须被拦下。"); err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
@@ -1289,7 +1289,7 @@ func TestCommitChapterLayeredRejectsOutOfRangeChapter(t *testing.T) {
 		t.Fatal("expected commit to fail when chapter out of layered outline range")
 	}
 
-	// 章节文件不应落盘、Progress 不应推进
+	// No chapter file should be written and Progress should not advance
 	if _, statErr := os.Stat(dir + "/chapters/02.md"); !os.IsNotExist(statErr) {
 		t.Fatalf("chapter 2 should not be persisted, stat err=%v", statErr)
 	}
@@ -1299,11 +1299,11 @@ func TestCommitChapterLayeredRejectsOutOfRangeChapter(t *testing.T) {
 	}
 }
 
-// TestCommitChapterLayeredAutoCompletesWhenDone 验证分层模式确定性完结兜底：
-// 大纲全部展开并写完 + 无骨架弧 + 无返工 + 活跃伏笔为零 + 指南针长线收束时，
-// 最后一章 commit 自动推 Phase=Complete，不依赖架构师主动调 complete_book。
-// 这是 9bf26a5 删掉分层自动完结后引入的 livelock 的修复（终卷末尾模型既不 append
-// 也不 complete → 写手裸跑越界死循环）。
+// TestCommitChapterLayeredAutoCompletesWhenDone verifies the deterministic completion backstop in layered mode:
+// when the outline is fully expanded and written, there is no skeleton arc, no rework, active foreshadowing is zero and the compass long threads are resolved,
+// the last chapter's commit automatically pushes Phase=Complete without depending on the architect calling complete_book.
+// This is the fix for the livelock introduced when 9bf26a5 removed layered auto-completion (at the end of the final volume the model neither appends
+// nor completes -> the writer runs on into out-of-range chapters -> livelock).
 func TestCommitChapterLayeredAutoCompletesWhenDone(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1314,7 +1314,7 @@ func TestCommitChapterLayeredAutoCompletesWhenDone(t *testing.T) {
 		t.Fatalf("InitProgress: %v", err)
 	}
 
-	// 单卷单弧两章，全部展开（无骨架弧）
+	// A single volume, a single arc, two chapters, all expanded (no skeleton arc)
 	foundation := NewSaveFoundationTool(s)
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
@@ -1333,7 +1333,7 @@ func TestCommitChapterLayeredAutoCompletesWhenDone(t *testing.T) {
 	if _, err := foundation.Execute(context.Background(), layeredArgs); err != nil {
 		t.Fatalf("Execute layered: %v", err)
 	}
-	// 指南针长线已收束（OpenThreads 空）
+	// The compass long threads are resolved (OpenThreads empty)
 	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "主角归乡"}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}
@@ -1358,7 +1358,7 @@ func TestCommitChapterLayeredAutoCompletesWhenDone(t *testing.T) {
 		return out
 	}
 
-	// 第 1 章：未写完，不应完结
+	// Chapter 1: not finished, must not complete
 	if bc, _ := commit(1)["book_complete"].(bool); bc {
 		t.Fatal("写完第 1 章不应触发完结")
 	}
@@ -1366,7 +1366,7 @@ func TestCommitChapterLayeredAutoCompletesWhenDone(t *testing.T) {
 		t.Fatal("写完第 1 章 phase 不应为 complete")
 	}
 
-	// 第 2 章（最后一章）：应自动完结
+	// Chapter 2 (the last chapter): should complete automatically
 	if bc, _ := commit(2)["book_complete"].(bool); !bc {
 		t.Fatal("写完最后一章应自动完结")
 	}
@@ -1375,14 +1375,14 @@ func TestCommitChapterLayeredAutoCompletesWhenDone(t *testing.T) {
 	}
 }
 
-// TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads 验证收官卷全链路：
-// 已宣告收官卷（append_volume 带 final:true）后——
-//  1. 末章 commit 不完结：完结不抢在卷末收尾三连（弧评审/弧摘要/卷摘要）之前，
-//     结局必须过 editor 质量闸；
-//  2. 三连齐备、卷摘要落盘（save_volume_summary 触发点）即完结，不再要求
-//     伏笔/长线双归零——否则 estimated_scale 高估的书永远无法合法完本。
+// TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads verifies the whole finale volume chain:
+// after a finale volume has been declared (append_volume with final:true) --
+//  1. The last chapter's commit does not complete: completion must not jump ahead of the end-of-volume wrap-up trio (arc review / arc summary / volume summary),
+//     the ending must pass the editor quality gate;
+//  2. Once the trio is complete and the volume summary is persisted (the save_volume_summary trigger point) it completes, with no further requirement that
+//     foreshadowing / long threads both reach zero -- otherwise a book whose estimated_scale is overestimated can never legitimately finish.
 //
-// 与下方 NoAutoCompleteWithOpenThreads 互为对照：同样带未收长线，未宣告不完结、已宣告完结。
+// This is the counterpart to NoAutoCompleteWithOpenThreads below: same unresolved long thread, not declared means no completion, declared means completion.
 func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1409,7 +1409,7 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 		t.Fatalf("Execute layered: %v", err)
 	}
 
-	// 卷末宣告收官卷：append_volume 带 final:true
+	// Declare the finale volume at the end of a volume: append_volume with final:true
 	appendArgs, _ := json.Marshal(map[string]any{
 		"type":   "append_volume",
 		"reason": "长线可在一卷内收完，宣告收官卷",
@@ -1433,7 +1433,7 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 		t.Fatalf("append_volume 应返回 final_volume=true 事实, got %v", appendOut)
 	}
 
-	// 长线未收束（未宣告时这会阻止完结，见对照测试）
+	// Long thread unresolved (when not declared this blocks completion, see the counterpart test)
 	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "主角归乡", OpenThreads: []string{"宿敌未除"}}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}
@@ -1458,11 +1458,11 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 		return out
 	}
 
-	// 第 1 章（非终卷末章）：不应完结
+	// Chapter 1 (not the last chapter of the final volume): should not complete
 	if bc, _ := commit(1)["book_complete"].(bool); bc {
 		t.Fatal("收官卷尚未写完不应完结")
 	}
-	// 第一卷的聚合工件必须先完成，第二卷末的卷摘要才是 Router 当前目标。
+	// Volume 1's aggregate artifacts must be finished first; only then is the volume summary at the end of volume 2 the Router's current target.
 	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 1, Scope: "arc", Verdict: "accept", Summary: "第一卷评审"}); err != nil {
 		t.Fatalf("SaveReview v1: %v", err)
 	}
@@ -1472,7 +1472,7 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 	if err := s.Summaries.SaveVolumeSummary(domain.VolumeSummary{Volume: 1, Title: "卷一", Summary: "完成", KeyEvents: []string{"起"}}); err != nil {
 		t.Fatalf("SaveVolumeSummary v1: %v", err)
 	}
-	// 第 2 章（收官卷末章）：卷末收尾三连未齐，完结不得抢在 editor 评审/摘要之前
+	// Chapter 2 (the last chapter of the finale volume): the end-of-volume wrap-up trio is not complete, so completion must not jump ahead of the editor review / summary
 	if bc, _ := commit(2)["book_complete"].(bool); bc {
 		t.Fatal("末章 commit 时三连未齐，不应完结")
 	}
@@ -1480,7 +1480,7 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 		t.Fatal("完结不应发生在卷末评审与摘要之前")
 	}
 
-	// 卷末收尾三连：弧评审 + 弧摘要落盘后，卷摘要（save_volume_summary）是完结触发点
+	// The end-of-volume wrap-up trio: once the arc review and arc summary are persisted, the volume summary (save_volume_summary) is the completion trigger point
 	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 2, Scope: "arc", Verdict: "accept", Summary: "末弧评审"}); err != nil {
 		t.Fatalf("SaveReview: %v", err)
 	}
@@ -1507,9 +1507,9 @@ func TestCommitChapterFinaleVolumeCompletesDespiteOpenThreads(t *testing.T) {
 	}
 }
 
-// TestCommitChapterFinaleSkeletonArcBlocksCompletion 验证收官完结的结构闸门：
-// 收官卷仍有骨架弧（规划内容未写）时，即使三连齐备也不得完结——这是防止
-// "过早完结"的唯一防线（layeredStructurallyComplete 条件 2）。
+// TestCommitChapterFinaleSkeletonArcBlocksCompletion verifies the structural gate on finale completion:
+// while the finale volume still has a skeleton arc (planned content not yet written), completion is forbidden even if the trio is complete -- this is the only
+// defence against "completing too early" (condition 2 of layeredStructurallyComplete).
 func TestCommitChapterFinaleSkeletonArcBlocksCompletion(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1521,7 +1521,7 @@ func TestCommitChapterFinaleSkeletonArcBlocksCompletion(t *testing.T) {
 	}
 
 	foundation := NewSaveFoundationTool(s)
-	// 收官卷：第一弧展开 1 章，第二弧仍是骨架
+	// Finale volume: the first arc expands 1 chapter, the second arc is still a skeleton
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
@@ -1552,7 +1552,7 @@ func TestCommitChapterFinaleSkeletonArcBlocksCompletion(t *testing.T) {
 	if _, err := tool.Execute(context.Background(), args); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	// 三连齐备也不放行：骨架弧意味着规划内容还没写
+	// Not let through even though the trio is complete: a skeleton arc means the planned content is not written yet
 	if err := s.World.SaveReview(domain.ReviewEntry{Chapter: 1, Scope: "arc", Verdict: "accept", Summary: "弧评审"}); err != nil {
 		t.Fatalf("SaveReview: %v", err)
 	}
@@ -1571,11 +1571,11 @@ func TestCommitChapterFinaleSkeletonArcBlocksCompletion(t *testing.T) {
 	}
 }
 
-// TestCommitChapterLayeredNoAutoCompleteWithOpenThreads 验证保守性：仍有活跃长线时
-// 即使章节写满也不自动完结，把"是否继续"的裁定权留给架构师。
+// TestCommitChapterLayeredNoAutoCompleteWithOpenThreads verifies the conservative choice: while active long threads remain,
+// it does not complete automatically even with every chapter written, leaving the "should we continue" judgement to the architect.
 
-// TestCommitChapterLayeredNoAutoCompleteWithOpenThreads 验证保守性：仍有活跃长线时
-// 即使章节写满也不自动完结，把"是否继续"的裁定权留给架构师。
+// TestCommitChapterLayeredNoAutoCompleteWithOpenThreads verifies the conservative choice: while active long threads remain,
+// it does not complete automatically even with every chapter written, leaving the "should we continue" judgement to the architect.
 func TestCommitChapterLayeredNoAutoCompleteWithOpenThreads(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -1601,7 +1601,7 @@ func TestCommitChapterLayeredNoAutoCompleteWithOpenThreads(t *testing.T) {
 	if _, err := foundation.Execute(context.Background(), layeredArgs); err != nil {
 		t.Fatalf("Execute layered: %v", err)
 	}
-	// 仍有未收束的活跃长线
+	// There are still unresolved active long threads
 	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "主角归乡", OpenThreads: []string{"宿敌未除"}}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}

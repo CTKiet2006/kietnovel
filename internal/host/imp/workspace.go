@@ -9,27 +9,27 @@ import (
 	"path/filepath"
 )
 
-// workspaceSchemaVersion 是导入工作区整体 schema 版本。
-// 不匹配时显式要求用匹配版本继续或重新导入，不猜测迁移（RFC §6.1）。
+// workspaceSchemaVersion is the overall schema version of the import workspace.
+// On mismatch it explicitly demands a matching version to continue or a fresh import; no migration is guessed (RFC §6.1).
 const workspaceSchemaVersion = 1
 
-// Digest 计算内容摘要，沿用仓库既有约定 "sha256:"+hex（见 store/checkpoints.go）。
+// Digest computes a content digest, following the repo's existing "sha256:"+hex convention (see store/checkpoints.go).
 func Digest(data []byte) string {
 	sum := sha256.Sum256(data)
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-// Artifact 是工作区中每份语义工件的统一身份：schema 版本 + 输入摘要 + 载荷。
-// 只有能从当前真实语义输入重建出相同 InputDigest 才可复用（RFC §6.3 / 不变量 1）。
-// 不实现依赖图：LoadState 沿固定线性管线逐步比对 InputDigest 判定复用与失效，NextAction 据此推导下一步。
+// Artifact is the uniform identity of every semantic artifact in the workspace: schema version + input digest + payload.
+// It may be reused only if the same InputDigest can be rebuilt from the current real semantic inputs (RFC §6.3 / invariant 1).
+// No dependency graph is implemented: LoadState walks a fixed linear pipeline, comparing InputDigest step by step to decide reuse vs. invalidation, and NextAction derives the next step from that.
 type Artifact[T any] struct {
 	SchemaVersion int    `json:"schema_version"`
 	InputDigest   string `json:"input_digest"`
 	Payload       T      `json:"payload"`
 }
 
-// Manifest 对应唯一归一化源快照，是工作区身份而非派生工件（RFC §6.1）。
-// 不保存绝对源路径，避免泄露机器目录并消除移动文件带来的恢复问题。
+// Manifest describes the single normalized source snapshot; it is the workspace's identity, not a derived artifact (RFC §6.1).
+// It stores no absolute source path, which avoids leaking machine directories and removes recovery problems caused by moving the file.
 type Manifest struct {
 	Version          int    `json:"version"`
 	SourceName       string `json:"source_name"`
@@ -40,7 +40,7 @@ type Manifest struct {
 	CreatedAt        string `json:"created_at"`
 }
 
-// Intent 保存启动导入时的显式用户授权，恢复后仍必须遵守，不由工件猜出，Runner 不静默改写（RFC §6.1）。
+// Intent stores the explicit user authorizations given at import start; they must still be honored after recovery, are never guessed from artifacts, and the Runner never silently rewrites them (RFC §6.1).
 type Intent struct {
 	Version             int    `json:"version"`
 	AutoConfirm         bool   `json:"auto_confirm,omitempty"`
@@ -48,7 +48,7 @@ type Intent struct {
 	ContinueAfterImport bool   `json:"continue_after_import,omitempty"`
 }
 
-// 工作区标准工件相对路径。
+// Standard workspace artifact relative paths.
 const (
 	fileManifest     = "manifest.json"
 	fileIntent       = "intent.json"
@@ -64,20 +64,20 @@ const (
 	dirFailures      = "failures"
 )
 
-// Workspace 是 <书根>/meta/import/ 目录的原子工件读写句柄。
+// Workspace is an atomic artifact read/write handle for the <book root>/meta/import/ directory.
 type Workspace struct {
 	dir string
 }
 
-// OpenWorkspace 返回指向书根下 meta/import/ 的句柄；不保证目录已存在，用 Active() 判断。
+// OpenWorkspace returns a handle to meta/import/ under the book root; it does not guarantee the directory exists, use Active() to check.
 func OpenWorkspace(bookDir string) *Workspace {
 	return &Workspace{dir: filepath.Join(bookDir, "meta", "import")}
 }
 
 func (w *Workspace) path(rel string) string { return filepath.Join(w.dir, rel) }
 
-// Active 判断是否存在已发布的活动工作区。meta/import/ 不存在就不算活动，
-// 半初始化目录以 meta/import.init-* 形态存在，不会被误判为活动（RFC §6.1）。
+// Active reports whether a published active workspace exists. Without meta/import/ it is not active,
+// and half-initialized directories exist as meta/import.init-*, so they are never mistaken for active (RFC §6.1).
 func (w *Workspace) Active() bool {
 	fi, err := os.Stat(w.dir)
 	return err == nil && fi.IsDir()
@@ -88,7 +88,7 @@ func (w *Workspace) has(rel string) bool {
 	return err == nil
 }
 
-// writeAtomic 以「临时文件 + fsync + rename」原子写入 rel（相对工作区）。
+// writeAtomic atomically writes rel (relative to the workspace) via "temp file + fsync + rename".
 func (w *Workspace) writeAtomic(rel string, data []byte) error {
 	full := w.path(rel)
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
@@ -118,8 +118,8 @@ func (w *Workspace) writeAtomic(rel string, data []byte) error {
 	return nil
 }
 
-// syncDir best-effort fsync 目录项，使刚完成的 rename 在掉电后仍持久。
-// Windows 等平台可能不支持目录 Sync，其错误忽略——进程崩溃安全不依赖它，仅补掉电场景（RFC §12.3）。
+// syncDir best-effort fsyncs the directory entry so a just-completed rename survives power loss.
+// Platforms such as Windows may not support syncing a directory; its error is ignored -- crash safety does not depend on it, it only covers power loss (RFC §12.3).
 func syncDir(dir string) {
 	d, err := os.Open(dir)
 	if err != nil {
@@ -145,7 +145,7 @@ func (w *Workspace) readJSON(rel string, v any) error {
 	return json.Unmarshal(data, v)
 }
 
-// LoadManifest 读取工作区源快照身份。
+// LoadManifest reads the identity of the workspace's source snapshot.
 func (w *Workspace) LoadManifest() (*Manifest, error) {
 	var m Manifest
 	if err := w.readJSON(fileManifest, &m); err != nil {
@@ -157,7 +157,7 @@ func (w *Workspace) LoadManifest() (*Manifest, error) {
 	return &m, nil
 }
 
-// LoadIntent 读取用户启动授权。
+// LoadIntent reads the user's start-of-import authorizations.
 func (w *Workspace) LoadIntent() (*Intent, error) {
 	var in Intent
 	if err := w.readJSON(fileIntent, &in); err != nil {
@@ -166,14 +166,14 @@ func (w *Workspace) LoadIntent() (*Intent, error) {
 	return &in, nil
 }
 
-// LoadSource 读取归一化源快照文本。
+// LoadSource reads the text of the normalized source snapshot.
 func (w *Workspace) LoadSource() ([]byte, error) {
 	return os.ReadFile(w.path(fileSource))
 }
 
-// LoadGuidance 读取用户切分指导（RFC §18.3）；缺失即无指导。
-// 指导与 source.txt 同为切分的语义输入而非派生工件，由显式 --guide 更新，
-// 内容变化使 segmentation 及其下游 InputDigest 自然失配。
+// LoadGuidance reads the user's segmentation guidance (RFC §18.3); a missing file means no guidance.
+// Guidance, like source.txt, is a semantic input of segmentation rather than a derived artifact, and is updated by an explicit --guide,
+// so a content change naturally invalidates segmentation and everything downstream via InputDigest.
 func (w *Workspace) LoadGuidance() (string, error) {
 	data, err := os.ReadFile(w.path(fileGuidance))
 	if os.IsNotExist(err) {
@@ -185,12 +185,12 @@ func (w *Workspace) LoadGuidance() (string, error) {
 	return string(data), nil
 }
 
-// readBytes 读取工件原始字节，用于下游 InputDigest 绑定。
+// readBytes reads an artifact's raw bytes, used for downstream InputDigest binding.
 func (w *Workspace) readBytes(rel string) ([]byte, error) {
 	return os.ReadFile(w.path(rel))
 }
 
-// writeArtifact 写入带统一身份的语义工件。
+// writeArtifact writes a semantic artifact carrying the uniform identity.
 func writeArtifact[T any](w *Workspace, rel, inputDigest string, payload T) error {
 	return w.writeJSON(rel, Artifact[T]{
 		SchemaVersion: workspaceSchemaVersion,
@@ -199,7 +199,7 @@ func writeArtifact[T any](w *Workspace, rel, inputDigest string, payload T) erro
 	})
 }
 
-// readArtifact 读取语义工件并校验 schema 版本；InputDigest 是否匹配由调用方按当前输入判定。
+// readArtifact reads a semantic artifact and validates its schema version; whether the InputDigest matches is decided by the caller against the current inputs.
 func readArtifact[T any](w *Workspace, rel string) (*Artifact[T], error) {
 	var a Artifact[T]
 	if err := w.readJSON(rel, &a); err != nil {
@@ -211,13 +211,13 @@ func readArtifact[T any](w *Workspace, rel string) (*Artifact[T], error) {
 	return &a, nil
 }
 
-// clearDir 删除工作区内某个中间缓存目录。错误必须交调用方处置：吞掉会让「已清除」的
-// 文案撒谎——下次重跑照样复用坏缓存（Windows 反病毒/句柄占用是真实场景，Debug-First）。
+// clearDir deletes one of the workspace's intermediate cache directories. The error must be handed
+// to the caller: swallowing it makes the "cleared" message lie -- the next rerun reuses the bad cache anyway (Windows antivirus/handle-holding is a real scenario, Debug-First).
 func (w *Workspace) clearDir(rel string) error {
 	return os.RemoveAll(w.path(rel))
 }
 
-// FailureMeta 是最近一次失败的诊断元数据（RFC §14.2）。
+// FailureMeta is the diagnostic metadata of the most recent failure (RFC §14.2).
 type FailureMeta struct {
 	Stage         string `json:"stage"`
 	Detail        string `json:"detail"`
@@ -225,15 +225,15 @@ type FailureMeta struct {
 	PrefixSalvage string `json:"prefix_salvage,omitempty"` // available:N / unavailable
 }
 
-// writeFailure best-effort 保存最近失败的元数据与未裁剪的原始模型响应到 failures/（RFC §14.2）。
-// 原始响应可能含正文，仅落在用户自己的书目录，不进普通日志或脱敏诊断导出。
+// writeFailure best-effort saves the most recent failure's metadata and the untruncated raw model response to failures/ (RFC §14.2).
+// The raw response may contain body text, so it only lands in the user's own book directory, never in ordinary logs or redacted diagnostic exports.
 func (w *Workspace) writeFailure(meta FailureMeta, rawResponse string) {
 	_ = w.writeJSON(filepath.Join(dirFailures, "last.json"), meta)
 	_ = w.writeAtomic(filepath.Join(dirFailures, "last-response.txt"), []byte(rawResponse))
 }
 
-// createWorkspace 在临时目录写齐 manifest/intent/source 并校验后，以目录 rename 原子发布为 meta/import/。
-// 这样初始三件套不会以半初始化形态进入 NextAction，也无需 stage=initializing（RFC §6.1）。
+// createWorkspace writes manifest/intent/source into a temp directory, validates them, then atomically publishes by directory rename to meta/import/.
+// This way the initial trio never reaches NextAction in a half-initialized form, and no stage=initializing is needed (RFC §6.1).
 func createWorkspace(bookDir string, m Manifest, in Intent, normalized []byte) (*Workspace, error) {
 	base := filepath.Join(bookDir, "meta")
 	final := filepath.Join(base, "import")
@@ -264,7 +264,7 @@ func createWorkspace(bookDir string, m Manifest, in Intent, normalized []byte) (
 	if err := tw.writeJSON(fileIntent, in); err != nil {
 		return nil, err
 	}
-	// 发布前校验三件套可读且源快照与 manifest 一致，杜绝半写工作区。
+	// Before publishing, verify the trio is readable and the source snapshot matches the manifest, eliminating half-written workspaces.
 	got, err := tw.LoadManifest()
 	if err != nil {
 		return nil, fmt.Errorf("校验初始 manifest：%w", err)

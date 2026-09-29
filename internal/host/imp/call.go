@@ -14,20 +14,20 @@ import (
 	"github.com/voocel/litellm"
 )
 
-// callModel 是内核对模型的最小依赖，便于测试注入 mock。
+// callModel is the kernel's minimal dependency on the model, which makes it easy to inject a mock in tests.
 type callModel interface {
 	Generate(ctx context.Context, messages []agentcore.Message, tools []agentcore.ToolSpec, opts ...agentcore.CallOption) (*agentcore.LLMResponse, error)
 }
 
-// errTruncated 表示模型因长度停止（容量错误）。携带原始文本供调用方决定失败或前缀打捞（§9.5）。
+// errTruncated signals that the model stopped on length (a capacity error). It carries the raw text so the caller can decide between failing and salvaging a prefix (§9.5).
 type errTruncated struct {
 	Raw string
 }
 
 func (e *errTruncated) Error() string { return "模型输出被长度截断（stop=length）" }
 
-// errSemantic 表示无法通过重问修复的输出层失败，携带原始响应，
-// 供 runner 统一落 failures/ 失败工件（§14.2），所有语义函数共用。
+// errSemantic signals an output-layer failure that re-asking cannot repair; it carries the raw response
+// so the runner can uniformly persist a failures/ failure artifact (§14.2). Shared by every semantic function.
 type errSemantic struct {
 	Raw string
 	Err error
@@ -36,17 +36,17 @@ type errSemantic struct {
 func (e *errSemantic) Error() string { return e.Err.Error() }
 func (e *errSemantic) Unwrap() error { return e.Err }
 
-// callProfile 承载 thinking 与可观测性选项，由 Host 探测的 ModelRuntime 派生。
-// 结构化协议由 callStructured 依据模型事实和静态 Contract 独立选择。
+// callProfile carries the thinking and observability options, derived from the ModelRuntime probed by the Host.
+// The structured protocol is chosen independently by callStructured from the model facts and the static Contract.
 type callProfile struct {
 	thinking agentcore.ThinkingLevel
-	// notify 可选：把请求退避重试/校验重问回显给界面；nil 时静默（§14.1）。
-	// retryAt 非零 = 下次重试的截止时刻，UI 据此渲染逐秒倒计时（事件只带截止点，剩余时间渲染时算）。
+	// notify is optional: it echoes request-backoff retries / validation re-asks to the UI; nil means silent (§14.1).
+	// retryAt non-zero = the deadline of the next retry, which the UI renders as a per-second countdown (the event carries only the deadline; the remaining time is computed at render time).
 	notify func(msg string, retryAt time.Time)
-	// progress 可选：回显长时阶段的内部推进（切分第 N/M 块、区间摘要 N/M）；nil 时静默。
-	// 切分/综合在函数内部逐块/逐区间调用模型，单块可达数分钟，没有它面板整段静默像卡死（§14.1）。
+	// progress is optional: it echoes internal progress inside long-running stages (segmentation chunk N/M, range digest N/M); nil means silent.
+	// Segmentation/synthesis call the model chunk by chunk / range by range inside the function and one chunk can take minutes; without this the panel goes silent for the whole stretch and looks hung (§14.1).
 	progress func(current, total int, msg string)
-	// log 可选：导入专属日志（logs/import.log）；nil 回退默认 logger。
+	// log is optional: the import-specific log (logs/import.log); nil falls back to the default logger.
 	log *slog.Logger
 }
 
@@ -57,27 +57,27 @@ func (p callProfile) logger() *slog.Logger {
 	return slog.Default()
 }
 
-// step 回显一条普通进度（长时阶段的内部推进）。
+// step echoes one ordinary progress update (internal progress of a long-running stage).
 func (p callProfile) step(current, total int, format string, args ...any) {
 	if p.progress != nil {
 		p.progress(current, total, fmt.Sprintf(format, args...))
 	}
 }
 
-// say 回显一条长时调用状态。重试可能静默数分钟（指数退避累计 2 分钟以上），
-// 不回显用户会误以为卡死。
+// say echoes one long-running call status. A retry can stay silent for minutes (exponential backoff accumulating past 2 minutes),
+// and without an echo the user would assume it hung.
 func (p callProfile) say(format string, args ...any) {
 	p.sayRetry(time.Time{}, format, args...)
 }
 
-// sayRetry 回显一条带重试截止时刻的状态，供 UI 倒计时。
+// sayRetry echoes a status carrying the retry deadline, for the UI countdown.
 func (p callProfile) sayRetry(retryAt time.Time, format string, args ...any) {
 	if p.notify != nil {
 		p.notify(fmt.Sprintf(format, args...), retryAt)
 	}
 }
 
-// snippet 把多行文本压成单行短摘要供界面回显：合并空白、截到 max 个 rune。
+// snippet squeezes multi-line text into a one-line short summary for the UI: whitespace merged, truncated to max runes.
 func snippet(s string, max int) string {
 	s = strings.Join(strings.Fields(s), " ")
 	if r := []rune(s); len(r) > max {
@@ -86,8 +86,8 @@ func snippet(s string, max int) string {
 	return s
 }
 
-// briefErr 把错误压成单行短文本供界面回显（完整错误链仍走日志与失败工件）。
-// 适配器结构化事实放前面：截断时优先保住"哪类错、什么状态码"，网关 message 可牺牲。
+// briefErr squeezes an error into one-line short text for the UI (the full error chain still goes to the log and the failure artifact).
+// The adapter's structured facts come first: on truncation "which kind of error, which status code" is what must survive, the gateway message is expendable.
 func briefErr(err error) string {
 	s := err.Error()
 	if d := modelErrDetail(err); d != "" {
@@ -96,7 +96,7 @@ func briefErr(err error) string {
 	return snippet(s, 100)
 }
 
-// errTypeLabels 把 litellm 错误分类翻成一眼可读的中文短标签。
+// errTypeLabels turns litellm error classifications into short, at-a-glance Chinese labels.
 var errTypeLabels = map[litellm.ErrorType]string{
 	litellm.ErrorTypeAuth:            "鉴权失败",
 	litellm.ErrorTypeRateLimit:       "限流",
@@ -112,10 +112,10 @@ var errTypeLabels = map[litellm.ErrorType]string{
 	litellm.ErrorTypeContentFilter:   "内容过滤拦截",
 }
 
-// modelErrDetail 从错误链提取适配器的结构化事实（错误分类、HTTP 状态、provider、模型）。
-// 网关的 message 常常只有一句空泛的 "Provider returned error"，单靠它无法判断是配置错、
-// 上游故障还是限流；这些事实 litellm 一直带着，只是不进 Error() 文案。agentcore 适配器的
-// Unwrap 明确允许知道 litellm 的调用方 errors.As 取原始错误。非模型调用错误返回空串。
+// modelErrDetail extracts the adapter's structured facts from the error chain (error class, HTTP status, provider, model).
+// The gateway's message is often just one vague "Provider returned error", which on its own cannot tell a configuration error apart from an
+// upstream failure or rate limit; litellm has always carried these facts, they just never reach the Error() text. The agentcore adapter's
+// Unwrap explicitly lets callers that know about litellm use errors.As to reach the original error. Non-model-call errors return an empty string.
 func modelErrDetail(err error) string {
 	var le *litellm.LiteLLMError
 	if !errors.As(err, &le) {
@@ -137,8 +137,8 @@ func modelErrDetail(err error) string {
 	return strings.Join(parts, "，")
 }
 
-// callOptions 组装本次调用的 CallOption：始终带输出上限；按能力可选 thinking。
-// thinking 仅在非 Auto 时发送——对不支持 thinking 的模型发任何等级（含 off）都是非法参数（与 arbiter 同策略）。
+// callOptions assembles this call's CallOption list: the output cap is always present; thinking is included per capability.
+// thinking is sent only when it is not Auto -- any level (including off) is an illegal parameter for a model that does not support thinking (same policy as arbiter).
 func (p callProfile) callOptions(maxTokens int) []agentcore.CallOption {
 	opts := []agentcore.CallOption{agentcore.WithMaxTokens(maxTokens)}
 	if p.thinking != agentcore.ThinkingAuto {
@@ -147,7 +147,7 @@ func (p callProfile) callOptions(maxTokens int) []agentcore.CallOption {
 	return opts
 }
 
-// callStructured 为导入层适配统一结构化执行器，并把通用失败映射为导入工件语义。
+// callStructured adapts the unified structured executor for the import layer and maps generic failures onto import artifact semantics.
 func callStructured[T any](ctx context.Context, m callModel, contract llmcontract.Contract, systemPrompt, payload string, maxTokens int, prof callProfile, validate func(*T) error) (T, error) {
 	out, err := llmcontract.Execute(ctx, m, llmcontract.Request[T]{
 		Contract:     contract,

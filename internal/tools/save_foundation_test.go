@@ -282,7 +282,7 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 
 	tool := NewSaveFoundationTool(s)
 
-	// 先创建初始 layered_outline（卷1）
+	// First create the initial layered_outline (volume 1)
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
@@ -298,7 +298,7 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 		t.Fatalf("Execute layered: %v", err)
 	}
 
-	// append_volume：追加卷2
+	// append_volume: append volume 2
 	appendArgs, _ := json.Marshal(map[string]any{
 		"type":   "append_volume",
 		"reason": "主线仍有多条长线未收束，需继续第二卷",
@@ -320,7 +320,7 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 		t.Fatalf("expected volume=2, got %v", result["volume"])
 	}
 
-	// 验证大纲有 2 卷
+	// Verify the outline has 2 volumes
 	volumes, _ := s.Outline.LoadLayeredOutline()
 	if len(volumes) != 2 {
 		t.Fatalf("expected 2 volumes, got %d", len(volumes))
@@ -329,7 +329,7 @@ func TestSaveFoundationAppendVolume(t *testing.T) {
 		t.Fatalf("expected title '第二卷', got %q", volumes[1].Title)
 	}
 
-	// 卷末判定理由必须进裁定审计
+	// The end-of-volume decision reason must go into the decision audit
 	recs, _ := s.Decisions.Recent(1)
 	if len(recs) != 1 || recs[0].Kind != "volume_end" || recs[0].Decider != "architect" {
 		t.Fatalf("append_volume 应落一条 volume_end 裁定审计, got %+v", recs)
@@ -357,7 +357,7 @@ func TestExpandNextArcCalibratesTarget(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("SaveLayeredOutline: %v", err)
 	}
-	// v0.7.9 以前 append_volume 允许模型漏填机械 index；新工具按结构位置处理。
+	// Before v0.7.9, append_volume allowed the model to omit the mechanical index; the new tool derives it from the structural position.
 	legacy, err := os.ReadFile(filepath.Join(dir, "layered_outline.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -415,7 +415,7 @@ func TestSaveFoundationAppendVolumeAssignsIndexes(t *testing.T) {
 
 	tool := NewSaveFoundationTool(s)
 
-	// 初始卷
+	// The initial volume
 	layeredArgs, _ := json.Marshal(map[string]any{
 		"type": "layered_outline",
 		"content": []map[string]any{{
@@ -429,7 +429,7 @@ func TestSaveFoundationAppendVolumeAssignsIndexes(t *testing.T) {
 	})
 	tool.Execute(context.Background(), layeredArgs)
 
-	// 模型提供的机械序号被忽略，store 按故事顺序生成。
+	// The mechanical ordinal supplied by the model is ignored; the store generates one in story order.
 	appendArgs, _ := json.Marshal(map[string]any{
 		"type":   "append_volume",
 		"reason": "测试理由",
@@ -461,8 +461,8 @@ func TestSaveFoundationAppendVolumeAssignsIndexes(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationAppendVolumeRejectsAfterComplete 验证 Phase=Complete 后不允许 append_volume。
-// 取代旧的"Final 卷拒绝追加"语义（Final 字段已删除）。
+// TestSaveFoundationAppendVolumeRejectsAfterComplete verifies that append_volume is not allowed after Phase=Complete.
+// This replaces the old "reject appending to a Final volume" semantics (the Final field has been removed).
 func TestSaveFoundationAppendVolumeRejectsAfterComplete(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -617,9 +617,9 @@ func TestSaveFoundationAcceptsDirectJSONArrayContent(t *testing.T) {
 	}
 }
 
-// completeBookSetup 建一份处于 writing 阶段、共 2 章的最小 Store,用于 complete_book
-// 系列测试。工具层校验(全部可枚举,进代码不进提示词):progress 已初始化、
-// PendingRewrites 为空、至少写完一章、大纲内无未写章节。
+// completeBookSetup builds a minimal Store in the writing phase with 2 chapters, for the complete_book
+// test series. Tool-layer checks (all enumerable, in code rather than in the prompt): progress is initialised,
+// PendingRewrites is empty, at least one chapter has been written, and the outline has no unwritten chapters.
 func completeBookSetup(t *testing.T) *store.Store {
 	t.Helper()
 	dir := t.TempDir()
@@ -663,7 +663,7 @@ func TestSaveFoundationCompleteBookPushesPhaseComplete(t *testing.T) {
 		t.Fatalf("expected progress.Phase=complete, got %s", progress.Phase)
 	}
 
-	// 完结判定的理由必须进裁定审计（事实快照取判定时刻）
+	// The reason for the completion decision must go into the decision audit (the fact snapshot is taken at the moment of the decision)
 	recs, _ := s.Decisions.Recent(1)
 	if len(recs) != 1 || recs[0].Kind != "volume_end" || recs[0].Decider != "architect" {
 		t.Fatalf("complete_book 应落一条 volume_end 裁定审计, got %+v", recs)
@@ -676,9 +676,9 @@ func TestSaveFoundationCompleteBookPushesPhaseComplete(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationCompleteBookRejectsZeroChapters 复现真实事故:规划刚落盘
-// phase 自动翻到 writing,弱模型顺手误调 complete_book——一章未写必须拒绝,
-// 否则整本书被跳过(0/68 章标记完本)。
+// TestSaveFoundationCompleteBookRejectsZeroChapters reproduces a real incident: planning had just been persisted
+// and phase had auto-flipped to writing, so a weak model casually called complete_book -- with not one chapter written it must be rejected,
+// otherwise the entire book gets skipped (0/68 chapters marked complete).
 func TestSaveFoundationCompleteBookRejectsZeroChapters(t *testing.T) {
 	s := completeBookSetup(t)
 	tool := NewSaveFoundationTool(s)
@@ -695,10 +695,10 @@ func TestSaveFoundationCompleteBookRejectsZeroChapters(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationCompleteBookRejectsOpenThreads 守护"长线未收束不可完本"的工具级
-// 防线：OpenThreads 契约即"需收束才能结局"，但实测架构师会在论述里把未收束长线豁免为
-// "作者有意留白"直接完本（导入完本书续写场景，用户续写诉求被完本规则锁死）。豁免必须
-// 显式落盘——update_compass 清空 open_threads 后方可完本。
+// TestSaveFoundationCompleteBookRejectsOpenThreads guards the tool-level enforcement of "no completion while a long thread is unresolved"
+// defence: the OpenThreads contract is exactly "must be resolved for an ending", but in practice the architect waives an unresolved thread in its reasoning as
+// "deliberate authorial blank space" and completes the book outright (in the scenario of continuing an imported finished book, the user's wish to keep writing is locked behind the completion rules). Any waiver must
+// be explicitly persisted -- update_compass must clear open_threads before completion is allowed.
 func TestSaveFoundationCompleteBookRejectsOpenThreads(t *testing.T) {
 	s := completeBookSetup(t)
 	for ch := 1; ch <= 2; ch++ {
@@ -722,7 +722,7 @@ func TestSaveFoundationCompleteBookRejectsOpenThreads(t *testing.T) {
 	if p, _ := s.Progress.Load(); p.Phase != domain.PhaseWriting {
 		t.Fatalf("phase 应保持 writing，得 %s", p.Phase)
 	}
-	// 显式收束落盘（update_compass 清空 open_threads）后放行。
+	// Allowed once the explicit resolution is persisted (update_compass clears open_threads).
 	if err := s.Outline.SaveCompass(domain.StoryCompass{EndingDirection: "终局已达成"}); err != nil {
 		t.Fatalf("SaveCompass: %v", err)
 	}
@@ -731,8 +731,8 @@ func TestSaveFoundationCompleteBookRejectsOpenThreads(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationCompleteBookRejectsUnwrittenChapters 大纲内还有未写章节时
-// 不可完本(提前收束的正规路径是 final 收官卷)。
+// TestSaveFoundationCompleteBookRejectsUnwrittenChapters when the outline still has unwritten chapters
+// completion is not allowed (the regular path for closing early is a final finale volume).
 func TestSaveFoundationCompleteBookRejectsUnwrittenChapters(t *testing.T) {
 	s := completeBookSetup(t)
 	if err := s.Progress.MarkChapterComplete(1, 3000, "", ""); err != nil {
@@ -757,7 +757,7 @@ func TestSaveFoundationCompleteBookRejectsUnwrittenChapters(t *testing.T) {
 }
 
 func TestSaveFoundationCompleteBookRejectsBeforeWriting(t *testing.T) {
-	// 规划阶段误调 complete_book 必须被拒，否则会直接跳过整本写作。
+	// A mistaken complete_book call during planning must be rejected, otherwise it would skip the writing of the whole book outright.
 	dir := t.TempDir()
 	s := store.NewStore(dir)
 	if err := s.Init(); err != nil {
@@ -782,8 +782,8 @@ func TestSaveFoundationCompleteBookRejectsBeforeWriting(t *testing.T) {
 	}
 }
 
-// TestSaveFoundationVolumeEndRequiresReason 卷末三选一必须带判定理由——
-// 它是全书最重的语义判断，理由要成为审计事实而不是散在会话日志里。
+// TestSaveFoundationVolumeEndRequiresReason the end-of-volume choice of three must carry a reason --
+// it is the heaviest semantic judgement in the whole book, and the reason must become an audit fact rather than being scattered across the session log.
 func TestSaveFoundationVolumeEndRequiresReason(t *testing.T) {
 	s := completeBookSetup(t)
 	tool := NewSaveFoundationTool(s)

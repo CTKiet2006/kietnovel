@@ -43,7 +43,7 @@ func TestNextActionChain(t *testing.T) {
 			if got != c.want {
 				t.Fatalf("NextAction=%s want=%s", got, c.want)
 			}
-			// 对同一事实快照恒定。
+			// Constant for the same fact snapshot.
 			if NextAction(c.f) != got {
 				t.Fatal("NextAction 对同一 Facts 不恒定")
 			}
@@ -53,12 +53,12 @@ func TestNextActionChain(t *testing.T) {
 
 func TestLoadStateReflectsWorkspace(t *testing.T) {
 	book := t.TempDir()
-	// 未建区：非活动 → ingest。
+	// Workspace not yet created: not active -> ingest.
 	w := OpenWorkspace(book)
 	if NextAction(mustLoadState(t, w)) != ActionIngest {
 		t.Fatal("空书应先 ingest")
 	}
-	// 建区后：workspace ready、未切分 → segment。
+	// After creation: workspace ready, not segmented -> segment.
 	src := filepath.Join(book, "book.txt")
 	if err := os.WriteFile(src, []byte("第一章\n正文\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -112,7 +112,7 @@ func TestIngestSnapshotConsistent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// 源快照必须已归一化，且摘要与 manifest 一致。
+	// The source snapshot must already be normalized and its digest must agree with the manifest.
 	if string(snap) != "第一章\n正文一\n\n第二章\n正文二" {
 		t.Fatalf("源快照未归一化：%q", snap)
 	}
@@ -121,8 +121,8 @@ func TestIngestSnapshotConsistent(t *testing.T) {
 	}
 }
 
-// TestGuidanceChangeInvalidatesSegmentation 守护 §18.3：切分指导是 segmentation 的语义输入，
-// 指导变化使旧切分（及其全部下游）自然失配重做，不需要手工失效规则。
+// TestGuidanceChangeInvalidatesSegmentation guards §18.3: segmentation guidance is a semantic input of segmentation,
+// so a guidance change naturally mismatches and redoes the old segmentation (and everything downstream), with no manual invalidation rule needed.
 func TestGuidanceChangeInvalidatesSegmentation(t *testing.T) {
 	book := t.TempDir()
 	src := filepath.Join(book, "book.txt")
@@ -152,8 +152,8 @@ func TestGuidanceChangeInvalidatesSegmentation(t *testing.T) {
 	}
 }
 
-// TestResumeSummary 守护 §18.2 启动提示：无工作区返回空串；停在半路时给出阶段化描述，
-// 使用户不必等到创作被门禁拒绝才发现这本书停在导入半路。
+// TestResumeSummary guards the §18.2 startup notice: with no workspace it returns an empty string; when stuck mid-way it gives a stage-specific description,
+// so the user does not have to wait until their writing is rejected by the gate to learn that this book is stuck mid-import.
 func TestResumeSummary(t *testing.T) {
 	dir := t.TempDir()
 	st := store.NewStore(dir)
@@ -174,7 +174,7 @@ func TestResumeSummary(t *testing.T) {
 	if got := ResumeSummary(st); !strings.Contains(got, "尚未完成切分") {
 		t.Fatalf("刚建区应提示未完成切分，得 %q", got)
 	}
-	// 切分+确认就绪、分析 0/1 → 提示分析进度。
+	// Segmentation + confirmation ready, analysis 0/1 -> report analysis progress.
 	norm, _ := ws.LoadSource()
 	seg := Segmentation{Chapters: []ChapterSpan{{Number: 1, Title: "第一章", Start: 0, End: len(norm)}}}
 	if err := writeArtifact(ws, fileSegmentation, segmentInputDigest(Digest(norm), "", segmentPromptVersion), seg); err != nil {
@@ -189,9 +189,9 @@ func TestResumeSummary(t *testing.T) {
 	}
 }
 
-// TestResumeStatusPublishedIsTerminal 守护发布终态（实测事故）：书已全量发布后，
-// segmentPromptVersion 升级使工作区切分工件失鲜，ResumeStatus 不得据此把书判回
-// "导入半路"——否则 startEngine 跨重启门禁会永久拒启已发布书的续写。
+// TestResumeStatusPublishedIsTerminal guards the published terminal state (from a real incident): once the book is fully published,
+// a segmentPromptVersion upgrade makes the workspace segmentation artifact stale, and ResumeStatus must not on that basis judge the book back into
+// "mid-import" -- otherwise startEngine's cross-restart gate would permanently refuse to start continued writing on an already published book.
 func TestResumeStatusPublishedIsTerminal(t *testing.T) {
 	dir := t.TempDir()
 	st := store.NewStore(dir)
@@ -207,16 +207,16 @@ func TestResumeStatusPublishedIsTerminal(t *testing.T) {
 		t.Fatalf("Ingest: %v", err)
 	}
 	norm, _ := ws.LoadSource()
-	// 用旧版本号写切分：模拟发布后 prompt 升级导致的 digest 失配。
+	// Write the segmentation with an old version number: simulates the digest mismatch caused by a post-publish prompt upgrade.
 	seg := Segmentation{Chapters: []ChapterSpan{{Number: 1, Title: "第一章", Start: 0, End: len(norm)}}}
 	if err := writeArtifact(ws, fileSegmentation, segmentInputDigest(Digest(norm), "", "seg-v0"), seg); err != nil {
 		t.Fatal(err)
 	}
-	// 未发布 + 切分失鲜：仍是半路导入，门禁应拦。
+	// Unpublished + stale segmentation: still a mid-import, the gate should block.
 	if active, done, err := ResumeStatus(st); err != nil || !active || done {
 		t.Fatalf("未发布的失鲜工作区应判未完成（active=%v done=%v）", active, done)
 	}
-	// 正式库已按该切分全量落库 → 发布对账通过，终态不受上游失鲜影响。
+	// The official store was written in full from that segmentation -> publish reconciliation passes, the terminal state is unaffected by upstream staleness.
 	if err := st.Book.Save(domain.BookMetadata{Title: "测试书", Synopsis: "测试简介"}); err != nil {
 		t.Fatal(err)
 	}
@@ -238,12 +238,12 @@ func TestResumeStatusPublishedIsTerminal(t *testing.T) {
 }
 
 func TestImportPreconditions(t *testing.T) {
-	// 空书通过。
+	// An empty book passes.
 	empty := store.NewStore(t.TempDir())
 	if err := checkImportPreconditions(empty); err != nil {
 		t.Fatalf("空书应通过前置校验：%v", err)
 	}
-	// 有完成章节被拒。
+	// Having completed chapters is rejected.
 	nonEmpty := store.NewStore(t.TempDir())
 	if err := nonEmpty.Progress.Save(&domain.Progress{CompletedChapters: []int{1, 2}}); err != nil {
 		t.Fatal(err)
