@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore/schema"
 )
 
 // CheckConsistencyTool 返回章节内容和全部状态数据，供 Agent 自行对照判断。

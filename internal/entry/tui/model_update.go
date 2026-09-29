@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"log/slog"
 	"slices"
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/CTKiet2006/kietnovel/internal/entry/startup"
 	"github.com/CTKiet2006/kietnovel/internal/host"
 	"github.com/CTKiet2006/kietnovel/internal/host/imp"
 	"github.com/CTKiet2006/kietnovel/internal/utils"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 const maxPromptEventCols = 160
@@ -121,8 +122,12 @@ func (m Model) toggleMouseReporting() (Model, tea.Cmd) {
 	return m, tea.EnableMouseCellMotion
 }
 
-// donePlaceholder gợi ý khung nhập lúc xong: xong trong phiên (doneMsg) và khởi động lại vào sách đã xong (bootstrap) dùng chung.
-const donePlaceholder = "Đã viết xong · gõ yêu cầu sửa (vd \"viết lại chương 3\"), /reopen viết tập mới, /export xuất"
+// donePlaceholder() gợi ý khung nhập lúc xong: xong trong phiên (doneMsg) và khởi động lại vào sách đã xong (bootstrap) dùng chung.
+// Là hàm chứ không phải hằng số, vì i18n.T không phải hằng số, và placeholder phải
+// dịch lại được khi đổi ngôn ngữ giữa phiên.
+func donePlaceholder() string {
+	return i18n.T("Đã viết xong · gõ yêu cầu sửa (vd \"viết lại chương 3\"), /reopen viết tập mới, /export xuất")
+}
 
 // enterRunning vào bàn viết: mở báo cáo chuột (bàn viết cần click đổi panel / cuộn /
 // kéo sidebar). Lệnh trả về bên gọi phải Batch vào giá trị trả cuối.
@@ -451,7 +456,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			enableMouse := m.enterRunning()
 			m.mode = modeDone
 			m.resizeTextarea()
-			m.textarea.Placeholder = donePlaceholder
+			m.textarea.Placeholder = donePlaceholder()
 			if msg.err != nil {
 				m.err = msg.err
 			}
@@ -500,7 +505,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			// Trạng thái xong không khóa khung nhập: dừng tự viết tiếp, nhưng user vẫn gõ được yêu cầu sửa (nhập ở modeDone qua
 			// Continue đánh thức vòng run mới, Arbiter phán quyết sửa hay viết tiếp; lệnh /export, /model
 			// cũng cần dùng được, khung nhập phải giữ focus (issue #27, #38)).
-			m.textarea.Placeholder = donePlaceholder
+			m.textarea.Placeholder = donePlaceholder()
 			return m, tea.Batch(fetchSnapshot(m.runtime), listenDone(m.runtime), m.textarea.Focus()), true
 		}
 		if m.abortPending {
@@ -508,13 +513,13 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			m.snapshot.RuntimeState = "paused"
 			m.syncRuntimePlaceholder()
 		} else {
-			m.textarea.Placeholder = "Bị ngắt, gõ gì đó để viết tiếp"
+			m.textarea.Placeholder = i18n.T("Bị ngắt, gõ gì đó để viết tiếp")
 		}
 		return m, tea.Batch(fetchSnapshot(m.runtime), listenDone(m.runtime)), true
 	case abortResultMsg:
 		if msg.stopped {
 			m.abortPending = true
-			m.textarea.Placeholder = "Đang dừng viết..."
+			m.textarea.Placeholder = i18n.T("Đang dừng viết...")
 		}
 		return m, nil, true
 	case reportLoadedMsg:
@@ -570,7 +575,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	case exportDoneMsg:
 		if msg.err != nil {
 			m.applyEvent(host.Event{
-				Time: time.Now(), Category: "ERROR", Summary: "Xuất thất bại: " + msg.err.Error(), Level: "error",
+				Time: time.Now(), Category: "ERROR", Summary: i18n.T("Xuất thất bại: ") + msg.err.Error(), Level: "error",
 			})
 		} else if msg.result != nil {
 			m.applyEvent(host.Event{
@@ -581,9 +586,9 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, true
 	case updateCheckMsg:
 		if msg.err != nil {
-			message := "Kiểm tra bản mới lúc khởi động thất bại"
+			message := i18n.T("Kiểm tra bản mới lúc khởi động thất bại")
 			if msg.result != nil {
-				message = "Kiểm tra bản mới lúc khởi động xong, nhưng cache bất thường"
+				message = i18n.T("Kiểm tra bản mới lúc khởi động xong, nhưng cache bất thường")
 			}
 			slog.Warn(message, "module", "version", "err", msg.err)
 		}
@@ -601,11 +606,11 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		return m, nil, true
 	case revisionDoneMsg:
 		if msg.err != nil {
-			m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: "Đồng bộ chương thất bại: " + msg.err.Error(), Level: "error"})
+			m.applyEvent(host.Event{Time: time.Now(), Category: "ERROR", Summary: i18n.T("Đồng bộ chương thất bại: ") + msg.err.Error(), Level: "error"})
 		} else if msg.checkOnly {
-			summary := "Không phát hiện chương nào bị sửa từ bên ngoài"
+			summary := i18n.T("Không phát hiện chương nào bị sửa từ bên ngoài")
 			if len(msg.chapters) > 0 {
-				summary = fmt.Sprintf("Phát hiện nội dung chương bị sửa từ bên ngoài: %v; chạy /sync để nhận", msg.chapters)
+				summary = fmt.Sprintf(i18n.T("Phát hiện nội dung chương bị sửa từ bên ngoài: %v; chạy /sync để nhận"), msg.chapters)
 			}
 			m.applyEvent(host.Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: "info"})
 		} else {
@@ -631,11 +636,11 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		m.modelConfig.testing = false
 		m.modelConfig.testCancel = nil
 		if errors.Is(msg.err, context.Canceled) {
-			m.modelConfig.message = "Đã hủy test kết nối"
+			m.modelConfig.message = i18n.T("Đã hủy test kết nối")
 		} else if msg.err != nil {
 			m.modelConfig.message = msg.err.Error()
 		} else {
-			m.modelConfig.message = "Test kết nối thành công: " + msg.model
+			m.modelConfig.message = i18n.T("Test kết nối thành công: ") + msg.model
 		}
 		return m, nil, true
 	case startResultMsg:
@@ -778,7 +783,7 @@ func (m Model) handleStartResultMsg(msg startResultMsg) (tea.Model, tea.Cmd) {
 			m.mode = modeRunning
 			m.snapshot.IsRunning = false
 			m.snapshot.RuntimeState = "idle"
-			m.textarea.Placeholder = "Khởi động thất bại, kiểm tra cấu hình model hoặc /model đổi model"
+			m.textarea.Placeholder = i18n.T("Khởi động thất bại, kiểm tra cấu hình model hoặc /model đổi model")
 			m.refreshStreamViewport()
 			m.refreshStateViewport()
 			return m, m.textarea.Focus()
@@ -811,10 +816,10 @@ func (m *Model) enterStarting(rawPrompt string) tea.Cmd {
 	enableMouse := m.enterRunning()
 	m.resetOutputPanels()
 	m.resizeTextarea()
-	m.textarea.Placeholder = "Đang khởi tạo truyện..."
+	m.textarea.Placeholder = i18n.T("Đang khởi tạo truyện...")
 	m.applyStartupPromptEvent(rawPrompt)
 	m.applyEvent(host.Event{
-		Time: time.Now(), Category: "SYSTEM", Summary: "Đang khởi tạo truyện", Level: "info",
+		Time: time.Now(), Category: "SYSTEM", Summary: i18n.T("Đang khởi tạo truyện"), Level: "info",
 	})
 	m.refreshEventViewport()
 	m.refreshStreamViewport()
@@ -830,7 +835,7 @@ func (m *Model) applyStartupPromptEvent(rawPrompt string) {
 	m.applyEvent(host.Event{
 		Time:     time.Now(),
 		Category: "USER",
-		Summary:  "Yêu cầu truyện: " + truncate(text, maxPromptEventCols),
+		Summary:  i18n.T("Yêu cầu truyện: ") + truncate(text, maxPromptEventCols),
 		Detail:   text,
 		Level:    "info",
 	})

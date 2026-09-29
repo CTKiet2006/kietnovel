@@ -1,11 +1,13 @@
 package tui
 
 import (
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strings"
 
+	"github.com/CTKiet2006/kietnovel/internal/host"
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/CTKiet2006/kietnovel/internal/host"
 )
 
 // renderTopBar vẽ thanh trạng thái trên đỉnh.
@@ -13,12 +15,12 @@ import (
 func renderTopBar(snap host.UISnapshot, width int, spinnerFrame, version string) string {
 	bookTitle := snap.BookTitle
 	if bookTitle == "" {
-		bookTitle = "Chưa đặt tên"
+		bookTitle = i18n.T("Chưa đặt tên")
 	}
 
 	var infoParts []string
 	if version != "" {
-		infoParts = append(infoParts, "ainovel-cli "+version)
+		infoParts = append(infoParts, buildversion.AppName+" "+version)
 	}
 	if snap.Provider != "" {
 		infoParts = append(infoParts, snap.Provider)
@@ -43,7 +45,7 @@ func renderTopBar(snap host.UISnapshot, width int, spinnerFrame, version string)
 	if !ok {
 		color = colorDim
 	}
-	disp, ok := statusDisplay[label]
+	disp, ok := statusDisplay()[label]
 	if !ok {
 		disp = struct {
 			icon  string
@@ -145,7 +147,7 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 	subtitle := lipgloss.NewStyle().
 		Foreground(colorMuted).
 		Italic(true).
-		Render("Engine sáng tác tiểu thuyết bằng AI")
+		Render(i18n.T("Engine sáng tác tiểu thuyết bằng AI"))
 
 	// Đường phân cách
 	divW := 44
@@ -157,10 +159,10 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 
 	// Điểm nổi bật
 	features := []struct{ icon, label, desc string }{
-		{">>", "Đa model phối hợp", "Architect dàn ý / Writer viết / Editor duyệt"},
-		{"::", "Tự nối khi đứt đoạn", "Sập hay ngắt giữa chừng vẫn viết tiếp từ chỗ cũ"},
-		{"<>", "Can thiệp trực tiếp", "Đang viết vẫn chỉnh hướng truyện được"},
-		{"##", "Truyện dài phân tầng", "Viết trường thiên theo tầng tập - cung - chương"},
+		{">>", i18n.T("Đa model phối hợp"), i18n.T("Architect dàn ý / Writer viết / Editor duyệt")},
+		{"::", i18n.T("Tự nối khi đứt đoạn"), i18n.T("Sập hay ngắt giữa chừng vẫn viết tiếp từ chỗ cũ")},
+		{"<>", i18n.T("Can thiệp trực tiếp"), i18n.T("Đang viết vẫn chỉnh hướng truyện được")},
+		{"##", i18n.T("Truyện dài phân tầng"), i18n.T("Viết trường thiên theo tầng tập - cung - chương")},
 	}
 	iconStyle := lipgloss.NewStyle().Foreground(colorAccent2).Bold(true)
 	featLabelStyle := lipgloss.NewStyle().Foreground(bodyTextColor)
@@ -175,17 +177,17 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 	feats := strings.Join(featLines, "\n")
 
 	// Gợi ý nhập
-	prompt := lipgloss.NewStyle().Foreground(bodyTextColor).Render("Nhập ý tưởng truyện của bạn ở dưới để bắt đầu")
+	prompt := lipgloss.NewStyle().Foreground(bodyTextColor).Render(i18n.T("Nhập ý tưởng truyện của bạn ở dưới để bắt đầu"))
 
 	modeLine := lipgloss.NewStyle().
 		Foreground(colorMuted).
-		Render("Chế độ hiện tại: " + mode.label() + " · " + mode.subtitle())
+		Render(i18n.T("Chế độ hiện tại: ") + mode.label() + " · " + mode.subtitle())
 
 	// Ví dụ
 	examples := []string{
-		"Viết truyện đô thị huyền nghi 12 chương, chính là nữ pháp y",
-		"Sáng tác trường thiên tiên hiệp, chính từ phàm nhân tu tới phi thăng",
-		"Viết truyện ngắn khoa học viễn tưởng về AI thức tỉnh và nghịch lý đạo đức",
+		i18n.T("Viết truyện đô thị huyền nghi 12 chương, chính là nữ pháp y"),
+		i18n.T("Sáng tác trường thiên tiên hiệp, chính từ phàm nhân tu tới phi thăng"),
+		i18n.T("Viết truyện ngắn khoa học viễn tưởng về AI thức tỉnh và nghịch lý đạo đức"),
 	}
 	exStyle := lipgloss.NewStyle().Foreground(colorAccent)
 	dotStyle := lipgloss.NewStyle().Foreground(colorDim)
@@ -220,7 +222,7 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 			Render("! " + importHint))
 	} else {
 		b.WriteString(lipgloss.NewStyle().Foreground(colorDim).
-			Render("Có dàn ý/thiết lập sẵn? /start <đường dẫn file> để tạo truyện mới · Có bản thảo cũ? /import <đường dẫn file> để nhập vào viết tiếp"))
+			Render(i18n.T("Có dàn ý/thiết lập sẵn? /start <đường dẫn file> để tạo truyện mới · Có bản thảo cũ? /import <đường dẫn file> để nhập vào viết tiếp")))
 	}
 	if updateHint != "" {
 		// Kiểm tra bản mới lúc khởi động trúng bản mới: thêm một dòng cùng kiểu nhấn như importHint.
@@ -230,7 +232,7 @@ func renderWelcome(width, height int, errMsg string, mode startupMode, importHin
 	}
 	b.WriteString("\n\n")
 	b.WriteString(lipgloss.NewStyle().Foreground(colorDim).Italic(true).
-		Render("Tab đổi chế độ · Bắt đầu nhanh thì Enter là viết · Đồng sáng tác thì Enter để trò chuyện"))
+		Render(i18n.T("Tab đổi chế độ · Bắt đầu nhanh thì Enter là viết · Đồng sáng tác thì Enter để trò chuyện")))
 
 	if errMsg != "" {
 		b.WriteString("\n\n")

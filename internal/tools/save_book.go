@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore/schema"
 )
 
 // SaveBookTool 保存作品对外信息，Architect 专用。

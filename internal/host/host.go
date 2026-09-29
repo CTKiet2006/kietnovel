@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,8 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/voocel/agentcore"
-	"github.com/voocel/agentcore/subagent"
 	"github.com/CTKiet2006/kietnovel/assets"
 	"github.com/CTKiet2006/kietnovel/internal/agents"
 	"github.com/CTKiet2006/kietnovel/internal/agents/ctxpack"
@@ -33,6 +32,8 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/tools"
 	"github.com/CTKiet2006/kietnovel/internal/userrules"
 	"github.com/CTKiet2006/kietnovel/internal/utils"
+	"github.com/voocel/agentcore"
+	"github.com/voocel/agentcore/subagent"
 )
 
 // Host là vỏ runtime: vòng đời / cửa vào can thiệp / chiếu sự kiện / quản lý model.
@@ -233,7 +234,7 @@ func New(cfg bootstrap.Config, bundle assets.Bundle, options ...NewOption) (*Hos
 		func(reason string) { h.abortWithEvent(reason, "error") },
 		func(level, summary string) {
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: level})
-			h.notifier.Send(notify.Notification{Kind: notify.KindBudget, Level: level, Title: "ainovel: Ngân sách", Body: summary})
+			h.notifier.Send(notify.Notification{Kind: notify.KindBudget, Level: level, Title: buildversion.AppName + ": Ngân sách", Body: summary})
 		},
 	); sentinel != nil {
 		h.budget = sentinel
@@ -243,18 +244,18 @@ func New(cfg bootstrap.Config, bundle assets.Bundle, options ...NewOption) (*Hos
 		usage.SetOnMissingUsage(func() {
 			const blind = "Vùng mù ngân sách: model không trả dữ liệu usage, chi phí tính ra 0 nên trần ngân sách không kích hoạt (với model tuỳ chỉnh, hãy xác nhận giá trong registry hoặc include_usage ở phía trên)"
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: blind, Level: "warn"})
-			h.notifier.Send(notify.Notification{Kind: notify.KindBudget, Level: "warn", Title: "ainovel: Ngân sách", Body: blind})
+			h.notifier.Send(notify.Notification{Kind: notify.KindBudget, Level: "warn", Title: buildversion.AppName + ": Ngân sách", Body: blind})
 		})
 	}
 	// Cổng tiến thế thống nhất: thực hiện hold một lần và chặn chương mới không có giấy phép ở chế độ review.
 	h.gate = NewChapterAdvanceGate(store,
 		func(reason string) {
 			h.abortWithEvent(reason, "info")
-			h.notifier.Send(notify.Notification{Kind: notify.KindAdvanceGate, Level: "info", Title: "ainovel: Chờ duyệt", Body: reason})
+			h.notifier.Send(notify.Notification{Kind: notify.KindAdvanceGate, Level: "info", Title: buildversion.AppName + ": Chờ duyệt", Body: reason})
 		},
 		func(level, summary string) {
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: level})
-			h.notifier.Send(notify.Notification{Kind: notify.KindAdvanceGate, Level: level, Title: "ainovel: Đẩy chương", Body: summary})
+			h.notifier.Send(notify.Notification{Kind: notify.KindAdvanceGate, Level: level, Title: buildversion.AppName + ": Đẩy chương", Body: summary})
 		},
 	)
 	// Sự kiện chặn của StopGuard: blocked là hành động tự lành tần suất cao, chỉ vào luồng sự kiện trong
@@ -265,11 +266,11 @@ func New(cfg bootstrap.Config, bundle assets.Bundle, options ...NewOption) (*Hos
 		case "escalated":
 			body := fmt.Sprintf("%s liên tục %d lần quay không tạo ra sản phẩm bắt buộc, dừng nhiệm vụ vòng này và trả lại Engine xử lý", agent, n)
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Agent: agent, Summary: "StopGuard nâng cấp: " + body, Level: "warn"})
-			h.notifier.Send(notify.Notification{Kind: notify.KindStopGuard, Level: "warn", Title: "ainovel: StopGuard", Body: body})
+			h.notifier.Send(notify.Notification{Kind: notify.KindStopGuard, Level: "warn", Title: buildversion.AppName + ": StopGuard", Body: body})
 		case "hard_stop":
 			body := fmt.Sprintf("%s bị provider từ chối (safety/content_filter), dừng ngay nhiệm vụ vòng này", agent)
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Agent: agent, Summary: "StopGuard nâng cấp: " + body, Level: "warn"})
-			h.notifier.Send(notify.Notification{Kind: notify.KindStopGuard, Level: "warn", Title: "ainovel: StopGuard", Body: body})
+			h.notifier.Send(notify.Notification{Kind: notify.KindStopGuard, Level: "warn", Title: buildversion.AppName + ": StopGuard", Body: body})
 		default: // blocked
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Agent: agent,
 				Summary: fmt.Sprintf("StopGuard: %s định kết thúc khi chưa tạo đủ sản phẩm bắt buộc, đã chặn và nhắc lại (lần thứ %d liên tiếp)", agent, n), Level: "info"})
@@ -1074,7 +1075,7 @@ func (h *Host) runEnded() {
 		h.mu.Unlock()
 		h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: "success"})
 		h.notifier.Send(notify.Notification{
-			Kind: notify.KindRunEnd, Level: "info", Title: "ainovel: Đã hoàn thành truyện",
+			Kind: notify.KindRunEnd, Level: "info", Title: buildversion.AppName + ": Đã hoàn thành truyện",
 			Body: h.runEndBody("", summary),
 		})
 	} else {
@@ -1095,7 +1096,7 @@ func (h *Host) runEnded() {
 			summary := fmt.Sprintf("Engine đã dừng (đã xong %d chương)", completed)
 			h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: summary, Level: "warn"})
 			h.notifier.Send(notify.Notification{
-				Kind: notify.KindRunEnd, Level: "warn", Title: "ainovel: Đã dừng viết",
+				Kind: notify.KindRunEnd, Level: "warn", Title: buildversion.AppName + ": Đã dừng viết",
 				Body: h.runEndBody(title, summary),
 			})
 		}

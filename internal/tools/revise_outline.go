@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore/schema"
 )
 
 // ReviseOutlineTool 让 Architect 用完整替换内容修订尚未发生的大纲尾段。

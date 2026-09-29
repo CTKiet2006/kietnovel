@@ -9,11 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/models"
 	storepkg "github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore"
 )
 
 // recentSampleCap 是滑动窗大小：只保留每个 role 最近 N 次调用的 (cacheRead, input)

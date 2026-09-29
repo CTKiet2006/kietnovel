@@ -2,13 +2,14 @@ package tui
 
 import (
 	"fmt"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/CTKiet2006/kietnovel/internal/host"
 	"github.com/CTKiet2006/kietnovel/internal/utils"
+	"github.com/charmbracelet/bubbles/viewport"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // renderEventContent render danh sách sự kiện thành luồng sự kiện phân cấp.
@@ -184,7 +185,7 @@ func retryCountdown(retryAt, now time.Time) string {
 		return ""
 	}
 	secs := int((remain + time.Second - 1) / time.Second)
-	return fmt.Sprintf("thử lại sau %ds", secs)
+	return fmt.Sprintf(i18n.T("thử lại sau %ds"), secs)
 }
 
 // renderDispatchSummary render tóm tắt DISPATCH: tên agent dùng màu role, task dùng màu nhạt.
@@ -292,7 +293,7 @@ func renderEventFlowViewport(vp viewport.Model, width, height int, focused bool)
 	if focused {
 		titleColor = colorAccent
 	}
-	title := lipgloss.NewStyle().Foreground(titleColor).Render(":: Luồng sự kiện")
+	title := lipgloss.NewStyle().Foreground(titleColor).Render(i18n.T(":: Luồng sự kiện"))
 	lineW := width - lipgloss.Width(title) - 4
 	if lineW < 0 {
 		lineW = 0
@@ -318,7 +319,7 @@ func renderStreamPanel(vp viewport.Model, width, height int, focused, running bo
 	// tránh đụng màu với dòng suy nghĩ xám nhạt in nghiêng
 	// khi focused thêm gạch chân để phân biệt trạng thái focus.
 	titleStyle := lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Underline(focused)
-	title := titleStyle.Render("▍ Xuất trực tiếp")
+	title := titleStyle.Render(i18n.T("▍ Xuất trực tiếp"))
 	if running {
 		status := renderStreamActivity(frame)
 		title += " " + status

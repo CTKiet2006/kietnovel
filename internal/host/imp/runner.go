@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/logger"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore"
 )
 
 // prompt/schema 版本纳入各阶段 InputDigest；升级 prompt 契约时递增以自然失效下游工件。

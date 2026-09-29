@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/rules"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore"
 )
 
 // nil 模型 + 空规则目录：归一化全降级，但快照仍可产出（system_defaults 兜底）并落盘。

@@ -2,7 +2,9 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strings"
 	"time"
 
@@ -96,11 +98,11 @@ func (s *simulationState) refresh(contentW int) {
 	b.WriteString(titleStyle.Render(s.title))
 	b.WriteString("\n\n")
 	if s.source != "" {
-		b.WriteString(dimStyle.Render("Nguồn "))
+		b.WriteString(dimStyle.Render(i18n.T("Nguồn ")))
 		b.WriteString(s.source)
 		b.WriteString("\n")
 	}
-	b.WriteString(dimStyle.Render("Bắt đầu "))
+	b.WriteString(dimStyle.Render(i18n.T("Bắt đầu ")))
 	b.WriteString(formatReportTime(s.startedAt))
 	if !s.finishedAt.IsZero() {
 		b.WriteString(dimStyle.Render("  Xong "))
@@ -108,17 +110,17 @@ func (s *simulationState) refresh(contentW int) {
 	}
 	b.WriteString("\n\n")
 
-	b.WriteString(mutedStyle.Render("Giai đoạn "))
+	b.WriteString(mutedStyle.Render(i18n.T("Giai đoạn ")))
 	b.WriteString(stageStyle.Render(string(s.stage)))
 	if s.total > 0 {
-		b.WriteString(mutedStyle.Render("  Tiến độ "))
+		b.WriteString(mutedStyle.Render(i18n.T("  Tiến độ ")))
 		b.WriteString(fmt.Sprintf("%d/%d", s.current, s.total))
 	}
 	b.WriteString("\n\n")
 
-	b.WriteString(titleStyle.Render("Nhật ký chạy"))
+	b.WriteString(titleStyle.Render(i18n.T("Nhật ký chạy")))
 	b.WriteString(" ")
-	b.WriteString(dimStyle.Render(fmt.Sprintf("(%d dòng)", len(s.history))))
+	b.WriteString(dimStyle.Render(fmt.Sprintf(i18n.T("(%d dòng)"), len(s.history))))
 	b.WriteString("\n")
 	for _, ln := range s.history {
 		b.WriteString("\n")
@@ -139,15 +141,15 @@ func (s *simulationState) refresh(contentW int) {
 	b.WriteString("\n\n")
 	switch {
 	case !s.done:
-		b.WriteString(dimStyle.Render("Esc hủy"))
+		b.WriteString(dimStyle.Render(i18n.T("Esc hủy")))
 	case s.err != nil:
-		b.WriteString(errStyle.Render("Xử lý hồ sơ văn phong thất bại"))
+		b.WriteString(errStyle.Render(i18n.T("Xử lý hồ sơ văn phong thất bại")))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("Esc đóng panel"))
+		b.WriteString(dimStyle.Render(i18n.T("Esc đóng panel")))
 	default:
-		b.WriteString(okStyle.Render("Hồ sơ văn phong đã sẵn sàng, Agent sau sẽ đọc từ novel_context"))
+		b.WriteString(okStyle.Render(i18n.T("Hồ sơ văn phong đã sẵn sàng, Agent sau sẽ đọc từ novel_context")))
 		b.WriteString("\n")
-		b.WriteString(dimStyle.Render("Esc đóng panel"))
+		b.WriteString(dimStyle.Render(i18n.T("Esc đóng panel")))
 	}
 
 	s.viewport.SetContent(b.String())
@@ -169,8 +171,8 @@ func renderSimulationModal(width, height int, s *simulationState) string {
 	if s.viewport.Height != boxH-4 {
 		s.viewport.Height = boxH - 4
 	}
-	hint := "  ↑↓ cuộn · Esc hủy/đóng"
-	modal := renderPaddedModalFrame(boxW, boxH, "Hồ sơ văn phong", hint, strings.Split(s.viewport.View(), "\n"))
+	hint := i18n.T("  ↑↓ cuộn · Esc hủy/đóng")
+	modal := renderPaddedModalFrame(boxW, boxH, i18n.T("Hồ sơ văn phong"), hint, strings.Split(s.viewport.View(), "\n"))
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)
 }
 
@@ -200,7 +202,7 @@ func (m Model) handleSimulationKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func startSimulate(rt *host.Host, reqID int, args []string, width, height int) (*simulationState, tea.Cmd, error) {
 	if len(args) > 0 {
-		return nil, nil, fmt.Errorf("Cách dùng: /simulate")
+		return nil, nil, errors.New(i18n.T("Cách dùng: /simulate"))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	ch, err := rt.Simulate(ctx)
@@ -208,13 +210,13 @@ func startSimulate(rt *host.Host, reqID int, args []string, width, height int) (
 		cancel()
 		return nil, nil, err
 	}
-	state := newSimulationState(reqID, "Tạo hồ sơ văn phong", "./simulate", width, height, cancel)
+	state := newSimulationState(reqID, i18n.T("Tạo hồ sơ văn phong"), "./simulate", width, height, cancel)
 	return state, listenSimulationEvent(reqID, ch), nil
 }
 
 func startImportSimulation(rt *host.Host, reqID int, args []string, width, height int) (*simulationState, tea.Cmd, error) {
 	if len(args) != 1 {
-		return nil, nil, fmt.Errorf("Cách dùng: /importsim <profile.json>")
+		return nil, nil, errors.New(i18n.T("Cách dùng: /importsim <profile.json>"))
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	ch, err := rt.ImportSimulationProfile(ctx, args[0])
@@ -222,7 +224,7 @@ func startImportSimulation(rt *host.Host, reqID int, args []string, width, heigh
 		cancel()
 		return nil, nil, err
 	}
-	state := newSimulationState(reqID, "Nhập hồ sơ văn phong", args[0], width, height, cancel)
+	state := newSimulationState(reqID, i18n.T("Nhập hồ sơ văn phong"), args[0], width, height, cancel)
 	return state, listenSimulationEvent(reqID, ch), nil
 }
 

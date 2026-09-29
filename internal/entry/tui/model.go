@@ -2,16 +2,18 @@ package tui
 
 import (
 	"fmt"
+	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strings"
 	"time"
 
+	"github.com/CTKiet2006/kietnovel/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/utils"
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/CTKiet2006/kietnovel/internal/host"
-	"github.com/CTKiet2006/kietnovel/internal/utils"
 )
 
 const maxEvents = 500
@@ -52,6 +54,7 @@ var eventSpinnerFrames = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯
 // Model là trạng thái đỉnh của TUI.
 type Model struct {
 	runtime            *host.Host
+	cfg                bootstrap.Config // cấu hình đang chạy, để /language ghi lại lựa chọn
 	cocreate           *cocreateState
 	help               *helpState
 	modelSwitch        *modelSwitchState
@@ -84,7 +87,7 @@ type Model struct {
 	flushPending       bool      // Đã đặt một lần xả stream, tránh mỗi delta mở lại timer
 	lastKeyAt          time.Time // Giờ phím thường gần nhất; tiết lưu KeyEnter chống \n dán bậy kích gửi
 	inputHistory       []string  // Lịch sử nhập đã gửi (khử trùng: kề nhau không lặp)
-	historyIdx         int       // Chỉ số đang duyệt; == len(inputHistory) là "chưa duyệt, đang sửa nháp"
+	historyIdx         int       // Chỉ số đang duyệt; == len(inputHistory) là i18n.T("chưa duyệt, đang sửa nháp")
 	historyDraft       string    // Nháp giữ lúc vào duyệt lịch sử, về cuối thì hồi
 	focusPane          focusPane
 	hoverPane          focusPane
@@ -450,51 +453,51 @@ func (m *Model) textareaIsMultiline() bool {
 func (m *Model) inputHints() string {
 	dimStyle := lipgloss.NewStyle().Foreground(colorDim)
 	if m.quitPending {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Bold(true).Render("Nhấn Ctrl+C lần nữa để thoát")
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Bold(true).Render(i18n.T("Nhấn Ctrl+C lần nữa để thoát"))
 	}
 	limitHint := m.inputLimitHint()
 	// Trang chào (modeNew) không mở báo cáo chuột, terminal kéo bôi đen copy nguyên bản được, khỏi gợi ý Ctrl+R;
 	// bàn viết mới mở báo cáo, copy phải Ctrl+R tắt tạm.
-	suffix := limitHint + " · Ctrl+R để bôi đen copy"
+	suffix := limitHint + i18n.T(" · Ctrl+R để bôi đen copy")
 	if m.mode == modeNew {
 		suffix = limitHint
 	}
 	if m.mouseOff && m.mode != modeNew {
 		// Bàn viết chuyển tay sang bôi đen copy: dùng màu nhấn báo đang ở trạng thái "kéo tự do để chọn", bấm Ctrl+R để hồi
 		return lipgloss.NewStyle().Foreground(colorAccent).Bold(true).
-			Render("✂ Chế độ bôi đen copy: kéo chuột chọn chữ để copy · Ctrl+R để về như cũ")
+			Render(i18n.T("✂ Chế độ bôi đen copy: kéo chuột chọn chữ để copy · Ctrl+R để về như cũ"))
 	}
 	if m.cocreate != nil {
-		scrollHint := " · Tab cuộn: hội thoại"
+		scrollHint := i18n.T(" · Tab cuộn: hội thoại")
 		if m.cocreate.focusPrompt {
-			scrollHint = " · Tab cuộn: chỉ đạo viết"
+			scrollHint = i18n.T(" · Tab cuộn: chỉ đạo viết")
 		}
 		switch {
 		case m.cocreate.awaiting:
-			return dimStyle.Render("Đang chờ AI trả lời · Esc thoát đồng sáng tác" + scrollHint + suffix)
+			return dimStyle.Render(i18n.T("Đang chờ AI trả lời · Esc thoát đồng sáng tác") + scrollHint + suffix)
 		case m.cocreate.canStart():
-			startLabel := "Ctrl+S bắt đầu viết"
+			startLabel := i18n.T("Ctrl+S bắt đầu viết")
 			if m.cocreate.stage {
-				startLabel = "Ctrl+S chốt và viết tiếp"
+				startLabel = i18n.T("Ctrl+S chốt và viết tiếp")
 			}
-			return dimStyle.Render("Enter gửi · " + startLabel + " · Esc thoát đồng sáng tác" + scrollHint + suffix)
+			return dimStyle.Render(i18n.T("Enter gửi · ") + startLabel + i18n.T(" · Esc thoát đồng sáng tác") + scrollHint + suffix)
 		default:
-			return dimStyle.Render("Enter gửi · Esc thoát đồng sáng tác" + scrollHint + suffix)
+			return dimStyle.Render(i18n.T("Enter gửi · Esc thoát đồng sáng tác") + scrollHint + suffix)
 		}
 	}
 	if m.mode == modeNew {
 		if m.startupMode == startupModeQuick {
-			return dimStyle.Render("Tab đổi chế độ · gõ / tìm lệnh · Enter viết luôn · Esc xóa ô nhập" + suffix)
+			return dimStyle.Render(i18n.T("Tab đổi chế độ · gõ / tìm lệnh · Enter viết luôn · Esc xóa ô nhập") + suffix)
 		}
-		return dimStyle.Render("Tab đổi chế độ · gõ / tìm lệnh · Enter trò chuyện đồng sáng tác · Esc xóa ô nhập" + suffix)
+		return dimStyle.Render(i18n.T("Tab đổi chế độ · gõ / tìm lệnh · Enter trò chuyện đồng sáng tác · Esc xóa ô nhập") + suffix)
 	}
 	switch m.snapshot.RuntimeState {
 	case "pausing":
-		return dimStyle.Render("Đang dừng viết · chờ lượt này xong" + suffix)
+		return dimStyle.Render(i18n.T("Đang dừng viết · chờ lượt này xong") + suffix)
 	case "paused":
-		return dimStyle.Render("Gõ / tìm lệnh · Enter viết tiếp · Esc xóa ô nhập" + suffix)
+		return dimStyle.Render(i18n.T("Gõ / tìm lệnh · Enter viết tiếp · Esc xóa ô nhập") + suffix)
 	}
-	return dimStyle.Render("Gõ / tìm lệnh · click/Tab đổi panel · ↑↓ cuộn · End xuống cuối · Ctrl+L xóa màn hình · Esc tạm dừng · Enter gửi" + suffix)
+	return dimStyle.Render(i18n.T("Gõ / tìm lệnh · click/Tab đổi panel · ↑↓ cuộn · End xuống cuối · Ctrl+L xóa màn hình · Esc tạm dừng · Enter gửi") + suffix)
 }
 
 func (m *Model) inputLimitHint() string {
@@ -506,7 +509,7 @@ func (m *Model) inputLimitHint() string {
 	if used < limit*4/5 {
 		return ""
 	}
-	return fmt.Sprintf(" · đã nhập %d/%d", used, limit)
+	return fmt.Sprintf(i18n.T(" · đã nhập %d/%d"), used, limit)
 }
 
 func (m *Model) eventFlowWidth() int {
@@ -552,7 +555,7 @@ func (m *Model) outputDir() string {
 }
 
 func defaultSteerPlaceholder() string {
-	return "Gõ can thiệp cốt truyện, vd: đẩy tuyến tình cảm lên chương 4"
+	return i18n.T("Gõ can thiệp cốt truyện, vd: đẩy tuyến tình cảm lên chương 4")
 }
 
 func (m *Model) syncRuntimePlaceholder() {
@@ -560,26 +563,26 @@ func (m *Model) syncRuntimePlaceholder() {
 		return
 	}
 	if m.starting {
-		m.textarea.Placeholder = "Đang khởi tạo truyện..."
+		m.textarea.Placeholder = i18n.T("Đang khởi tạo truyện...")
 		return
 	}
 	switch m.snapshot.RuntimeState {
 	case "completed":
-		m.textarea.Placeholder = donePlaceholder
+		m.textarea.Placeholder = donePlaceholder()
 	case "pausing":
-		m.textarea.Placeholder = "Đang dừng viết..."
+		m.textarea.Placeholder = i18n.T("Đang dừng viết...")
 	case "paused":
 		if m.snapshot.AdvanceMode == "review" && m.snapshot.Phase == "writing" {
-			m.textarea.Placeholder = "Đang chờ duyệt từng chương: gõ góp ý, hoặc /next cho viết tiếp"
+			m.textarea.Placeholder = i18n.T("Đang chờ duyệt từng chương: gõ góp ý, hoặc /next cho viết tiếp")
 		} else {
-			m.textarea.Placeholder = "Đã dừng, gõ gì đó để viết tiếp"
+			m.textarea.Placeholder = i18n.T("Đã dừng, gõ gì đó để viết tiếp")
 		}
 	default:
 		if !m.snapshot.IsRunning {
 			if m.snapshot.AdvanceMode == "review" && m.snapshot.Phase == "writing" {
-				m.textarea.Placeholder = "Đang chờ duyệt từng chương: gõ góp ý, hoặc /next cho viết tiếp"
+				m.textarea.Placeholder = i18n.T("Đang chờ duyệt từng chương: gõ góp ý, hoặc /next cho viết tiếp")
 			} else {
-				m.textarea.Placeholder = "Bị ngắt, gõ gì đó để viết tiếp"
+				m.textarea.Placeholder = i18n.T("Bị ngắt, gõ gì đó để viết tiếp")
 			}
 		} else {
 			m.textarea.Placeholder = defaultSteerPlaceholder()
@@ -617,14 +620,14 @@ func (m *Model) layoutHeights() (topH, inputH, bodyH int) {
 
 func (m Model) View() string {
 	if m.width == 0 || m.height == 0 {
-		return "Đang tải..."
+		return i18n.T("Đang tải...")
 	}
 	if m.width < 100 {
 		return lipgloss.NewStyle().
 			Width(m.width).Height(m.height).
 			AlignHorizontal(lipgloss.Center).
 			AlignVertical(lipgloss.Center).
-			Render("Terminal quá hẹp, nới ra ít nhất 100 cột")
+			Render(i18n.T("Terminal quá hẹp, nới ra ít nhất 100 cột"))
 	}
 	if m.cocreate != nil {
 		return renderCoCreateModal(m.width, m.height, m.cocreate, errorText(m.err), m.textarea.View(), m.spinnerIdx, m.quitPending)

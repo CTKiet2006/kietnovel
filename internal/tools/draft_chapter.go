@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore/schema"
 )
 
 // DraftChapterTool 写入整章草稿，替代旧的 write_scene + polish_chapter 流水线。

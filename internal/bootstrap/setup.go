@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/CTKiet2006/kietnovel/internal/rules"
 	"github.com/CTKiet2006/kietnovel/internal/utils"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // exampleConfig là template có comment sẽ ghi vào ~/.ainovel/config.example.jsonc sau khi dẫn.

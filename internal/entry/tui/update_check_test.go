@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
 	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func TestUpdateNotesPreviewSanitizesAndTruncates(t *testing.T) {
@@ -26,7 +26,7 @@ func TestFormatUpdateNoticeIncludesSafePreview(t *testing.T) {
 		Latest: "v1.2.4",
 		Notes:  "## 修复启动问题",
 	})
-	for _, want := range []string{"v1.2.4", "修复启动问题", "ainovel-cli update"} {
+	for _, want := range []string{"v1.2.4", "修复启动问题", buildversion.AppName + " update"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("Thông báo cập nhật %q thiếu %q", got, want)
 		}

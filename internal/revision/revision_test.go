@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voocel/agentcore"
-	"github.com/voocel/agentcore/llm"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore"
+	"github.com/voocel/agentcore/llm"
 )
 
 func TestAnalysisContractIsStrictReady(t *testing.T) {

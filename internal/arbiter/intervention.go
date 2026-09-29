@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/voocel/agentcore"
-	"github.com/voocel/agentcore/schema"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 	storepkg "github.com/CTKiet2006/kietnovel/internal/store"
 	"github.com/CTKiet2006/kietnovel/internal/utils"
+	"github.com/voocel/agentcore"
+	"github.com/voocel/agentcore/schema"
 )
 
 // InterventionFacts 干预分诊的事实包(Collect 时刻快照)。

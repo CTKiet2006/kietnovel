@@ -21,13 +21,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voocel/agentcore"
-	"github.com/voocel/agentcore/subagent"
 	"github.com/CTKiet2006/kietnovel/internal/arbiter"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/flow"
 	storepkg "github.com/CTKiet2006/kietnovel/internal/store"
 	"github.com/CTKiet2006/kietnovel/internal/tools"
+	"github.com/voocel/agentcore"
+	"github.com/voocel/agentcore/subagent"
 )
 
 // scriptedChatModel 按回调产出响应的最小 ChatModel。

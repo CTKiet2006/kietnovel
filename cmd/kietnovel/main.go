@@ -13,6 +13,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/entry/startup"
 	"github.com/CTKiet2006/kietnovel/internal/entry/tui"
 	"github.com/CTKiet2006/kietnovel/internal/eval"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"github.com/CTKiet2006/kietnovel/internal/rules"
 	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 )
@@ -108,7 +109,10 @@ func runWithConfig(cfg bootstrap.Config, opts cliOptions, args []string) {
 	// FillDefaults phải chạy trước khi tải asset: OutputDir là trường runtime, giá trị mặc định chuẩn hóa ở đây —
 	// nếu không, dưới cấu hình mặc định thì override văn phong cấp sách <thư mục sách>/style/ không bao giờ được tải.
 	cfg.FillDefaults()
-	// Ngôn ngữ sáng tác (vi/zh): chọn lớp voice + chỉ dẫn buộc đúng ngôn ngữ đầu ra.
+	// Ngôn ngữ giao diện TUI. Phải đặt trước mọi thứ gọi i18n.T, và trước khi dựng
+	// TUI, vì bảng dịch được tra khi render chứ không lúc khởi tạo struct.
+	i18n.SetLanguage(cfg.Language)
+	// Ngôn ngữ sáng tác (vi/en/zh): chọn lớp voice + chỉ dẫn buộc đúng ngôn ngữ đầu ra.
 	// Giao thức prompt giữ nguyên bản gốc (đã kiểm chứng), không dịch.
 	bundle := assets.LoadWithLanguage(cfg.Language, cfg.Style, assets.DefaultLoadOptions(cfg.OutputDir))
 	bundle.ApplyLanguage(cfg.Language)

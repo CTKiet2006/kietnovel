@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/utils"
+	"github.com/voocel/agentcore"
 )
 
 // handleToolUpdate 处理 Worker 的进度中继(ProgressPayload):TOOL 行、流式正文、

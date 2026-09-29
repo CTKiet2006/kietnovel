@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 	"log/slog"
 	"slices"
 	"strings"
@@ -820,7 +821,7 @@ func (e *engine) recordStale(op controlOp) {
 // pauseWithNotify 引擎自主暂停(僵局熔断/失败裁定 abort):离屏通知 + 走 host 统一
 // 暂停语义(onPause → abortWithEvent:lifecycle=paused + 屏内事件 + cancel ctx)。
 func (e *engine) pauseWithNotify(kind, body string) {
-	e.notify(kind, "warn", "ainovel: 引擎暂停", body)
+	e.notify(kind, "warn", buildversion.AppName+": 引擎暂停", body)
 	if e.onPause != nil {
 		e.onPause(body)
 		return

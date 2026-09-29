@@ -35,7 +35,7 @@ func TestBootstrapCompletedBookLandsOnDoneWorkbench(t *testing.T) {
 	if got.mode != modeDone {
 		t.Fatalf("Sách đã hoàn thành phải rơi vào workbench hoàn thành, được mode=%v", got.mode)
 	}
-	if got.textarea.Placeholder != donePlaceholder {
+	if got.textarea.Placeholder != donePlaceholder() {
 		t.Fatalf("Phải đưa gợi ý trạng thái hoàn thành (gồm /reopen), được %q", got.textarea.Placeholder)
 	}
 

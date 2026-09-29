@@ -6,13 +6,16 @@ import (
 	"os"
 	"path/filepath"
 
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 	"github.com/gofrs/flock"
 )
 
 const bookLockFile = ".ainovel.lock"
 
 // ErrBookInUse nghĩa là cùng thư mục truyện đã bị một tiến trình khác chiếm.
-var ErrBookInUse = errors.New("Thư mục truyện đã bị một instance ainovel-cli khác chiếm")
+// Nêu đúng tên chương trình từ AppName, vì đây là thông báo người dùng đọc được
+// và phải khớp với tên binary họ sẽ chạy.
+var ErrBookInUse = errors.New("Thư mục truyện đã bị một instance " + buildversion.AppName + " khác chiếm")
 
 // bookLease giữ quyền độc quyền liên tiến trình của thư mục truyện trong suốt vòng đời Host.
 // File khoá vẫn nằm trong thư mục; trạng thái chiếm thực sự do hệ điều hành quản lý, tiến trình thoát bất thường cũng tự giải phóng.

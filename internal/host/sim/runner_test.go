@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore"
 )
 
 type scriptedLLM struct {

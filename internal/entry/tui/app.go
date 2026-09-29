@@ -2,14 +2,15 @@ package tui
 
 import (
 	"fmt"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"log/slog"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/CTKiet2006/kietnovel/assets"
 	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
 	"github.com/CTKiet2006/kietnovel/internal/host"
 	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Run khởi động TUI.
@@ -29,9 +30,10 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, build buildversion.Info) er
 	defer rt.Close()
 
 	m := NewModel(rt, build.Version)
+	m.cfg = cfg
 	m.disableUpdateCheck = cfg.DisableUpdateCheck
 	if logErr := rt.FileLogError(); logErr != nil {
-		logWarning := fmt.Errorf("File log không dùng được, đã chuyển sang log terminal: %w", logErr)
+		logWarning := fmt.Errorf(i18n.T("File log không dùng được, đã chuyển sang log terminal: %w"), logErr)
 		m.err = logWarning
 		m.applyEvent(host.Event{
 			Time: time.Now(), Category: "SYSTEM", Level: "warn",

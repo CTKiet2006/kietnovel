@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strings"
 	"time"
 
@@ -55,7 +56,7 @@ func (s *reportState) setContent(contentW int) {
 	case s.report != nil:
 		s.viewport.SetContent(renderReportText(*s.report, contentW, s.exportPath, s.exportErr, s.startedAt, s.finishedAt))
 	default:
-		s.viewport.SetContent("Báo cáo chẩn đoán không khả dụng")
+		s.viewport.SetContent(i18n.T("Báo cáo chẩn đoán không khả dụng"))
 	}
 }
 
@@ -86,18 +87,18 @@ func renderReportText(report diag.Report, width int, exportPath string, exportEr
 	// Chẩn đoán khử nhạy cảm đã xuất → hướng người dùng dán issue
 	if exportPath != "" {
 		exportStyle := lipgloss.NewStyle().Foreground(colorAccent2)
-		b.WriteString(exportStyle.Render("Đã xuất chẩn đoán khử nhạy cảm (dán được vào GitHub issue)"))
+		b.WriteString(exportStyle.Render(i18n.T("Đã xuất chẩn đoán khử nhạy cảm (dán được vào GitHub issue)")))
 		b.WriteString("\n")
 		b.WriteString(dimStyle.Render(wrapText(exportPath, width)))
 		b.WriteString("\n\n")
 	} else if exportErr != nil {
-		b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("Xuất chẩn đoán khử nhạy cảm thất bại: " + exportErr.Error()))
+		b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render(i18n.T("Xuất chẩn đoán khử nhạy cảm thất bại: ") + exportErr.Error()))
 		b.WriteString("\n\n")
 	}
 
-	b.WriteString(titleStyle.Render("Tổng quan"))
+	b.WriteString(titleStyle.Render(i18n.T("Tổng quan")))
 	b.WriteString("\n\n")
-	b.WriteString(dimStyle.Render("Bắt đầu "))
+	b.WriteString(dimStyle.Render(i18n.T("Bắt đầu ")))
 	b.WriteString(formatReportTime(startedAt))
 	if !finishedAt.IsZero() {
 		b.WriteString(dimStyle.Render("  Xong "))
@@ -106,14 +107,14 @@ func renderReportText(report diag.Report, width int, exportPath string, exportEr
 	b.WriteString("\n\n")
 
 	// Dòng 1: chương + số chữ
-	b.WriteString(mutedStyle.Render("Chương "))
+	b.WriteString(mutedStyle.Render(i18n.T("Chương ")))
 	b.WriteString(fmt.Sprintf("%d/%d", st.CompletedChapters, st.TotalChapters))
-	b.WriteString(mutedStyle.Render("  Số chữ "))
+	b.WriteString(mutedStyle.Render(i18n.T("  Số chữ ")))
 	b.WriteString(fmt.Sprintf("%d", st.TotalWords))
 	if st.AvgWordsPerCh > 0 {
 		b.WriteString(dimStyle.Render(fmt.Sprintf(" (%d/ch)", st.AvgWordsPerCh)))
 	}
-	b.WriteString(mutedStyle.Render("  Giai đoạn "))
+	b.WriteString(mutedStyle.Render(i18n.T("  Giai đoạn ")))
 	b.WriteString(st.Phase)
 	if st.Flow != "" && st.Flow != "writing" {
 		b.WriteString(mutedStyle.Render("/"))
@@ -122,29 +123,29 @@ func renderReportText(report diag.Report, width int, exportPath string, exportEr
 	b.WriteString("\n")
 
 	// Dòng 2: duyệt + viết lại + điểm TB
-	b.WriteString(mutedStyle.Render("Duyệt "))
-	b.WriteString(fmt.Sprintf("%d lần", st.ReviewCount))
+	b.WriteString(mutedStyle.Render(i18n.T("Duyệt ")))
+	b.WriteString(fmt.Sprintf(i18n.T("%d lần"), st.ReviewCount))
 	if st.RewriteCount > 0 {
-		b.WriteString(mutedStyle.Render("  Viết lại "))
-		b.WriteString(fmt.Sprintf("%d lần", st.RewriteCount))
+		b.WriteString(mutedStyle.Render(i18n.T("  Viết lại ")))
+		b.WriteString(fmt.Sprintf(i18n.T("%d lần"), st.RewriteCount))
 	}
 	if st.AvgReviewScore > 0 {
-		b.WriteString(mutedStyle.Render("  Điểm TB "))
+		b.WriteString(mutedStyle.Render(i18n.T("  Điểm TB ")))
 		b.WriteString(fmt.Sprintf("%.1f", st.AvgReviewScore))
 	}
 	b.WriteString("\n")
 
 	// Dòng 3: nút thắt + kế hoạch
 	if st.ForeshadowOpen > 0 || st.ForeshadowStale > 0 {
-		b.WriteString(mutedStyle.Render("Nút thắt "))
-		b.WriteString(fmt.Sprintf("Mở %d", st.ForeshadowOpen))
+		b.WriteString(mutedStyle.Render(i18n.T("Nút thắt ")))
+		b.WriteString(fmt.Sprintf(i18n.T("Mở %d"), st.ForeshadowOpen))
 		if st.ForeshadowStale > 0 {
-			b.WriteString(lipgloss.NewStyle().Foreground(colorReview).Render(fmt.Sprintf(" kẹt %d", st.ForeshadowStale)))
+			b.WriteString(lipgloss.NewStyle().Foreground(colorReview).Render(fmt.Sprintf(i18n.T(" kẹt %d"), st.ForeshadowStale)))
 		}
 		b.WriteString("\n")
 	}
 	if st.PlanningTier != "" {
-		b.WriteString(mutedStyle.Render("Kế hoạch "))
+		b.WriteString(mutedStyle.Render(i18n.T("Kế hoạch ")))
 		b.WriteString(st.PlanningTier)
 		b.WriteString("\n")
 	}
@@ -153,13 +154,13 @@ func renderReportText(report diag.Report, width int, exportPath string, exportEr
 	b.WriteString("\n")
 	findings := report.Findings
 	if len(findings) == 0 {
-		b.WriteString(lipgloss.NewStyle().Foreground(colorSuccess).Render("Không phát hiện vấn đề"))
+		b.WriteString(lipgloss.NewStyle().Foreground(colorSuccess).Render(i18n.T("Không phát hiện vấn đề")))
 		b.WriteString("\n")
 		return b.String()
 	}
 
 	criticals, warnings, infos := countSeverities(findings)
-	b.WriteString(titleStyle.Render("Phát hiện"))
+	b.WriteString(titleStyle.Render(i18n.T("Phát hiện")))
 	b.WriteString(" ")
 	b.WriteString(dimStyle.Render(formatSeverityCounts(criticals, warnings, infos)))
 	b.WriteString("\n")
@@ -171,7 +172,7 @@ func renderReportText(report diag.Report, width int, exportPath string, exportEr
 
 	if len(report.Actions) > 0 {
 		b.WriteString("\n")
-		b.WriteString(titleStyle.Render("Việc có thể làm"))
+		b.WriteString(titleStyle.Render(i18n.T("Việc có thể làm")))
 		b.WriteString(" ")
 		b.WriteString(dimStyle.Render(fmt.Sprintf("(%d)", len(report.Actions))))
 		b.WriteString("\n")
@@ -199,13 +200,13 @@ func renderReportLoadingText(width int, startedAt time.Time) string {
 	hintStyle := lipgloss.NewStyle().Foreground(colorDim)
 
 	var b strings.Builder
-	b.WriteString(titleStyle.Render("Đang tạo báo cáo chẩn đoán"))
+	b.WriteString(titleStyle.Render(i18n.T("Đang tạo báo cáo chẩn đoán")))
 	b.WriteString("\n\n")
-	b.WriteString(hintStyle.Render("Giờ bắt đầu " + formatReportTime(startedAt)))
+	b.WriteString(hintStyle.Render(i18n.T("Giờ bắt đầu ") + formatReportTime(startedAt)))
 	b.WriteString("\n\n")
-	b.WriteString(bodyStyle.Render(wrapText("Đang đọc output truyện hiện tại để phân tích luồng, chất lượng, kế hoạch và vấn đề ngữ cảnh. Truyện lớn có thể mất vài giây.", width)))
+	b.WriteString(bodyStyle.Render(wrapText(i18n.T("Đang đọc output truyện hiện tại để phân tích luồng, chất lượng, kế hoạch và vấn đề ngữ cảnh. Truyện lớn có thể mất vài giây."), width)))
 	b.WriteString("\n\n")
-	b.WriteString(hintStyle.Render("Esc đóng panel trước cũng được, phân tích nền xong lần mở sau sẽ tạo lại."))
+	b.WriteString(hintStyle.Render(i18n.T("Esc đóng panel trước cũng được, phân tích nền xong lần mở sau sẽ tạo lại.")))
 	return b.String()
 }
 
@@ -350,8 +351,8 @@ func renderReportModal(width, height int, state *reportState) string {
 	modal := renderPaddedModalFrame(
 		boxW,
 		boxH,
-		"Báo cáo chẩn đoán",
-		"  ↑↓ cuộn · Esc đóng",
+		i18n.T("Báo cáo chẩn đoán"),
+		i18n.T("  ↑↓ cuộn · Esc đóng"),
 		strings.Split(state.viewport.View(), "\n"),
 	)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, modal)

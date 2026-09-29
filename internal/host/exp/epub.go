@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/CTKiet2006/kietnovel/internal/domain"
+	buildversion "github.com/CTKiet2006/kietnovel/internal/version"
 )
 
 // renderEPUB 把章节集合打包成 EPUB 3 字节流。
@@ -247,14 +248,14 @@ func renderOPF(book domain.BookMetadata, hasCover bool, chapters []int) string {
     <dc:identifier id="bookid">%s</dc:identifier>
     <dc:title>%s</dc:title>
     <dc:language>zh-CN</dc:language>
-    <dc:creator>ainovel-cli</dc:creator>
+    <dc:creator>%s</dc:creator>
     <dc:description>%s</dc:description>
     <meta property="dcterms:modified">%s</meta>
   </metadata>
   <manifest>
     <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
     <item id="css" href="style.css" media-type="text/css"/>
-`, html.EscapeString(bookID), html.EscapeString(title), html.EscapeString(book.Synopsis), modified)
+`, html.EscapeString(bookID), html.EscapeString(title), buildversion.AppName, html.EscapeString(book.Synopsis), modified)
 
 	if hasCover {
 		b.WriteString(`    <item id="cover" href="cover.xhtml" media-type="application/xhtml+xml"/>` + "\n")

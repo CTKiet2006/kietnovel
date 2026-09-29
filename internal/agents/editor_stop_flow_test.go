@@ -17,11 +17,11 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/voocel/agentcore"
-	"github.com/voocel/agentcore/subagent"
 	"github.com/CTKiet2006/kietnovel/internal/agents/guard"
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/store"
+	"github.com/voocel/agentcore"
+	"github.com/voocel/agentcore/subagent"
 )
 
 // editorStopAfterToolResult 与 build.go 中 editor 的配置保持同一判据。

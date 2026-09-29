@@ -2,12 +2,13 @@ package tui
 
 import (
 	"context"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/CTKiet2006/kietnovel/internal/entry/startup"
 	"github.com/CTKiet2006/kietnovel/internal/host"
+	"github.com/charmbracelet/bubbles/viewport"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type startupMode int
@@ -20,27 +21,27 @@ const (
 func (m startupMode) label() string {
 	switch m {
 	case startupModeCoCreate:
-		return "Đồng sáng tác"
+		return i18n.T("Đồng sáng tác")
 	default:
-		return "Bắt đầu nhanh"
+		return i18n.T("Bắt đầu nhanh")
 	}
 }
 
 func (m startupMode) subtitle() string {
 	switch m {
 	case startupModeCoCreate:
-		return "Trò chuyện với AI cho rõ ý rồi mới viết"
+		return i18n.T("Trò chuyện với AI cho rõ ý rồi mới viết")
 	default:
-		return "Một câu là viết luôn"
+		return i18n.T("Một câu là viết luôn")
 	}
 }
 
 func placeholderForNewMode(mode startupMode) string {
 	switch mode {
 	case startupModeCoCreate:
-		return "Nhập ý tưởng cốt lõi, Enter để cùng AI sáng tác"
+		return i18n.T("Nhập ý tưởng cốt lõi, Enter để cùng AI sáng tác")
 	default:
-		return "Nhập một câu nhu cầu truyện, Enter là viết luôn"
+		return i18n.T("Nhập một câu nhu cầu truyện, Enter là viết luôn")
 	}
 }
 
@@ -50,14 +51,14 @@ func placeholderForCoCreate(state *cocreateState) string {
 	}
 	switch {
 	case state.awaiting:
-		return "AI đang sắp xếp yêu cầu của bạn..."
+		return i18n.T("AI đang sắp xếp yêu cầu của bạn...")
 	case state.canStart():
 		if state.stage {
-			return "Gõ thêm, hoặc Ctrl+S để chốt hướng và viết tiếp"
+			return i18n.T("Gõ thêm, hoặc Ctrl+S để chốt hướng và viết tiếp")
 		}
-		return "Gõ thêm, hoặc Ctrl+S để bắt đầu viết"
+		return i18n.T("Gõ thêm, hoặc Ctrl+S để bắt đầu viết")
 	default:
-		return "Gõ thêm yêu cầu, Enter gửi cho AI"
+		return i18n.T("Gõ thêm yêu cầu, Enter gửi cho AI")
 	}
 }
 
@@ -103,17 +104,21 @@ func newCoCreateState(initial string) *cocreateState {
 
 // stageCoCreateOpener là câu mở tổng hợp của đồng sáng tác giai đoạn, gửi cho LLM như lượt user kickoff,
 // để trợ lý dựa "trạng thái truyện hiện tại" mở lời chủ động, thay vì để hội thoại trống chờ user nói trước.
-const stageCoCreateOpener = "Tôi tạm dừng chút, muốn cùng bạn lên hướng cho đoạn tiếp."
+func stageCoCreateOpener() string {
+	return i18n.T("Tôi tạm dừng chút, muốn cùng bạn lên hướng cho đoạn tiếp.")
+}
 
 // stageCoCreateSystemLine là cách hiện trung tính của câu mở này trong UI: câu mở thực chất do hệ thống tổng hợp,
 // user chưa từng gõ, nên không giả làm phát ngôn của "bạn", mà ghi một dòng hệ thống cho rõ ngữ cảnh (nó vẫn gửi cho LLM
 // bằng stageCoCreateOpener, xem nhánh đặc biệt i==0 trong renderCoCreateConversationPanel).
-const stageCoCreateSystemLine = "Đã dừng viết, vào đồng sáng tác giai đoạn — AI sẽ dựa tiến độ hiện tại cùng bạn lên hướng tiếp theo."
+func stageCoCreateSystemLine() string {
+	return i18n.T("Đã dừng viết, vào đồng sáng tác giai đoạn — AI sẽ dựa tiến độ hiện tại cùng bạn lên hướng tiếp theo.")
+}
 
 // newStageCoCreateState tạo trạng thái đồng sáng tác giai đoạn: gieo câu mở và đánh dấu stage, để runCoCreate đi
 // StageCoCreateStream, Ctrl+S đi ResumeFromCoCreate.
 func newStageCoCreateState() *cocreateState {
-	s := newCoCreateState(stageCoCreateOpener)
+	s := newCoCreateState(stageCoCreateOpener())
 	s.stage = true
 	return s
 }
@@ -193,12 +198,12 @@ func (s *cocreateState) buildPrompt() (string, error) {
 }
 
 func renderStartupModeBar(width int, mode startupMode) string {
-	quick := renderStartupModePill(mode == startupModeQuick, "Bắt đầu nhanh")
-	cocreate := renderStartupModePill(mode == startupModeCoCreate, "Đồng sáng tác")
+	quick := renderStartupModePill(mode == startupModeQuick, i18n.T("Bắt đầu nhanh"))
+	cocreate := renderStartupModePill(mode == startupModeCoCreate, i18n.T("Đồng sáng tác"))
 	title := lipgloss.NewStyle().
 		Foreground(colorAccent).
 		Bold(true).
-		Render("Chế độ khởi động")
+		Render(i18n.T("Chế độ khởi động"))
 	divider := lipgloss.NewStyle().
 		Foreground(colorDim).
 		Render("·")
@@ -327,7 +332,7 @@ func renderCoCreateSuggestions(width int, state *cocreateState) string {
 	bodyStyle := lipgloss.NewStyle().Foreground(colorMuted)
 	hintStyle := lipgloss.NewStyle().Foreground(colorDim).Italic(true)
 
-	lines := []string{hintStyle.Render("Gợi ý của AI (bấm 1/2/3 để ghép, sửa rồi gửi):")}
+	lines := []string{hintStyle.Render(i18n.T("Gợi ý của AI (bấm 1/2/3 để ghép, sửa rồi gửi):"))}
 	for i, s := range sugs {
 		lines = append(lines, digitStyle.Render(digits[i]+" ")+bodyStyle.Render(strings.TrimSpace(s)))
 	}
@@ -388,9 +393,9 @@ func renderCoCreateModal(width, height int, state *cocreateState, errMsg, inputV
 		contentH = 10
 	}
 
-	titleText, subtitleText := "Đồng sáng tác", "Nói rõ nhu cầu rồi mới viết"
+	titleText, subtitleText := i18n.T("Đồng sáng tác"), i18n.T("Nói rõ nhu cầu rồi mới viết")
 	if state.stage {
-		titleText, subtitleText = "Đồng sáng tác giai đoạn", "Lên hướng tiếp theo rồi viết tiếp"
+		titleText, subtitleText = i18n.T("Đồng sáng tác giai đoạn"), i18n.T("Lên hướng tiếp theo rồi viết tiếp")
 	}
 	headerStyle := lipgloss.NewStyle().Width(boxW).AlignHorizontal(lipgloss.Center)
 	title := headerStyle.Foreground(colorMuted).Bold(true).Render(titleText)
@@ -400,7 +405,7 @@ func renderCoCreateModal(width, height int, state *cocreateState, errMsg, inputV
 	hintStyle := lipgloss.NewStyle().Width(boxW).AlignHorizontal(lipgloss.Center)
 	if quitPending {
 		// quitPending đồng bộ với inputHints(); nếu không modal đồng sáng tác che đáy, user không cảm được "bấm Ctrl+C lần nữa".
-		hintLine = hintStyle.Foreground(lipgloss.Color("243")).Bold(true).Render("Nhấn Ctrl+C lần nữa để thoát")
+		hintLine = hintStyle.Foreground(lipgloss.Color("243")).Bold(true).Render(i18n.T("Nhấn Ctrl+C lần nữa để thoát"))
 	} else {
 		hintLine = hintStyle.Foreground(colorDim).Italic(true).Render(coCreateHint(state))
 	}
@@ -422,17 +427,17 @@ func renderCoCreateModal(width, height int, state *cocreateState, errMsg, inputV
 func coCreateHint(state *cocreateState) string {
 	switch {
 	case state == nil:
-		return "Enter gửi · Esc thoát"
+		return i18n.T("Enter gửi · Esc thoát")
 	case state.awaiting:
-		return "AI đang trả lời · ↑↓ cuộn hội thoại · lăn chuột cuộn chỉ đạo · Esc thoát"
+		return i18n.T("AI đang trả lời · ↑↓ cuộn hội thoại · lăn chuột cuộn chỉ đạo · Esc thoát")
 	case state.canStart():
-		action := "Ctrl+S bắt đầu viết"
+		action := i18n.T("Ctrl+S bắt đầu viết")
 		if state.stage {
-			action = "Ctrl+S chốt và viết tiếp"
+			action = i18n.T("Ctrl+S chốt và viết tiếp")
 		}
-		return "Enter bổ sung tiếp · " + action + " · ↑↓ cuộn hội thoại · lăn chuột cuộn chỉ đạo · Esc thoát"
+		return i18n.T("Enter bổ sung tiếp · ") + action + i18n.T(" · ↑↓ cuộn hội thoại · lăn chuột cuộn chỉ đạo · Esc thoát")
 	default:
-		return "Enter gửi · ↑↓ cuộn hội thoại · lăn chuột cuộn chỉ đạo · Esc thoát"
+		return i18n.T("Enter gửi · ↑↓ cuộn hội thoại · lăn chuột cuộn chỉ đạo · Esc thoát")
 	}
 }
 
@@ -448,12 +453,12 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 	}
 	wrapW := max(12, contentW-4)
 
-	userRole := lipgloss.NewStyle().Foreground(colorAccent2).Bold(true).Render("Bạn")
+	userRole := lipgloss.NewStyle().Foreground(colorAccent2).Bold(true).Render(i18n.T("Bạn"))
 	aiRole := lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render("AI")
 	userBody := lipgloss.NewStyle().Foreground(colorAccent2)
 	aiBody := lipgloss.NewStyle().Foreground(bodyTextColor)
 	thinkingStyle := lipgloss.NewStyle().Foreground(colorDim).Italic(true)
-	thinkingTag := lipgloss.NewStyle().Foreground(colorDim).Bold(true).Render("AI đang nghĩ")
+	thinkingTag := lipgloss.NewStyle().Foreground(colorDim).Bold(true).Render(i18n.T("AI đang nghĩ"))
 
 	sysStyle := lipgloss.NewStyle().Foreground(colorDim).Italic(true)
 
@@ -463,7 +468,7 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 		// Câu mở tổng hợp của đồng sáng tác giai đoạn (luôn là tin user history[0]) hiện bằng dòng hệ thống trung tính,
 		// không giả làm nhập của user; nó vẫn gửi cho LLM như lượt user kickoff.
 		if isUser && state.stage && i == 0 {
-			for j, line := range wrapStreamText(stageCoCreateSystemLine, wrapW) {
+			for j, line := range wrapStreamText(stageCoCreateSystemLine(), wrapW) {
 				prefix := "· "
 				if j > 0 {
 					prefix = "  "
@@ -533,20 +538,20 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 		Width(contentW).
 		Height(height).
 		Padding(0, 1)
-	return style.Render(panelTitleStyle.Render(":: Hội thoại đồng sáng tác") + "\n" + state.convVP.View())
+	return style.Render(panelTitleStyle.Render(i18n.T(":: Hội thoại đồng sáng tác")) + "\n" + state.convVP.View())
 }
 
 func renderCoCreatePromptPanel(width, height int, state *cocreateState) string {
-	readyLabel := "Đã viết được"
+	readyLabel := i18n.T("Đã viết được")
 	if state.stage {
-		readyLabel = "Đã chốt được để viết tiếp"
+		readyLabel = i18n.T("Đã chốt được để viết tiếp")
 	}
-	status := lipgloss.NewStyle().Foreground(colorDim).Render("Đang trò chuyện")
+	status := lipgloss.NewStyle().Foreground(colorDim).Render(i18n.T("Đang trò chuyện"))
 	if state.ready() {
 		status = lipgloss.NewStyle().Foreground(colorAccent).Render(readyLabel)
 	}
 	if state.awaiting {
-		status = lipgloss.NewStyle().Foreground(colorMuted).Italic(true).Render("AI đang tổng hợp")
+		status = lipgloss.NewStyle().Foreground(colorMuted).Italic(true).Render(i18n.T("AI đang tổng hợp"))
 	}
 
 	// Rộng nội dung = tổng rộng cột - 2 (padding 0,1 chiếm 2 cột, không viền).
@@ -555,11 +560,11 @@ func renderCoCreatePromptPanel(width, height int, state *cocreateState) string {
 		contentW = 8
 	}
 
-	emptyHint := "AI sẽ tổng hợp dần ở đây thành chỉ đạo chốt để vào viết."
-	panelTitle := ":: Chỉ đạo viết hiện tại"
+	emptyHint := i18n.T("AI sẽ tổng hợp dần ở đây thành chỉ đạo chốt để vào viết.")
+	panelTitle := i18n.T(":: Chỉ đạo viết hiện tại")
 	if state.stage {
-		emptyHint = "AI sẽ tổng hợp dần ở đây thành hướng cho giai đoạn tiếp."
-		panelTitle = ":: Hướng tiếp theo"
+		emptyHint = i18n.T("AI sẽ tổng hợp dần ở đây thành hướng cho giai đoạn tiếp.")
+		panelTitle = i18n.T(":: Hướng tiếp theo")
 	}
 	text := strings.TrimSpace(state.draftPrompt())
 	if text == "" {
@@ -582,11 +587,11 @@ func renderCoCreatePromptPanel(width, height int, state *cocreateState) string {
 	if state.promptVP.TotalLineCount() > state.promptVP.VisibleLineCount() {
 		switch {
 		case state.promptVP.AtTop():
-			hint = "↓ Còn nội dung dưới, lăn chuột hoặc PgDn để xem"
+			hint = i18n.T("↓ Còn nội dung dưới, lăn chuột hoặc PgDn để xem")
 		case state.promptVP.AtBottom():
-			hint = "↑ Còn nội dung trên, lăn chuột hoặc PgUp để xem"
+			hint = i18n.T("↑ Còn nội dung trên, lăn chuột hoặc PgUp để xem")
 		default:
-			hint = "↑↓ cuộn tiếp để xem"
+			hint = i18n.T("↑↓ cuộn tiếp để xem")
 		}
 	}
 

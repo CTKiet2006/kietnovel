@@ -13,6 +13,11 @@ type Info struct {
 	Date    string
 }
 
+// AppName là tên chương trình, dùng cho mọi chỗ người dùng nhìn thấy: thanh tiêu đề
+// TUI, gợi ý lệnh nâng cấp, thông báo lỗi, metadata EPUB. Đặt ở đây để đổi tên
+// một lần duy nhất, tránh tình trạng tên trong giao diện lệch với tên binary.
+const AppName = "kietnovel"
+
 func Resolve(raw Info) Info {
 	return Info{
 		Version: displayVersion(raw.Version),
@@ -23,7 +28,7 @@ func Resolve(raw Info) Info {
 
 func Print(w io.Writer, info Info) {
 	info = Resolve(info)
-	fmt.Fprintf(w, "kietnovel %s\ncommit: %s\nbuilt: %s\n", info.Version, info.Commit, info.Date)
+	fmt.Fprintf(w, "%s %s\ncommit: %s\nbuilt: %s\n", AppName, info.Version, info.Commit, info.Date)
 }
 
 func displayVersion(v string) string {

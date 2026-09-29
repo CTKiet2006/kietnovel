@@ -3,8 +3,8 @@ package tui
 import (
 	"testing"
 
-	"github.com/voocel/agentcore"
 	"github.com/CTKiet2006/kietnovel/internal/host"
+	"github.com/voocel/agentcore"
 )
 
 type fakeModelRuntime struct {
