@@ -100,6 +100,26 @@ func BuildWriterPrompt(writerPrompt, voice, style string) string {
 	return out
 }
 
+// languageVietnameseDirective là chỉ dẫn ngôn ngữ gắn vào prompt các vai trò
+// chính khi cấu hình language=vi. Prompts gốc viết bằng tiếng Trung nên
+// chế độ zh không cần gắn thêm gì.
+const languageVietnameseDirective = `## Ngôn ngữ sáng tác
+
+Toàn bộ sản phẩm của vai trò này — tên truyện, tóm tắt, tiền đề, dàn ý, hồ sơ nhân vật, quy tắc thế giới, bản nháp và chương hoàn chỉnh — PHẢI viết bằng Tiếng Việt tự nhiên, mượt mà, đúng quy chuẩn trong voice. Không lẫn tiếng Trung hay tiếng Anh trừ tên riêng đã Việt hóa. Tên tool, tên file và checkpoint hệ thống giữ nguyên.`
+
+// ApplyLanguage gắn chỉ dẫn ngôn ngữ sáng tác vào prompt Architect/Writer/Editor.
+// lang "vi" (mặc định, chuỗi trống cũng tính là vi): bắt buộc sản phẩm bằng Tiếng Việt.
+// lang "zh": giữ nguyên prompt gốc. Gọi một lần sau Load, trước khi chạy engine.
+func (b *Bundle) ApplyLanguage(lang string) {
+	if strings.TrimSpace(lang) != "" && strings.TrimSpace(lang) != "vi" {
+		return
+	}
+	b.Prompts.ArchitectShort += "\n\n" + languageVietnameseDirective
+	b.Prompts.ArchitectLong += "\n\n" + languageVietnameseDirective
+	b.Prompts.Writer += "\n\n" + languageVietnameseDirective
+	b.Prompts.Editor += "\n\n" + languageVietnameseDirective
+}
+
 // OverrideVoice 用 raw 整体替换已组装的文风段(eval 做 voice A/B 用)。
 // variant 与 baseline 仍经 BuildWriterPrompt 同一路径组装。
 func (b *Bundle) OverrideVoice(raw string) {

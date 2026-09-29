@@ -450,51 +450,51 @@ func (m *Model) textareaIsMultiline() bool {
 func (m *Model) inputHints() string {
 	dimStyle := lipgloss.NewStyle().Foreground(colorDim)
 	if m.quitPending {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Bold(true).Render("Press Ctrl+C again to exit")
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("243")).Bold(true).Render("Nhấn Ctrl+C lần nữa để thoát")
 	}
 	limitHint := m.inputLimitHint()
 	// 欢迎页(modeNew)不开鼠标上报，终端原生拖拽即可复制，无需 Ctrl+R 提示；
 	// 工作台才开上报，复制需 Ctrl+R 临时关闭。
-	suffix := limitHint + " · Ctrl+R 切到选中复制模式"
+	suffix := limitHint + " · Ctrl+R để bôi đen copy"
 	if m.mode == modeNew {
 		suffix = limitHint
 	}
 	if m.mouseOff && m.mode != modeNew {
 		// 工作台手动切到选中复制：用强调色提示当前处于"自由拖拽选中"状态，按 Ctrl+R 恢复
 		return lipgloss.NewStyle().Foreground(colorAccent).Bold(true).
-			Render("✂ 选中复制模式：可拖拽选中文本复制 · Ctrl+R 退出恢复鼠标交互")
+			Render("✂ Chế độ bôi đen copy: kéo chuột chọn chữ để copy · Ctrl+R để về như cũ")
 	}
 	if m.cocreate != nil {
-		scrollHint := " · Tab 滚动:对话"
+		scrollHint := " · Tab cuộn: hội thoại"
 		if m.cocreate.focusPrompt {
-			scrollHint = " · Tab 滚动:创作指令"
+			scrollHint = " · Tab cuộn: chỉ đạo viết"
 		}
 		switch {
 		case m.cocreate.awaiting:
-			return dimStyle.Render("等待 AI 回复 · Esc 退出共创" + scrollHint + suffix)
+			return dimStyle.Render("Đang chờ AI trả lời · Esc thoát đồng sáng tác" + scrollHint + suffix)
 		case m.cocreate.canStart():
-			startLabel := "Ctrl+S 开始创作"
+			startLabel := "Ctrl+S bắt đầu viết"
 			if m.cocreate.stage {
-				startLabel = "Ctrl+S 应用并继续"
+				startLabel = "Ctrl+S chốt và viết tiếp"
 			}
-			return dimStyle.Render("Enter 发送 · " + startLabel + " · Esc 退出共创" + scrollHint + suffix)
+			return dimStyle.Render("Enter gửi · " + startLabel + " · Esc thoát đồng sáng tác" + scrollHint + suffix)
 		default:
-			return dimStyle.Render("Enter 发送 · Esc 退出共创" + scrollHint + suffix)
+			return dimStyle.Render("Enter gửi · Esc thoát đồng sáng tác" + scrollHint + suffix)
 		}
 	}
 	if m.mode == modeNew {
 		if m.startupMode == startupModeQuick {
-			return dimStyle.Render("Tab 切换启动模式 · 输入 / 搜索命令 · Enter 直接开始创作 · Esc 清空输入" + suffix)
+			return dimStyle.Render("Tab đổi chế độ · gõ / tìm lệnh · Enter viết luôn · Esc xóa ô nhập" + suffix)
 		}
-		return dimStyle.Render("Tab 切换启动模式 · 输入 / 搜索命令 · Enter 开始共创对话 · Esc 清空输入" + suffix)
+		return dimStyle.Render("Tab đổi chế độ · gõ / tìm lệnh · Enter trò chuyện đồng sáng tác · Esc xóa ô nhập" + suffix)
 	}
 	switch m.snapshot.RuntimeState {
 	case "pausing":
-		return dimStyle.Render("正在暂停创作 · 请等待当前轮次结束" + suffix)
+		return dimStyle.Render("Đang dừng viết · chờ lượt này xong" + suffix)
 	case "paused":
-		return dimStyle.Render("输入 / 搜索命令 · Enter 继续创作 · Esc 清空输入" + suffix)
+		return dimStyle.Render("Gõ / tìm lệnh · Enter viết tiếp · Esc xóa ô nhập" + suffix)
 	}
-	return dimStyle.Render("输入 / 搜索命令 · 点击/Tab 切换面板 · ↑↓ 滚动 · End 跳底 · Ctrl+L 清屏 · Esc 暂停 · Enter 发送" + suffix)
+	return dimStyle.Render("Gõ / tìm lệnh · click/Tab đổi panel · ↑↓ cuộn · End xuống cuối · Ctrl+L xóa màn hình · Esc tạm dừng · Enter gửi" + suffix)
 }
 
 func (m *Model) inputLimitHint() string {
@@ -506,7 +506,7 @@ func (m *Model) inputLimitHint() string {
 	if used < limit*4/5 {
 		return ""
 	}
-	return fmt.Sprintf(" · 输入 %d/%d", used, limit)
+	return fmt.Sprintf(" · đã nhập %d/%d", used, limit)
 }
 
 func (m *Model) eventFlowWidth() int {

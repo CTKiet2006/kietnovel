@@ -20,27 +20,27 @@ const (
 func (m startupMode) label() string {
 	switch m {
 	case startupModeCoCreate:
-		return "共创规划"
+		return "Đồng sáng tác"
 	default:
-		return "快速开始"
+		return "Bắt đầu nhanh"
 	}
 }
 
 func (m startupMode) subtitle() string {
 	switch m {
 	case startupModeCoCreate:
-		return "先与 AI 对话澄清，再开始创作"
+		return "Trò chuyện với AI cho rõ ý rồi mới viết"
 	default:
-		return "一句话直接开始写"
+		return "Một câu là viết luôn"
 	}
 }
 
 func placeholderForNewMode(mode startupMode) string {
 	switch mode {
 	case startupModeCoCreate:
-		return "先输入你的核心想法，Enter 开始与 AI 共创"
+		return "Nhập ý tưởng cốt lõi, Enter để cùng AI sáng tác"
 	default:
-		return "输入一句小说需求，Enter 直接开始创作"
+		return "Nhập một câu nhu cầu truyện, Enter là viết luôn"
 	}
 }
 
@@ -50,14 +50,14 @@ func placeholderForCoCreate(state *cocreateState) string {
 	}
 	switch {
 	case state.awaiting:
-		return "AI 正在整理你的要求..."
+		return "AI đang sắp xếp yêu cầu của bạn..."
 	case state.canStart():
 		if state.stage {
-			return "继续补充，或按 Ctrl+S 应用方向并继续创作"
+			return "Gõ thêm, hoặc Ctrl+S để chốt hướng và viết tiếp"
 		}
-		return "继续补充，或按 Ctrl+S 开始创作"
+		return "Gõ thêm, hoặc Ctrl+S để bắt đầu viết"
 	default:
-		return "继续补充你的要求，Enter 发送给 AI"
+		return "Gõ thêm yêu cầu, Enter gửi cho AI"
 	}
 }
 
