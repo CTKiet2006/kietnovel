@@ -46,3 +46,11 @@ refer/
 output*
 workspace/
 ainovel.db
+
+# kietnovel: thư mục runtime chứa bí mật và truyện — KHÔNG BAO GIỜ commit.
+# config/config.json giữ API key thật, novels/*/workspace giữ bản thảo.
+# Chỉ commit file *.example.jsonc làm mẫu.
+/config/
+/novels/
+/simulate/
+/xuat_ban/

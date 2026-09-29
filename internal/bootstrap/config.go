@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -194,6 +195,34 @@ var knownRoles = map[string]bool{
 	"import_segment":    true,
 	"import_analyze":    true,
 	"import_synthesize": true,
+}
+
+// NovelDirEnv là biến môi trường chọn bộ truyện đang viết.
+// Mỗi thư mục là một bộ truyện độc lập, ví dụ:
+//
+//	NOVEL_DIR=./novels/tien-hiep-ky ainovel-cli
+//
+// Khi đặt, thư mục đầu ra của truyện là <NOVEL_DIR>/output/novel
+// (văn phong <outputDir>/style/ và checkpoint đi theo từng truyện).
+// Không đặt = hành vi cũ: ./output/novel theo thư mục làm việc.
+const NovelDirEnv = "NOVEL_DIR"
+
+// NovelDirBase trả về thư mục gốc bộ truyện từ NOVEL_DIR ("" nếu không đặt).
+func NovelDirBase() string {
+	return strings.TrimSpace(os.Getenv(NovelDirEnv))
+}
+
+// ResolveOutputDir tính thư mục đầu ra của truyện:
+// có NOVEL_DIR → <NOVEL_DIR tuyệt đối>/output/novel, không có → output/novel.
+func ResolveOutputDir() string {
+	base := NovelDirBase()
+	if base == "" {
+		return filepath.Join("output", "novel")
+	}
+	if abs, err := filepath.Abs(base); err == nil {
+		base = abs
+	}
+	return filepath.Join(base, "output", "novel")
 }
 
 // Ngôn ngữ sáng tác truyện: "vi" (Tiếng Việt, mặc định) hoặc "zh" (Tiếng Trung).
@@ -442,7 +471,9 @@ func (c *Config) DefaultProviderConfig() ProviderConfig {
 // FillDefaults 填充默认值。
 func (c *Config) FillDefaults() {
 	if c.OutputDir == "" {
-		c.OutputDir = filepath.Join("output", "novel")
+		// NOVEL_DIR (nếu có) quyết định truyện nào; cấu hình file
+		// vẫn đọc theo cwd như cũ, chỉ thư mục đầu ra đi theo truyện.
+		c.OutputDir = ResolveOutputDir()
 	}
 	// Ngôn ngữ sáng tác mặc định là Tiếng Việt; cấu hình cũ không có
 	// trường language vẫn chạy như trước mà không cần sửa file.
