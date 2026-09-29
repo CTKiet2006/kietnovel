@@ -15,7 +15,7 @@ import (
 	"github.com/voocel/agentcore"
 )
 
-// prompt/schema 版本纳入各阶段 InputDigest；升级 prompt 契约时递增以自然失效下游工件。
+// Each prompt/schema version is folded into its stage's InputDigest; bump it when upgrading a prompt contract so downstream artifacts are naturally invalidated.
 const (
 	segmentPromptVersion = "seg-v2" // v2：边界只落真实分隔处、标题逐字复制（配合标题回显校验）
 	analyzePromptVersion = "analyze-v1"
@@ -23,8 +23,8 @@ const (
 	confirmMethodUser    = "user_confirmed" // TUI 预览后按 y 的显式人工确认
 )
 
-// Prompts 是各语义函数的系统提示词。综合分两阶段：Synthesize 出全书 BookSynthesis，
-// Range 出长书连续区间 RangeDigest；两者输出结构不同，须各用对应提示词。
+// Prompts holds the system prompts of the semantic functions. Synthesis has two stages: Synthesize produces the whole-book BookSynthesis,
+// Range produces a consecutive range RangeDigest for a long book; the two have different output structures and must each use their own prompt.
 type Prompts struct {
 	Segment    string
 	Analyze    string
@@ -32,8 +32,8 @@ type Prompts struct {
 	Range      string
 }
 
-// RunBudgets 是各语义函数的输入/输出预算。第一版用保守常量；
-// 未来应由当前 architect 模型的 context window / completion 上限推导，使批次随能力自然放大（RFC §9.2/§21）。
+// RunBudgets holds the input/output budgets of the semantic functions. The first version uses conservative constants;
+// in the future they should be derived from the current architect model's context window / completion cap so batches scale naturally with capability (RFC §9.2/§21).
 type RunBudgets struct {
 	MaxUnitBytes         int
 	SegmentChunkBytes    int
@@ -44,7 +44,7 @@ type RunBudgets struct {
 	SynthesizeMaxTokens  int
 }
 
-// DefaultRunBudgets 返回保守默认预算，用于模型能力未知（探测失败）时兜底。
+// DefaultRunBudgets returns the conservative default budgets, used as a fallback when model capability is unknown (probing failed).
 func DefaultRunBudgets() RunBudgets {
 	return RunBudgets{
 		MaxUnitBytes:         8000,
@@ -57,37 +57,37 @@ func DefaultRunBudgets() RunBudgets {
 	}
 }
 
-// ModelRuntime 承载 imp 语义调用所需的模型能力事实，由 Host 在边界探测后注入（RFC §13/§17）。
-// 让双预算随 context/completion 自然放大、thinking 随能力发送；全零值时回退保守默认，
-// 行为与接入能力前一致。结构化输出不按 provider 能力发 response_format（见 callProfile 注释）。
+// ModelRuntime carries the model capability facts the imp semantic calls need, injected by the Host after boundary probing (RFC §13/§17).
+// It lets the budget pair scale naturally with context/completion and lets thinking be sent according to capability; on an all-zero value it falls back to the
+// conservative defaults, behaving exactly as before capability was wired in. Structured output does not send response_format based on provider capability (see the callProfile comment).
 type ModelRuntime struct {
 	ContextTokens   int                     // 输入上下文上限（token）
 	MaxOutputTokens int                     // 单次可见输出上限（token）
 	Thinking        agentcore.ThinkingLevel // 已按能力 resolve；ThinkingAuto("") 表示不显式发送
 }
 
-// profile 派生本运行时的调用能力选项（thinking）。
+// profile derives this runtime's call capability options (thinking).
 func (rt ModelRuntime) profile() callProfile {
 	return callProfile{thinking: rt.Thinking}
 }
 
-// Caller 是一个语义函数的模型档位：模型 + 该模型的能力事实（RFC §13.1/§17）。
-// segment/analyze/synthesize 各自持有档位，预算与调用选项都按各自档位派生，
-// 廉价档位的小窗口只约束它自己的函数，不拖累其它阶段。
+// Caller is one semantic function's model tier: the model + that model's capability facts (RFC §13.1/§17).
+// segment/analyze/synthesize each hold their own tier, and both the budgets and the call options are derived per tier,
+// so a cheap tier's small window constrains only its own function and never holds back the other stages.
 type Caller struct {
 	Model   callModel
 	Runtime ModelRuntime
 }
 
-// budgetsFromRuntime 从模型真实 context/completion 上限派生各语义函数预算（RFC §9.2/§21）。
-// 这才让「换更强模型自动扩大批次、减少调用次数」成立；能力未知时回退保守默认。
+// budgetsFromRuntime derives the semantic function budgets from the model's real context/completion caps (RFC §9.2/§21).
+// Only this makes "switching to a stronger model automatically enlarges batches and reduces the call count" true; when capability is unknown it falls back to the conservative defaults.
 func budgetsFromRuntime(rt ModelRuntime) RunBudgets {
 	if rt.ContextTokens <= 0 || rt.MaxOutputTokens <= 0 {
 		return DefaultRunBudgets()
 	}
 	const bytesPerToken = 3 // 中文 UTF-8 保守换算：token→字节（偏低估容量更安全）
 	out := rt.MaxOutputTokens
-	// 输入预算：上下文扣掉可见输出与 ~10% 推理/系统预留后按字节换算。
+	// Input budget: from the context window, subtract the visible output and a ~10% reasoning/system reserve, then convert to bytes.
 	reserve := rt.ContextTokens / 10
 	inTokens := rt.ContextTokens - out - reserve
 	if inTokens < 2000 {
@@ -110,19 +110,19 @@ func budgetsFromRuntime(rt ModelRuntime) RunBudgets {
 	}
 }
 
-// Confirmation 是切分确认工件，绑定当前 segmentation（RFC §8.4）。
+// Confirmation is the segmentation confirmation artifact, bound to the current segmentation (RFC §8.4).
 type Confirmation struct {
 	Method   string `json:"method"`
 	Chapters int    `json:"chapters"`
 }
 
-// StoryResolution 是 uncertain 故事状态的用户裁定，绑定当前 synthesis（RFC §10.4）。
+// StoryResolution is the user's verdict on an uncertain story status, bound to the current synthesis (RFC §10.4).
 type StoryResolution struct {
 	Choice string `json:"choice"` // open / closed
 }
 
-// Deps 是 runner 的窄依赖（RFC §17）。三个语义函数各自声明模型档位；
-// Host 默认全部落 architect，配置层可把机械性更强的函数指到更便宜档位（RFC §13.1）。
+// Deps are the runner's narrow dependencies (RFC §17). Each of the three semantic functions declares its own model tier;
+// the Host defaults them all to architect, and the config layer may point the more mechanical functions at a cheaper tier (RFC §13.1).
 type Deps struct {
 	Store         *store.Store
 	CommitChapter ChapterCommitter
@@ -133,7 +133,7 @@ type Deps struct {
 	Budgets       RunBudgets
 }
 
-// budgetsFromDeps 按各语义函数自己的档位能力派生预算（RFC §9.2/§13.1）。
+// budgetsFromDeps derives budgets from the capability of each semantic function's own tier (RFC §9.2/§13.1).
 func budgetsFromDeps(d Deps) RunBudgets {
 	seg := budgetsFromRuntime(d.Segment.Runtime)
 	ana := budgetsFromRuntime(d.Analyze.Runtime)
@@ -149,8 +149,8 @@ func budgetsFromDeps(d Deps) RunBudgets {
 	}
 }
 
-// Run 执行完整导入管线：LoadState → NextAction → 执行一个动作 → 重新读取事实。
-// 在自己的 goroutine 中跑；返回的事件通道由本函数关闭。
+// Run executes the full import pipeline: LoadState -> NextAction -> perform one action -> re-read the facts.
+// It runs in its own goroutine; the returned event channel is closed by this function.
 func Run(ctx context.Context, deps Deps, opts Options) (<-chan Event, error) {
 	if deps.Store == nil || deps.CommitChapter == nil ||
 		deps.Segment.Model == nil || deps.Analyze.Model == nil || deps.Synthesize.Model == nil {
@@ -159,9 +159,9 @@ func Run(ctx context.Context, deps Deps, opts Options) (<-chan Event, error) {
 	if deps.Budgets == (RunBudgets{}) {
 		deps.Budgets = budgetsFromDeps(deps)
 	}
-	// 导入流程日志独立成文件：一次导入的完整转录（事件、重试、完整错误链）不与
-	// 引擎/TUI 日志混流，排查时只看这一个文件。创建失败须回显——面板会指引用户
-	// 查看 logs/import.log，静默回退等于指向一个不存在的文件（Debug-First）。
+	// The import pipeline log lives in its own file: the complete transcript of one import (events, retries, full error chains) does not mingle with
+	// the engine/TUI logs, so troubleshooting only has to look at this one file. A creation failure must be echoed -- the panel
+	// points the user at logs/import.log, and a silent fallback would point at a file that does not exist (Debug-First).
 	log, closeLog, logErr := logger.FileLogger(deps.Store.Dir(), "import.log")
 	log.Info("imp 导入模型运行时",
 		"segment_ctx", deps.Segment.Runtime.ContextTokens,
@@ -197,8 +197,8 @@ func (r *runner) emit(stage Stage, current, total int, msg string, err error) {
 
 func (r *runner) send(ev Event) {
 	r.logEvent(ev)
-	// 终态与停点事件承载唯一的成败/须行动信号（确认预览、--story 提示丢了用户就不知道该做什么），
-	// 必须可靠送达；只有中间进度事件才可在积压时丢弃。
+	// Terminal-state and stop-point events carry the only success/failure and action-required signals (losing a confirmation preview or a --story prompt leaves the user with no idea what to do),
+	// so they must be delivered reliably; only intermediate progress events may be dropped when they pile up.
 	if ev.Stage == StageError || ev.Stage == StageDone ||
 		ev.Stage == StageAwaitingConfirmation || ev.Stage == StageAwaitingStoryStatus {
 		r.events <- ev
@@ -210,8 +210,8 @@ func (r *runner) send(ev Event) {
 	}
 }
 
-// logEvent 把每条进度事件转录进导入专属日志（<书根>/logs/import.log）：面板的重试行原地覆盖、
-// 面板随 Esc 消失，日志是唯一可事后排查的完整流程记录（§14.1）。
+// logEvent transcribes every progress event into the import-specific log (<book root>/logs/import.log): the panel's retry line is overwritten in place and
+// the panel vanishes on Esc, so the log is the only complete pipeline record available for after-the-fact troubleshooting (§14.1).
 func (r *runner) logEvent(ev Event) {
 	log := r.log
 	if log == nil {
@@ -239,9 +239,9 @@ func (r *runner) fail(msg string, err error) {
 	r.emit(StageError, 0, 0, msg, err)
 }
 
-// saveFailure 统一把携带原始响应的失败落到 failures/（RFC §14.2 第三落点），
-// segment/synthesize 等所有语义函数共用此兜底；分析截断打捞路径已就地写更精细的元数据。
-// 无原始响应的失败（IO、取消、前置校验）没有可保存的模型输出，不写。
+// saveFailure uniformly persists a failure that carries a raw response into failures/ (the third landing point of RFC §14.2),
+// a fallback shared by every semantic function such as segment/synthesize; the analysis truncation salvage path already writes finer metadata in place.
+// Failures with no raw response (IO, cancellation, pre-validation) have no model output to save, so nothing is written.
 func (r *runner) saveFailure(err error) {
 	var se *errSemantic
 	var tr *errTruncated
@@ -253,16 +253,16 @@ func (r *runner) saveFailure(err error) {
 	}
 }
 
-// facts 组合工作区事实与正式发布对账。
+// facts combines the workspace facts with the official publish reconciliation.
 func (r *runner) facts() (Facts, error) {
 	return CollectFacts(r.deps.Store, r.ws)
 }
 
-// profileFor 派生某档位的调用选项，并把请求退避/校验重问回显到对应阶段的事件流——
-// 重试退避可静默累计 2 分钟以上，不回显用户会误以为卡死（§14.1）。
-// Key 只给请求退避（带截止时刻）：它是同一次调用内的瞬态状态，UI 原地更新一行（"第 N 次"跳动）。
-// 校验重问是跨调用的语义事件——切分逐块调用，各块独立重问，共用 Key 会让后一块覆盖前一块、
-// 吃掉排查线索（实测面板只剩一条 unit_id 不断变化的行），因此各自成行保留历史。
+// profileFor derives a tier's call options and echoes request backoff / validation re-asks into that stage's event stream --
+// a retry backoff can silently accumulate past 2 minutes, and without an echo the user would think it hung (§14.1).
+// Key is given only to request backoff (with the deadline): it is transient state within one call and the UI updates a single line in place (the "attempt N" text changing).
+// A validation re-ask is a cross-call semantic event -- segmentation calls chunk by chunk and each chunk re-asks independently, so sharing a Key would let a later chunk
+// overwrite an earlier one and swallow the troubleshooting lead (in practice the panel showed a single row whose unit_id kept changing), so each gets its own line to preserve history.
 func (r *runner) profileFor(c Caller, stage Stage) callProfile {
 	prof := c.Runtime.profile()
 	prof.log = r.log
@@ -279,9 +279,9 @@ func (r *runner) profileFor(c Caller, stage Stage) callProfile {
 	return prof
 }
 
-// applyGuidance 把本次 --guide 显式指导持久化为工作区语义输入（RFC §18.3）。
-// 指导是 segmentation InputDigest 的输入之一：内容变化自然使旧切分及其全部下游失配并重做，
-// 不写手工失效规则。工作区未建立时先跳过，ingest 后的下一轮循环写入。
+// applyGuidance persists this run's explicit --guide guidance as a workspace semantic input (RFC §18.3).
+// Guidance is one of the inputs to the segmentation InputDigest: a content change naturally mismatches the old segmentation and all of its downstream and forces a redo,
+// so no manual invalidation rule is written. It is skipped while the workspace does not exist yet and written on the next loop iteration after ingest.
 func (r *runner) applyGuidance() error {
 	g := strings.TrimSpace(r.opts.Guidance)
 	if g == "" || !r.ws.Active() {
@@ -294,9 +294,9 @@ func (r *runner) applyGuidance() error {
 	if existing == g {
 		return nil
 	}
-	// 发布开始后正式工件不可覆盖（§12.2）：此时重切必然在 publish 撞「拒绝覆盖」死墙，
-	// 且撞墙前会先重付切分/分析/综合的全链模型调用——把失败提前到零成本处。
-	// book 是发布的第一笔写入，它存在即发布已开始（导入前置校验保证书原本为空）。
+	// Once publishing has started, official artifacts cannot be overwritten (§12.2): re-segmenting at that point is bound to slam into publish's "refuse to overwrite" wall,
+	// and before hitting that wall it would first re-pay the full chain of segmentation/analysis/synthesis model calls -- so the failure is moved forward to a zero-cost point.
+	// book is the first write of publishing, so its existence means publishing has begun (import pre-validation guarantees the book started out empty).
 	book, err := r.deps.Store.Book.Load()
 	if err != nil {
 		return fmt.Errorf("读取正式 book: %w", err)
@@ -307,9 +307,9 @@ func (r *runner) applyGuidance() error {
 	return r.ws.writeAtomic(fileGuidance, []byte(g))
 }
 
-// checkSourceIdentity 拦截「工作区进行中却传入不同源文件」：ingest 只在无工作区时执行，
-// 若不比对，/import B.txt 会静默从 A 的断点继续、把 A 发布完毕而 B 一个字节都没读（RFC §12.1/§18.2）。
-// 同一文件重复传路径是常见习惯（/import 同路径恢复），按内容摘要比对而非拒绝所有路径。
+// checkSourceIdentity blocks "a different source file is passed while a workspace is in progress": ingest only runs when there is no workspace,
+// without a comparison, /import B.txt would silently resume from A's checkpoint, publish A to completion and not read a single byte of B (RFC §12.1/§18.2).
+// Passing the same path repeatedly is a common habit (/import with the same path to resume), so compare by content digest rather than rejecting every repeated path.
 func (r *runner) checkSourceIdentity() error {
 	if r.opts.SourcePath == "" || !r.ws.Active() {
 		return nil
@@ -390,9 +390,9 @@ func (r *runner) run(ctx context.Context) {
 }
 
 func (r *runner) ingest(ctx context.Context) error {
-	// 走到 ingest 而目录已存在 = 身份三件套（manifest/source/intent）缺失或损坏：
-	// createWorkspace 会以「已存在（无参数 /import 可恢复）」拒绝，无参数重跑又因
-	// WorkspaceReady=false 回到这里要求源路径——两条提示互相打架，用户无路可走。
+	// Reaching ingest while the directory already exists means the identity trio (manifest/source/intent) is missing or corrupt:
+	// createWorkspace refuses with "already exists (recover with a bare /import)", while rerunning bare in turn
+	// fails because WorkspaceReady=false sends it back here demanding a source path -- the two messages contradict each other and the user is left with no way forward.
 	if r.ws.Active() {
 		return fmt.Errorf("meta/import/ 已存在但工作区身份不可用（manifest/source/intent 缺失或损坏），请人工确认后删除该目录再重新导入")
 	}
@@ -423,9 +423,9 @@ func (r *runner) segment(ctx context.Context) error {
 	}
 	r.emit(StageSegmenting, 0, 0, fmt.Sprintf("语义识别章节边界（%d 个坐标单元）...", len(units)), nil)
 	digest := segmentInputDigest(Digest(src), guidance, segmentPromptVersion)
-	// 块缓存身份额外绑定 MaxUnitBytes：unit 表由（归一化源, MaxUnitBytes）唯一确定，换模型
-	// 档位改变 MaxUnitBytes 会重塑超长行的虚拟分片——ID 序列（L1.1…）与块端点可复现但字节
-	// 范围已变，仅凭端点 ID 匹配会复用错位的旧边界（anchor 失配确定性失败或静默错切）。
+	// The chunk cache identity additionally binds MaxUnitBytes: the unit table is uniquely determined by (normalized source, MaxUnitBytes), so switching model
+	// tier and changing MaxUnitBytes reshapes the virtual splits of over-long lines -- the ID sequence (L1.1...) and the chunk endpoints are reproducible but the byte
+	// ranges have changed, so matching on endpoint IDs alone would reuse misaligned old boundaries (either a deterministic anchor mismatch failure or a silent mis-segmentation).
 	chunkIdentity := fmt.Sprintf("%s\x00units:%d", digest, r.deps.Budgets.MaxUnitBytes)
 	seg, err := Segment(ctx, r.deps.Segment.Model, r.deps.Prompts.Segment, src, units, guidance,
 		r.deps.Budgets.SegmentChunkBytes, r.deps.Budgets.SegmentContextMargin, r.deps.Budgets.SegmentMaxTokens,
@@ -436,7 +436,7 @@ func (r *runner) segment(ctx context.Context) error {
 	if err := writeArtifact(r.ws, fileSegmentation, digest, *seg); err != nil {
 		return err
 	}
-	// 最终切分已落盘，块级缓存完成使命；清理失败无碍正确性（digest 仍一致），但要留痕。
+	// The final segmentation is on disk and the chunk-level cache has served its purpose; a cleanup failure does not harm correctness (the digest still agrees) but must leave a trace.
 	if cerr := r.ws.clearDir(dirSegmentChunks); cerr != nil {
 		r.emit(StageSegmenting, 0, 0, fmt.Sprintf("块级缓存清理失败（不影响切分结果）：%v", cerr), nil)
 	}
@@ -445,7 +445,7 @@ func (r *runner) segment(ctx context.Context) error {
 	return nil
 }
 
-// confirm 处理切分确认。--yes 自动接受并写 confirmation 工件；否则展示预览并停止。
+// confirm handles segmentation confirmation. --yes accepts automatically and writes the confirmation artifact; otherwise it shows the preview and stops.
 func (r *runner) confirm() bool {
 	seg, err := readArtifact[Segmentation](r.ws, fileSegmentation)
 	if err != nil {
@@ -459,9 +459,9 @@ func (r *runner) confirm() bool {
 	}
 	accept := r.opts.AcceptSegmentation
 	auto := r.opts.AutoConfirm || (in != nil && in.AutoConfirm)
-	// 语义容错发生过（Notes 非空：空章吸收/起始兜底/重合去重）的切分不由 --yes 盲放行：
-	// 结构被确定性改写过，必须人工核对——否则容错说明在 --yes 下无人看见，等于静默改写。
-	// TUI 预览后按 y 走 AcceptSegmentation（看过预览的显式裁定），不受此限。
+	// A segmentation where semantic tolerance kicked in (Notes non-empty: empty-chapter absorption / leading fallback / overlap dedup) is not blindly waved through by --yes:
+	// the structure was deterministically rewritten, so it must be reviewed by a human -- otherwise the tolerance notes go unseen under --yes, which amounts to a silent rewrite.
+	// Pressing y after the TUI preview goes through AcceptSegmentation (an explicit verdict made after viewing the preview) and is exempt from this.
 	blockedByNotes := auto && !accept && len(seg.Payload.Notes) > 0
 	if blockedByNotes {
 		auto = false
@@ -492,8 +492,8 @@ func (r *runner) confirm() bool {
 	return true
 }
 
-// buildConfirmPreview 组装切分确认预览：章节数、附属区域、全部章节标题与 uncertain 标记（RFC §8.4）。
-// 全量列出，面板 viewport 可滚动查看；不设截断上限。
+// buildConfirmPreview assembles the segmentation confirmation preview: chapter count, ancillary regions, all chapter titles and uncertain markers (RFC §8.4).
+// Everything is listed in full so the panel viewport can scroll through it; no truncation cap is set.
 func buildConfirmPreview(seg *Segmentation) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "已切分 %d 章", len(seg.Chapters))
@@ -518,11 +518,11 @@ func buildConfirmPreview(seg *Segmentation) string {
 	for _, mt := range seg.Matter {
 		fmt.Fprintf(&b, "  [%s] %s\n", mt.Kind, mt.Title)
 	}
-	// 切分期的容错说明（如空正文占位标题并入前段）必须呈现在人工停点上，否则吸收行为变成静默改写。
+	// Tolerance notes from segmentation (such as a placeholder title with an empty body being merged into the previous segment) must surface at the human stop point, otherwise the absorption becomes a silent rewrite.
 	for _, n := range seg.Notes {
 		fmt.Fprintf(&b, "  ! %s\n", n)
 	}
-	// 操作提示（y 确认 / --guide 重切 / Esc）由 TUI 暂停块统一渲染，此处只留事实，避免双份文案漂移。
+	// The action hints (y to confirm / --guide to re-segment / Esc) are rendered uniformly by the TUI pause block; only facts are kept here, to avoid two copies of the wording drifting apart.
 	return b.String()
 }
 
@@ -537,9 +537,9 @@ func (r *runner) analyze(ctx context.Context) error {
 	}
 	seg := &segArt.Payload
 	total := len(seg.Chapters)
-	// 逐章 digest 只绑定本章正文，不含批次上下文与前序 ledger。若第 K 章因缺失/失配需重分析，
-	// 其后仍留着 digest 恰好匹配的旧工件会带着已失效的 ledger 被复用。开分析前清理越过新鲜前缀的尾部，
-	// 强制"重分析某章即失效其后全部分析"，之后前向分析不再产生陈旧尾部（RFC §9.6 / #4a）。
+	// A per-chapter digest binds only that chapter's body, with no batch context and no earlier ledger. If chapter K needs re-analysis because it is missing or mismatched,
+	// the old artifacts after it whose digests happen to match would be reused carrying an already invalidated ledger. Before starting analysis, clear the tail that runs past the fresh prefix,
+	// forcing "re-analyzing one chapter invalidates every analysis after it", after which forward analysis no longer produces a stale tail (RFC §9.6 / #4a).
 	if err := discardAnalysesAfter(r.ws, analyzedChapters(r.ws, seg, src, segArt.InputDigest, analyzePromptVersion), total); err != nil {
 		return err
 	}
@@ -624,10 +624,10 @@ func (r *runner) publish(ctx context.Context) error {
 	if err := publishFoundation(r.deps.Store, f); err != nil {
 		return err
 	}
-	// 导入完成 Hold 必须早于任何章节提交即持久化：若在"最后一章提交"与"设置 Hold"之间崩溃，
-	// 重启后 isPublished=true → 导入判为完成却漏设 Hold，Engine 会误把导入书当普通停机续写。
-	// 置于 publishFoundation（已初始化 RunMeta）之后、章节提交之前，彻底关闭该窗口；重跑发布时幂等
-	// 重设（--continue 不设 Hold，交由自动接力，RFC §12.4）。
+	// The import-complete Hold must be persisted before any chapter commit: if a crash happens between "commit the last chapter" and "set the Hold",
+	// then after the restart isPublished=true -> the import is judged complete yet the Hold was never set, and the Engine mistakes the imported book for an ordinary one to continue writing.
+	// It is placed after publishFoundation (which has initialized RunMeta) and before the chapter commits, closing that window completely; when publishing is rerun it idempotently
+	// re-sets it (--continue sets no Hold and leaves that to the automatic relay, RFC §12.4).
 	if err := r.setCompletionHold(); err != nil {
 		return fmt.Errorf("建立导入完成 Hold：%w", err)
 	}
@@ -643,9 +643,9 @@ func (r *runner) publish(ctx context.Context) error {
 	return nil
 }
 
-// storyChoice 返回 uncertain 状态的有效裁定：优先绑定当前 synthesis 的已落盘裁定，其次本次 opts，再次原始 intent。
-// 已落盘裁定必须校验 InputDigest 与当前 synthesis 一致——重新综合后旧裁定失效，不能把旧 open/closed 静默
-// 套到新结果上，否则用户不会被重新征询（RFC §10.4）。显式 --story（intent）是用户跨综合的常驻指令，可保留。
+// storyChoice returns the effective verdict for an uncertain status: first the persisted verdict bound to the current synthesis, then this run's opts, then the original intent.
+// A persisted verdict must be validated for an InputDigest consistent with the current synthesis -- after re-synthesis the old verdict is void, and silently
+// applying the old open/closed to the new result would mean the user is never asked again (RFC §10.4). An explicit --story (intent) is a standing user instruction across syntheses and may be kept.
 func (r *runner) storyChoice() (string, error) {
 	if raw, err := r.ws.readBytes(fileSynthesis); err == nil {
 		if art, aerr := readArtifact[StoryResolution](r.ws, fileStoryResolve); aerr == nil && art.InputDigest == Digest(raw) {
@@ -666,8 +666,8 @@ func (r *runner) storyChoice() (string, error) {
 	return in.StoryResolution, nil
 }
 
-// resolveStoryStatus 在 uncertain 且已有显式裁定时落盘 story-resolution.json（绑定当前 synthesis），
-// 使下游 NextAction 自然放行；无裁定则展示等待并停止。
+// resolveStoryStatus persists story-resolution.json when the status is uncertain and an explicit verdict already exists (bound to the current synthesis),
+// so that the downstream NextAction lets it through naturally; with no verdict it shows a waiting state and stops.
 func (r *runner) resolveStoryStatus() bool {
 	choice, err := r.storyChoice()
 	if err != nil {
@@ -690,7 +690,7 @@ func (r *runner) resolveStoryStatus() bool {
 	return true
 }
 
-// resolveStory 依据综合结果与用户显式裁定给出故事收束状态（RFC §10.4）。
+// resolveStory decides the story closure status from the synthesis result and the user's explicit verdict (RFC §10.4).
 func (r *runner) resolveStory(syn *BookSynthesis) (bool, error) {
 	switch syn.StoryStatus {
 	case storyClosed:
@@ -715,8 +715,8 @@ func (r *runner) resolveStory(syn *BookSynthesis) (bool, error) {
 	}
 }
 
-// setCompletionHold 设置一次导入完成 Hold；仅 --continue 才跳过（RFC §12.4）。
-// 错误必须传播——Hold 是"导入后不误续写"的唯一保障，静默失败等于保护失效。
+// setCompletionHold sets an import-complete Hold; only --continue skips it (RFC §12.4).
+// The error must propagate -- the Hold is the only safeguard against mistakenly continuing to write after an import, and a silent failure means the safeguard is gone.
 func (r *runner) setCompletionHold() error {
 	in, err := r.ws.LoadIntent()
 	if err != nil {

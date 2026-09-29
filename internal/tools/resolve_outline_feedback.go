@@ -12,7 +12,7 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// ResolveOutlineFeedbackTool 落盘“现有计划仍适用”的审查结论并消费反馈。
+// ResolveOutlineFeedbackTool persists the audit verdict "the existing plan still applies" and consumes the feedback.
 type ResolveOutlineFeedbackTool struct{ store *store.Store }
 
 func NewResolveOutlineFeedbackTool(store *store.Store) *ResolveOutlineFeedbackTool {

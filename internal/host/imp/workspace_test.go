@@ -49,7 +49,7 @@ func TestArtifactRoundtripPreservesIdentity(t *testing.T) {
 
 func TestReadArtifactRejectsSchemaMismatch(t *testing.T) {
 	w := &Workspace{dir: t.TempDir()}
-	// 直接写一个 schema 版本不匹配的工件。
+	// Write an artifact with a mismatched schema version directly.
 	raw := Artifact[string]{SchemaVersion: 999, InputDigest: "sha256:x", Payload: "y"}
 	if err := w.writeJSON("seg.json", raw); err != nil {
 		t.Fatal(err)
@@ -80,11 +80,11 @@ func TestCreateWorkspacePublishesAtomically(t *testing.T) {
 			t.Fatalf("缺工件 %s", f)
 		}
 	}
-	// createWorkspace 成功后不应泄漏半初始化临时目录（meta/import.init-*）。
+	// After createWorkspace succeeds, no half-initialized temp directory (meta/import.init-*) may leak.
 	if dirs, _ := filepath.Glob(filepath.Join(book, "meta", "import.init-*")); len(dirs) != 0 {
 		t.Fatalf("发布成功后不应残留 init 目录：%v", dirs)
 	}
-	// 重复创建应因已存在而失败。
+	// Creating again should fail because it already exists.
 	if _, err := createWorkspace(book, m, Intent{}, norm); err == nil {
 		t.Fatal("已存在活动工作区时重复创建应失败")
 	}
@@ -93,7 +93,7 @@ func TestCreateWorkspacePublishesAtomically(t *testing.T) {
 func TestCreateWorkspaceRejectsInconsistentSnapshot(t *testing.T) {
 	book := t.TempDir()
 	m := Manifest{Version: workspaceSchemaVersion, NormalizedSHA256: Digest([]byte("A"))}
-	// manifest 声明的摘要与实际写入的 normalized 不一致 → 发布前校验应拦截。
+	// The digest declared by the manifest disagrees with the normalized text actually written -> the pre-publish check should block it.
 	if _, err := createWorkspace(book, m, Intent{}, []byte("B")); err == nil {
 		t.Fatal("源快照与 manifest 摘要不一致时应拒绝发布")
 	}

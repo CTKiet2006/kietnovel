@@ -11,7 +11,7 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// ExpandNextArcTool 将当前已完成弧之后的骨架展开为详细章节。
+// ExpandNextArcTool expands the skeleton after the currently completed arc into detailed chapters.
 type ExpandNextArcTool struct {
 	store *store.Store
 }

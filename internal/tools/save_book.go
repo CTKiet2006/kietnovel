@@ -11,7 +11,7 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// SaveBookTool 保存作品对外信息，Architect 专用。
+// SaveBookTool saves the book's public-facing information; for the Architect only.
 type SaveBookTool struct{ store *store.Store }
 
 func NewSaveBookTool(store *store.Store) *SaveBookTool { return &SaveBookTool{store: store} }

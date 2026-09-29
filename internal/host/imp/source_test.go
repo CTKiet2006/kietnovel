@@ -53,7 +53,7 @@ func TestNormalizeLineEndings(t *testing.T) {
 	if got := normalize("a\r\nb\rc\nd"); got != "a\nb\nc\nd" {
 		t.Fatalf("归一化不符：%q", got)
 	}
-	// 空行与缩进必须保留。
+	// Blank lines and indentation must be preserved.
 	if got := normalize("第一章\r\n\r\n\t正文"); got != "第一章\n\n\t正文" {
 		t.Fatalf("空行/缩进未保留：%q", got)
 	}

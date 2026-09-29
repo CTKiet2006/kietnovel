@@ -13,8 +13,8 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// AuditFoundationTool 接收 Architect 对已落盘基础设定的语义审查结论。
-// 文学与跨文件语义由模型判断；工具只保证审查版本、结论和状态迁移一致。
+// AuditFoundationTool takes the Architect's semantic audit verdict on the already-persisted foundation.
+// Literary and cross-file semantics are judged by the model; the tool only guarantees that the audit version, the verdict and the state transition stay consistent.
 type AuditFoundationTool struct {
 	store *store.Store
 }

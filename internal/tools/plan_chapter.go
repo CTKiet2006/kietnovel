@@ -11,7 +11,7 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// PlanChapterTool 保存章节构思，Agent 自主决定规划粒度。
+// PlanChapterTool saves the chapter plan; the Agent decides the planning granularity on its own.
 type PlanChapterTool struct {
 	store *store.Store
 }
@@ -26,7 +26,7 @@ func (t *PlanChapterTool) Description() string {
 }
 func (t *PlanChapterTool) Label() string { return "规划章节" }
 
-// 写工具，禁止并发。
+// A writing tool; concurrency is forbidden.
 func (t *PlanChapterTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *PlanChapterTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 

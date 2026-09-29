@@ -9,8 +9,8 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/stylestat"
 )
 
-// StyleStatsIndex 把 Store 中的已完成章节同步到增量统计器。
-// 首次 Snapshot 全量恢复一次；之后只加载新增章节，重写由 commit_chapter 主动刷新。
+// StyleStatsIndex syncs the completed chapters in the Store into the incremental statistics.
+// The first Snapshot performs a full recovery once; after that only new chapters are loaded, and rewrites are actively refreshed by commit_chapter.
 type StyleStatsIndex struct {
 	store *store.Store
 
@@ -78,8 +78,8 @@ func (s *StyleStatsIndex) Snapshot(
 	return s.tracker.Snapshot(titles, stopwords), nil
 }
 
-// ChapterCommitted 在提交 Saga 完整成功后刷新一章。索引尚未初始化时，
-// 下一次 Snapshot 会从 Progress 事实一次性恢复。
+// ChapterCommitted refreshes one chapter after the commit saga has fully succeeded. While the index is not yet initialized,
+// the next Snapshot recovers it in one go from the Progress facts.
 func (s *StyleStatsIndex) ChapterCommitted(chapter int, text string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

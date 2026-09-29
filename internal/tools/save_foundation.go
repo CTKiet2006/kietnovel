@@ -13,7 +13,7 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// SaveFoundationTool 保存基础设定（premise/outline/characters），Architect 专用。
+// SaveFoundationTool saves the foundation (premise/outline/characters); for the Architect only.
 type SaveFoundationTool struct {
 	store *store.Store
 }
@@ -28,7 +28,7 @@ func (t *SaveFoundationTool) Description() string {
 }
 func (t *SaveFoundationTool) Label() string { return "保存设定" }
 
-// 写工具（跨域更新 Outline/Progress/Characters），禁止并发。
+// A writing tool (it updates Outline/Progress/Characters across domains); concurrency is forbidden.
 func (t *SaveFoundationTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *SaveFoundationTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
@@ -67,8 +67,8 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 
 	result := map[string]any{"saved": true, "type": a.Type, "scale": a.Scale}
 
-	// 全量大纲只属于规划期。写作期必须用受保护的增量操作，完结后必须先重开；
-	// 否则会绕过已完成章节保护，破坏 Progress 与章节事实的一致性。
+	// The full outline belongs to the planning phase only. The writing phase must use the protected incremental operations, and after completion the book must be reopened first;
+	// otherwise it would bypass the completed-chapter protection and break the consistency between Progress and the chapter facts.
 	progress, err := t.store.Progress.Load()
 	if err != nil {
 		return nil, fmt.Errorf("check foundation phase: %w: %w", errs.ErrStoreRead, err)
@@ -91,9 +91,9 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		}
 	}
 
-	// 卷末三选一（续卷/收官/完结）是全书最重的语义判断，理由必须成为审计事实
-	// （decisions.jsonl，与 plan_start/intervention 同一条流水），否则收官过早/
-	// 续卷失当只能翻会话日志排障。事实快照取判定时刻（变更落盘前）的进度。
+	// The end-of-volume choice of three (continue / finale / complete) is the heaviest semantic judgement in the whole book, and the reason must become an audit fact
+	// (decisions.jsonl, the same stream as plan_start/intervention); otherwise a finale that comes too early /
+	// a wrong call to continue can only be diagnosed by digging through the session log. The fact snapshot is the progress as of the moment of the decision (before the change is persisted).
 	volumeEnd := a.Type == "append_volume" || a.Type == "complete_book"
 	if volumeEnd && strings.TrimSpace(a.Reason) == "" {
 		return nil, fmt.Errorf("%s 必须带 reason 参数：对照完结判定清单，一句话说明本次为何续卷、宣告收官或完结: %w", a.Type, errs.ErrToolArgs)
@@ -234,7 +234,7 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		if saved.Final {
 			result["final_volume"] = true
 		} else if domain.FinaleVolume(prior) > 0 {
-			// 事实回显：此前宣告的收官态因追加普通新卷而解除（新卷成为末卷）
+			// Fact echo: a previously declared finale state is cleared because an ordinary new volume was appended (the new volume becomes the last one)
 			result["finale_released"] = true
 		}
 		result["arcs"] = len(saved.Arcs)
@@ -250,9 +250,9 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		}
 
 	case "complete_book":
-		// 全书完结的唯一入口：直接推 Phase=Complete。
-		// 仅 Writing 阶段允许，防止规划阶段误调跳过整本写作。
-		// 拒绝有返工队列时调用——保证 PendingRewrites 跑完才能结束。
+		// The only entry point for completing the whole book: it pushes Phase=Complete directly.
+		// Only allowed during the Writing phase, to stop a mistaken call in the planning phase from skipping the writing of the whole book.
+		// Rejected while a rework queue exists -- guaranteeing that PendingRewrites has to finish before the book can end.
 		progress, perr := t.store.Progress.Load()
 		if perr != nil {
 			return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, perr)
@@ -266,9 +266,9 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		if len(progress.PendingRewrites) > 0 {
 			return nil, fmt.Errorf("还有 %d 章在返工队列中，处理完再调 complete_book: %w", len(progress.PendingRewrites), errs.ErrToolPrecondition)
 		}
-		// 可枚举的完本前置校验必须在代码层(三分法),不能只依赖提示词里的
-		// "完结判定清单"——真实事故:规划刚落盘 phase 翻到 writing,弱模型顺手
-		// 误调 complete_book,0/68 章被直接标记完本。
+		// The enumerable completion preconditions must live in the code layer (the three-way split); they cannot rely only on the
+		// "completion decision checklist" in the prompt -- a real incident: planning had just been persisted, phase flipped to writing, and a weak model casually
+		// called complete_book, marking the book complete at 0/68 chapters.
 		if len(progress.CompletedChapters) == 0 {
 			return nil, fmt.Errorf("一章未写不可完本;规划完成后写作由系统自动推进,无需调用 complete_book: %w", errs.ErrToolPrecondition)
 		}
@@ -284,10 +284,10 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		} else if progress.TotalChapters > 0 && next <= progress.TotalChapters {
 			return nil, fmt.Errorf("大纲内还有未写章节（下一章 %d/共 %d），不可完本；想提前收束请改用 append_volume 且卷 JSON 顶层带 \"final\": true 宣告收官卷: %w", next, progress.TotalChapters, errs.ErrToolPrecondition)
 		}
-		// 活跃长线未收束不可完本——OpenThreads 的字段契约即"需收束才能结局"。这不是
-		// 语义复判：真认为已全部收束，先 update_compass 清空 open_threads 再完本，把
-		// "论述里豁免"变成可审计的落盘动作（实测导入完本书续写时，架构师引经据典绕过
-		// 完结清单第 3 条直接完本，用户的续写诉求被完本规则锁死）。
+		// An unresolved active long thread blocks completion -- the field contract of OpenThreads is exactly "must be resolved for an ending". This is not
+		// a semantic re-judgement: if you really believe everything is resolved, first clear open_threads with update_compass and only then complete the book, turning
+		// "waived in the reasoning" into an auditable persisted action (measured: when continuing an imported finished book, the architect cited precedent to bypass
+		// item 3 of the completion checklist and completed the book outright, locking the user's wish to keep writing behind the completion rules).
 		compass, err := t.store.Outline.LoadCompass()
 		if err != nil {
 			return nil, fmt.Errorf("load compass: %w: %w", errs.ErrStoreRead, err)
@@ -307,8 +307,8 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		if err := decode("compass", &compass); err != nil {
 			return nil, err
 		}
-		// 工具层强制覆盖 LastUpdated 为当前已完成章节数，不信任 LLM 自填。
-		// LLM 通常忘填或留 0，会让 diag.CompassDrift 误报、Router 路由失真。
+		// The tool layer forcibly overwrites LastUpdated with the current number of completed chapters and does not trust what the LLM filled in.
+		// The LLM usually forgets to fill it in or leaves 0, which makes diag.CompassDrift report false positives and distorts Router routing.
 		p, err := t.store.Progress.Load()
 		if err != nil {
 			return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, err)
@@ -337,8 +337,8 @@ func (t *SaveFoundationTool) Execute(_ context.Context, args json.RawMessage) (j
 		t.recordVolumeEndDecision(a.Type, a.Reason, volumeEndFacts, result)
 	}
 
-	// 返回剩余未完成项。初始工件齐全后仍会剩 foundation_audit；只有
-	// audit_foundation 对实际落盘版本给出 ready=true，才允许进入 writing。
+	// It returns the remaining unfinished items. Even once the initial artifacts are all present, foundation_audit still remains; only
+	// audit_foundation returning ready=true for the actually persisted version allows entry into writing.
 	remaining, err := t.store.FoundationMissing()
 	if err != nil {
 		return nil, fmt.Errorf("load foundation state: %w: %w", errs.ErrStoreRead, err)
@@ -370,8 +370,8 @@ func foundationArtifact(t string) string {
 	}
 }
 
-// decodeFoundationJSON 解析 save_foundation 的 content 字段，失败时附上行列位置
-// 和最常见的修复提示，让 LLM 下一次重试能直接定位而不是盲猜。
+// decodeFoundationJSON parses the content field of save_foundation, attaching the line/column position on failure
+// plus the most common fix hints, so the LLM can locate the problem directly on its next retry instead of guessing blindly.
 func decodeFoundationJSON(typeName, content string, out any) error {
 	err := json.Unmarshal([]byte(content), out)
 	if err == nil {
@@ -420,9 +420,9 @@ func normalizeFoundationContent(raw json.RawMessage) (string, error) {
 	return string(raw), nil
 }
 
-// recordVolumeEndDecision 把卷末三选一（续卷/收官/完结）的判定理由落进裁定审计。
-// best-effort：结构变更已落盘，审计失败只告警不回滚——报错会让模型重试已完成
-// 的操作（重复追加卷）。
+// recordVolumeEndDecision records the reason behind the end-of-volume choice of three (continue / finale / complete) into the decision audit.
+// best-effort: the structural change is already persisted, so an audit failure only warns and does not roll back -- reporting an error would make the model retry an operation
+// that has already succeeded (appending the volume again).
 func (t *SaveFoundationTool) recordVolumeEndDecision(action, reason string, facts json.RawMessage, result map[string]any) {
 	decision := map[string]any{"action": action}
 	if v, ok := result["volume"]; ok {
@@ -447,7 +447,7 @@ func (t *SaveFoundationTool) recordVolumeEndDecision(action, reason string, fact
 	}
 }
 
-// consumeWriterFeedback 在结构操作成功后清除已处理的规划反馈。
+// consumeWriterFeedback clears the already-processed planning feedback after a structural operation succeeds.
 func consumeWriterFeedback(st *store.Store) error {
 	if err := st.Outline.ClearOutlineFeedback(); err != nil {
 		return fmt.Errorf("clear outline feedback: %w: %w", errs.ErrStoreWrite, err)

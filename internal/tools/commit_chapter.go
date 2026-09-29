@@ -19,14 +19,14 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// CommitChapterTool 提交章节：加载正文 → 保存终稿 → 生成摘要 → 更新状态 → 更新进度。
+// CommitChapterTool commits a chapter: load the body -> save the final version -> generate the summary -> update the state -> update the progress.
 type CommitChapterTool struct {
 	store      *store.Store
 	styleStats *StyleStatsIndex
 }
 
-// NewCommitChapterTool 创建提交工具。styleStats 必须与 novel_context 共享，
-// 保证新增、重写与恢复完成后刷新同一份统计索引。
+// NewCommitChapterTool creates the commit tool. styleStats must be shared with novel_context,
+// so that the same statistics index is refreshed after a new commit, a rewrite or a recovery.
 func NewCommitChapterTool(store *store.Store, styleStats *StyleStatsIndex) *CommitChapterTool {
 	if styleStats == nil {
 		panic("tools: NewCommitChapterTool requires StyleStatsIndex")
@@ -42,15 +42,15 @@ func (t *CommitChapterTool) chapterStyleDelta(chapter int) (domain.StyleDelta, e
 	return record.StyleDelta, nil
 }
 
-// commitOutput 在 domain.CommitResult 之上嵌入扩展字段，保持 domain 包不依赖 rules。
-// 由于嵌入字段会被 JSON marshaler 提升（promoted），序列化结果等同于扁平结构。
+// commitOutput embeds extra fields on top of domain.CommitResult, keeping the domain package free of a dependency on rules.
+// Since embedded fields are promoted by the JSON marshaler, the serialized result is equivalent to a flat structure.
 type commitOutput struct {
 	domain.CommitResult
 	RuleViolations []rules.Violation `json:"rule_violations,omitempty"`
 }
 
-// commitArgs 是提交 Saga 的规范化结构化载荷。首次执行把它与正文快照一起写入
-// PendingCommit；崩溃恢复一律重放这份冻结意图，忽略新 Worker 生成的参数和草稿。
+// commitArgs is the normalized structured payload of the commit saga. On the first execution it is written, together with the body snapshot, into the
+// PendingCommit; a crash recovery always replays this frozen intent and ignores the parameters and draft produced by a new Worker.
 type commitArgs struct {
 	Chapter int `json:"chapter"`
 	domain.ChapterFacts
@@ -63,7 +63,7 @@ func (t *CommitChapterTool) Description() string {
 }
 func (t *CommitChapterTool) Label() string { return "提交章节" }
 
-// 写工具（跨域可恢复 Saga：完整载荷→终稿/状态→进度→checkpoint），禁止并发。
+// A writing tool (a recoverable saga crossing domains: full payload -> final version/state -> progress -> checkpoint); concurrency is forbidden.
 func (t *CommitChapterTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *CommitChapterTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 func (t *CommitChapterTool) StrictSchema() bool                     { return true }
@@ -127,17 +127,17 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	}
 	if existingPending == nil || existingPending.Stage == domain.CommitStageStarted {
 		if err := t.validateCommitArgs(a); err != nil {
-			// 一份冻结的载荷被反复重放时，每次重试都会撞上同一个错误，而模型无法
-			// 通过新参数脱身：上面的 payload 回放会覆盖掉它刚传的内容。保留这份
-			// 不可变载荷只制造死锁，因此凡是 stage=Started（即尚未写入任何正文的
-			// 那一步）都显式解除冻结，让模型改正后重提。正文与章节记录不受影响。
+			// When a frozen payload is replayed over and over, every retry hits the same error and the model cannot
+			// get out of it with new parameters, because the payload replay above overwrites whatever it just passed. Keeping this
+			// payload immutable only manufactures a deadlock, so for every stage=Started (that is, the step where no body text
+			// has been written yet) the freeze is explicitly released, so the model can correct it and resubmit. The body text and the chapter record are unaffected.
 			//
-			// 限定在 stage=Started：进度已标记/信号已保存的提交走的是
-			// finishPendingCommit 路径，那里 payload 必须保持不可变。
+			// Restricted to stage=Started: a commit whose progress is already marked / whose signal is already saved takes the
+			// finishPendingCommit path, where the payload must stay immutable.
 			//
-			// ErrToolArgs / ErrToolPrecondition 是模型改参数就能过的类别；
-			// ErrToolConflict（队列/状态类）说明是环境变了而非参数错了，
-			// 此时解锁会让模型绕过状态机检查，所以不放行。
+			// ErrToolArgs / ErrToolPrecondition are the classes the model can get past by changing parameters;
+			// ErrToolConflict (the queue/state class) says the environment changed rather than the parameters being wrong,
+			// and unlocking there would let the model bypass the state machine checks, so it is not allowed.
 			if existingPending != nil && existingPending.Stage == domain.CommitStageStarted &&
 				(errors.Is(err, errs.ErrToolArgs) || errors.Is(err, errs.ErrToolPrecondition)) {
 				if clearErr := t.store.Signals.ClearPendingCommit(); clearErr != nil {
@@ -185,11 +185,11 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		return t.buildSkipResult(a.Chapter, progress)
 	}
 
-	// 新提交必须通过当前阶段/返工队列校验；已有普通 PendingCommit 是恢复协议，
-	// 允许跨过“Progress 已先落盘/Phase 已完成”的中断窗口继续收尾。
+	// A new commit must pass the current phase / rework queue checks; an existing ordinary PendingCommit is the recovery protocol,
+	// which allows it to carry on wrapping up across the interruption window where "Progress already landed / Phase already completed".
 	if existingPending == nil {
 		if err := t.store.Progress.ValidateChapterWork(a.Chapter); err != nil {
-			// 队列冲突保持原样（已带 ErrToolConflict 分类）；其他 IO 错误归 Precondition。
+			// A queue conflict is left as it is (it already carries the ErrToolConflict classification); other IO errors are classed as Precondition.
 			if errors.Is(err, errs.ErrToolConflict) {
 				return nil, err
 			}
@@ -203,8 +203,8 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		}
 	}
 
-	// 分层模式越界拦截：必须先于任何写操作，否则越界 commit 会把章节文件、摘要、
-	// Progress 都改坏。boundary 复用给下方第 6b 步算弧/卷信号。
+	// Out-of-range block in layered mode: it must come before any write, otherwise an out-of-range commit would corrupt the chapter file, the summary and
+	// Progress alike. boundary is reused by step 6b below to compute the arc/volume signal.
 	var boundary *store.ArcBoundary
 	if progress.Layered {
 		b, bErr := t.store.Outline.CheckArcBoundary(a.Chapter)
@@ -219,8 +219,8 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		boundary = b
 	}
 
-	// 1. 冻结章节正文。首次提交从草稿读取并随 PendingCommit 一起落盘；恢复时
-	// 只使用该快照，避免新 Worker 在重试前覆盖 draft 后形成“旧事实 + 新正文”。
+	// 1. Freeze the chapter body. A first commit reads it from the draft and persists it together with the PendingCommit; on recovery
+	// only that snapshot is used, which avoids a new Worker overwriting the draft before the retry and ending up with "old facts + new body".
 	var content string
 	if existingPending != nil {
 		content = existingPending.DraftContent
@@ -259,10 +259,10 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		}
 	}
 
-	// StageStarted 可能表示尚未写任何工件，也可能在状态增量中途崩溃；完整载荷
-	// 的所有操作都必须幂等，因此统一重放。StageStateApplied 则直接进入 Progress。
+	// StageStarted may mean no artifact has been written yet, or a crash partway through the state delta; every operation of the full payload
+	// must be idempotent, so it is replayed as a whole. StageStateApplied instead goes straight to Progress.
 	if pending.Stage == domain.CommitStageStarted {
-		// 2. 保存终稿
+		// 2. Save the final version
 		if err := t.store.Drafts.SaveFinalChapter(a.Chapter, content); err != nil {
 			return nil, fmt.Errorf("save final chapter: %w: %w", errs.ErrStoreWrite, err)
 		}
@@ -274,7 +274,7 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 			return nil, fmt.Errorf("save chapter record: %w: %w", errs.ErrStoreWrite, err)
 		}
 
-		// 3. 保存摘要
+		// 3. Save the summary
 		summary := domain.ChapterSummary{
 			Chapter: a.Chapter, Title: a.Title, Summary: a.Summary, Characters: a.Characters, KeyEvents: a.KeyEvents,
 		}
@@ -282,7 +282,7 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 			return nil, fmt.Errorf("save summary: %w: %w", errs.ErrStoreWrite, err)
 		}
 
-		// 4. 更新状态增量
+		// 4. Update the state delta
 		if len(a.TimelineEvents) > 0 {
 			for i := range a.TimelineEvents {
 				a.TimelineEvents[i].Chapter = a.Chapter
@@ -320,14 +320,14 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		}
 	}
 
-	// 5. 更新进度
+	// 5. Update the progress
 	if !completed {
 		if err := t.store.Progress.MarkChapterComplete(a.Chapter, wordCount, a.HookType, a.DominantStrand); err != nil {
 			return nil, fmt.Errorf("mark chapter complete: %w: %w", errs.ErrStoreWrite, err)
 		}
 	}
 
-	// 6. 判断是否需要审阅
+	// 6. Decide whether a review is needed
 	progress, err = t.store.Progress.Load()
 	if err != nil {
 		return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, err)
@@ -337,7 +337,7 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		completedCount = len(progress.CompletedChapters)
 	}
 
-	// 6b. 长篇模式弧/卷信号：boundary 已在入口前置校验，Layered 时保证非 nil
+	// 6b. Arc/volume signal in long-form mode: boundary was already validated at the entry and is guaranteed non-nil when Layered
 	var arcEnd, volumeEnd, needsExpansion, needsNewVolume bool
 	var vol, arc, nextVol, nextArc int
 	if progress != nil && progress.Layered && boundary != nil {
@@ -362,7 +362,7 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		reviewRequired, reviewReason = domain.ShouldReview(completedCount)
 	}
 
-	// 7. 构造结构化信号
+	// 7. Build the structured signal
 	result := domain.CommitResult{
 		Chapter:        a.Chapter,
 		Committed:      true,
@@ -373,8 +373,8 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		HookType:       a.HookType,
 		DominantStrand: a.DominantStrand,
 		Feedback:       a.Feedback,
-		// (feedback 同时持久化到反馈池,见下方 persistFeedback——返回值只是镜像,
-		// architect 经 novel_context 消费的是 store 事实)
+		// (feedback is also persisted into the feedback pool, see persistFeedback below -- the return value is only a mirror,
+		// what the architect consumes via novel_context is the store fact)
 		ArcEnd:         arcEnd,
 		VolumeEnd:      volumeEnd,
 		Volume:         vol,
@@ -385,7 +385,7 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		NextArc:        nextArc,
 	}
 
-	// 8. 完成态判定：非分层写完最后一章 / 分层最终卷最后一章 → MarkComplete
+	// 8. Completion determination: the last chapter in non-layered mode / the last chapter of the final volume in layered mode -> MarkComplete
 	bookComplete, err := t.applyCompletion(&result, progress)
 	if err != nil {
 		return nil, err
@@ -401,7 +401,7 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		result.Flow = string(latestProgress.Flow)
 	}
 
-	// 8.5 反馈池是后续规划的持久事实，由 Architect 在下一次结构操作时消费。
+	// 8.5 The feedback pool is a persistent fact for later planning, consumed by the Architect at the next structural operation.
 	if a.Feedback != nil && (strings.TrimSpace(a.Feedback.Deviation) != "" || strings.TrimSpace(a.Feedback.Suggestion) != "") {
 		if err := t.store.Outline.AppendOutlineFeedback(store.ChapterFeedback{
 			Chapter: a.Chapter, Deviation: a.Feedback.Deviation, Suggestion: a.Feedback.Suggestion,
@@ -410,7 +410,7 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		}
 	}
 
-	// 机械规则是输出的一部分，必须在 ProgressMarked 前固化，恢复时直接返回同一输出。
+	// The mechanical rules are part of the output and must be fixed before ProgressMarked, so that recovery returns exactly the same output.
 	violations := t.checkRules(content)
 	output, err := json.Marshal(commitOutput{CommitResult: result, RuleViolations: violations})
 	if err != nil {
@@ -425,8 +425,8 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		return nil, fmt.Errorf("update pending commit result: %w: %w", errs.ErrStoreWrite, err)
 	}
 
-	// 9. 追加 checkpoint。必须先于清除 pending_commit，确保重启后可见的
-	// pending_commit 总能驱动重跑补齐缺失 checkpoint。
+	// 9. Append the checkpoint. This must come before clearing pending_commit, so that a pending_commit visible after a restart
+	// pending_commit can always drive a rerun to fill in the missing checkpoint.
 	if err := t.appendCommitCheckpoint(a.Chapter); err != nil {
 		return nil, fmt.Errorf("checkpoint commit: %w: %w", errs.ErrStoreWrite, err)
 	}
@@ -436,7 +436,7 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 		return nil, fmt.Errorf("update pending commit checkpoint stage: %w: %w", errs.ErrStoreWrite, err)
 	}
 
-	// 10. 清除进度中间状态
+	// 10. Clear the intermediate progress state
 	if err := t.store.Progress.ClearInProgress(); err != nil {
 		return nil, fmt.Errorf("clear in-progress: %w: %w", errs.ErrStoreWrite, err)
 	}
@@ -448,8 +448,8 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	return output, nil
 }
 
-// finishPendingCommit 收尾 ProgressMarked/SignalSaved 中断窗口。Checkpoint 追加按
-// digest 幂等；只有 checkpoint 与中间态清理都成功后才删除恢复记录。
+// finishPendingCommit wraps up the ProgressMarked/SignalSaved interruption window. The checkpoint append is idempotent by
+// digest; the recovery record is deleted only after both the checkpoint and the intermediate-state cleanup have succeeded.
 func (t *CommitChapterTool) finishPendingCommit(pending domain.PendingCommit, progress *domain.Progress) (json.RawMessage, error) {
 	if pending.Stage == domain.CommitStageProgressMarked {
 		if err := t.appendCommitCheckpoint(pending.Chapter); err != nil {
@@ -525,8 +525,8 @@ func (t *CommitChapterTool) appendCommitCheckpoint(chapter int) error {
 	return err
 }
 
-// checkRules 对章节正文做机械检查：内置产品底线 Lint（机制残留，始终执行）
-// + 用户规则 Check（读本书快照的 structured；快照缺失退到内置默认，保证机械底线始终在）。
+// checkRules runs mechanical checks on the chapter body: the built-in product floor Lint (a mechanism residue, always executed)
+// plus the user rules Check (reading this book's snapshot `structured`; when the snapshot is missing it falls back to the built-in defaults, guaranteeing that the mechanical floor is always present).
 func (t *CommitChapterTool) checkRules(text string) []rules.Violation {
 	violations := rules.Lint(text)
 	structured := rules.SystemDefaults().Structured
@@ -536,19 +536,19 @@ func (t *CommitChapterTool) checkRules(text string) []rules.Violation {
 	return append(violations, rules.Check(text, structured)...)
 }
 
-// executeRewriteCommit 处理打磨/重写章节的提交：覆盖终稿与摘要、更新字数、drain 队列。
-// 跳过所有世界状态追加（timeline / foreshadow / relationship / state_changes）与弧边界检测，
-// 这些已在章节原始提交时应用。
+// executeRewriteCommit handles the commit of a polished/rewritten chapter: overwrite the final version and the summary, update the word count, drain the queue.
+// It skips every world state append (timeline / foreshadow / relationship / state_changes) and the arc boundary detection,
+// because those were already applied when the chapter was originally committed.
 func (t *CommitChapterTool) executeRewriteCommit(a commitArgs, progress *domain.Progress, pending domain.PendingCommit, recovering bool) (json.RawMessage, error) {
 	chapter := a.Chapter
-	// 1. 只使用首次提交时冻结的返工正文，崩溃恢复不得采用随后被覆盖的 draft。
+	// 1. Use only the rework body frozen at the first commit; crash recovery must not adopt a draft that was overwritten afterwards.
 	content := pending.DraftContent
 	if content == "" {
 		return nil, fmt.Errorf("第 %d 章返工提交缺少 draft_content，无法安全恢复: %w", chapter, errs.ErrToolConflict)
 	}
 	wordCount := domain.WordCount(content)
 
-	// 2. 正文或标题至少一项发生变化；标题打磨无需伪造正文改动。
+	// 2. At least one of the body or the title changed; polishing a title must not require faking a body change.
 	if !recovering {
 		changed, err := t.rewriteChanged(chapter, content, a.Title)
 		if err != nil {
@@ -565,8 +565,8 @@ func (t *CommitChapterTool) executeRewriteCommit(a commitArgs, progress *domain.
 	}
 
 	if pending.Stage == domain.CommitStageStarted {
-		// 3. 先构造完整候选记录集并重放校验。旧实现先覆盖记录再重建投影，
-		// 一旦事实链不闭合就会把失败载荷留在磁盘上，后续重试永远读到坏基线。
+		// 3. Build the complete candidate record set first and validate by replay. The old implementation overwrote the records and then rebuilt the projection,
+		// so as soon as the fact chain did not close it left the failed payload on disk and every later retry read a broken baseline.
 		existing, err := t.store.ChapterRecords.Load(chapter)
 		if err != nil {
 			return nil, fmt.Errorf("rewrite: load chapter record: %w: %w", errs.ErrStoreRead, err)
@@ -611,7 +611,7 @@ func (t *CommitChapterTool) executeRewriteCommit(a commitArgs, progress *domain.
 			return nil, fmt.Errorf("rewrite: 章节事实链校验失败，已解除冻结且未写入返工结果: %w: %w", errs.ErrToolPrecondition, err)
 		}
 
-		// 4. 校验通过后再覆盖权威记录与终稿；同一冻结载荷可安全重放。
+		// 4. Only after validation passes are the authoritative records and the final version overwritten; the same frozen payload can be replayed safely.
 		if err := t.store.Drafts.SaveFinalChapter(chapter, content); err != nil {
 			return nil, fmt.Errorf("rewrite: save final chapter: %w: %w", errs.ErrStoreWrite, err)
 		}
@@ -636,19 +636,19 @@ func (t *CommitChapterTool) executeRewriteCommit(a commitArgs, progress *domain.
 		}
 	}
 
-	// 5. 更新字数（MarkChapterComplete 对已完成章节是幂等的：replaces word count, slice.Contains 防止重复入队）
+	// 5. Update the word count (MarkChapterComplete is idempotent for an already completed chapter: it replaces the word count, and slice.Contains prevents double enqueueing)
 	if progress.Phase != domain.PhaseComplete {
 		if err := t.store.Progress.MarkChapterComplete(chapter, wordCount, a.HookType, a.DominantStrand); err != nil {
 			return nil, fmt.Errorf("rewrite: update word count: %w: %w", errs.ErrStoreWrite, err)
 		}
 
-		// 6. Drain 待处理队列；队列空时 CompleteRewrite 会自动把 flow 切回 writing
+		// 6. Drain the pending queue; when the queue is empty CompleteRewrite automatically switches flow back to writing
 		if err := t.store.Progress.CompleteRewrite(chapter); err != nil {
 			return nil, fmt.Errorf("rewrite: complete rewrite: %w: %w", errs.ErrStoreWrite, err)
 		}
 	}
 
-	// 7. 读取 drain 后的 Progress 快照，作为事实返回
+	// 7. Read the Progress snapshot after the drain and return it as the fact
 	mode := pending.RewriteMode
 	if mode == "" {
 		mode = "rewrite"
@@ -667,11 +667,11 @@ func (t *CommitChapterTool) executeRewriteCommit(a commitArgs, progress *domain.
 	}
 	drained := len(remaining) == 0
 
-	// 队列清空后再判完结：返工提交不经过主路径 applyCompletion，完结只能在此触发。
-	//   - 分层 + 正向写作：layeredComplete 总判定（收官卷结构写完 / 未宣告走质量级）。
-	//   - 分层 + reopen 返工（ReopenedFromComplete）：返工只改已有章、不增减结构，按结构完整
-	//     即重新完结——若因返工扰动了某条线索就卡在 writing，终卷末会落到越界续写死循环。
-	//   - 非分层：写满 TotalChapters 即完结（返工不增减章数，原本就满）。
+	// Completion is determined only after the queue is empty: a rework commit does not go through the main path's applyCompletion, so completion can only be triggered here.
+	//   - Layered + forward writing: the overall layeredComplete determination (structurally written if a finale volume is declared / the quality-level check if not).
+	//   - Layered + reopen rework (ReopenedFromComplete): rework only modifies existing chapters and never adds or removes structure, so structural completeness
+	//     alone re-completes the book -- if a mere disturbance of some thread by the rework left it stuck in writing, the end of the final volume would fall into an out-of-range continuation livelock.
+	//   - Non-layered: reaching TotalChapters completes the book (rework neither adds nor removes chapters; it was already full).
 	bookComplete := false
 	if drained && latest != nil {
 		reComplete := false
@@ -701,7 +701,7 @@ func (t *CommitChapterTool) executeRewriteCommit(a commitArgs, progress *domain.
 		}
 	}
 
-	// 同主路径：rewrite/polish 也返回基于当前正文的机械检查结果。
+	// Same as the main path: rewrite/polish also returns the mechanical check results based on the current body text.
 	violations := t.checkRules(content)
 	output, err := json.Marshal(map[string]any{
 		"chapter": chapter, "rewritten": true, "mode": mode, "word_count": wordCount,
@@ -718,7 +718,7 @@ func (t *CommitChapterTool) executeRewriteCommit(a commitArgs, progress *domain.
 		return nil, fmt.Errorf("rewrite: update pending progress stage: %w: %w", errs.ErrStoreWrite, err)
 	}
 
-	// 8. Checkpoint 后再标 signal_saved，最后清理 PendingCommit。
+	// 8. After the checkpoint, mark signal_saved, and finally clear the PendingCommit.
 	if err := t.appendCommitCheckpoint(chapter); err != nil {
 		return nil, fmt.Errorf("rewrite: checkpoint commit: %w: %w", errs.ErrStoreWrite, err)
 	}
@@ -738,9 +738,9 @@ func (t *CommitChapterTool) executeRewriteCommit(a commitArgs, progress *domain.
 	return output, nil
 }
 
-// restoreRewritePlants 只修复旧版本已经造成的单一损坏形态：伏笔账本仍记录本章
-// 的 plant，但本章接纳记录已被失败返工覆盖。账本给出完整 id、描述和种植章，
-// 因而可以确定性还原；其他不一致继续显式报错，不猜测剧情事实。
+// restoreRewritePlants repairs only the single corruption shape older versions could produce: the foreshadowing ledger still records this chapter's
+// plant, while this chapter's accepted record has been overwritten by the failed rework. The ledger supplies the full id, description and planting chapter,
+// so the restore can be deterministic; any other inconsistency still reports an explicit error rather than guessing plot facts.
 func (t *CommitChapterTool) restoreRewritePlants(chapter int, existing []domain.ForeshadowUpdate, facts *domain.ChapterFacts) ([]string, error) {
 	planted := make(map[string]struct{}, len(existing)+len(facts.ForeshadowUpdates))
 	for _, update := range existing {
@@ -798,8 +798,8 @@ func (t *CommitChapterTool) refreshStyleStats(chapter int, content string) {
 	t.styleStats.ChapterCommitted(chapter, content)
 }
 
-// buildSkipResult 为"章节已完成的重复提交"构造与正常 commit 对齐的事实返回。
-// 协调者据此做后续决策（writer/editor/architect 派发），而不会因为拿到 prose 提示而幻觉。
+// buildSkipResult builds a fact return aligned with a normal commit for a "repeat submission of an already completed chapter".
+// The coordinator makes its follow-up decisions on this (dispatching writer/editor/architect) instead of hallucinating because it received a prose hint.
 func (t *CommitChapterTool) buildSkipResult(chapter int, progress *domain.Progress) (json.RawMessage, error) {
 	_, wordCount, err := t.store.Drafts.LoadChapterContent(chapter)
 	if err != nil {
@@ -843,12 +843,12 @@ func (t *CommitChapterTool) buildSkipResult(chapter int, progress *domain.Progre
 	return json.Marshal(result)
 }
 
-// applyCompletion 判断本次 commit 是否使全书完结，若是则 MarkComplete 并返回 true。
-//   - 非分层：写完约定总章数即完结。
-//   - 分层：架构师显式 save_foundation type=complete_book 是主路径；这里再加一道
-//     确定性兜底（见 layeredComplete）——防止模型在终点既不 append_volume 也不
-//     complete_book，导致"写手裸跑越界章节 → 越界守卫拦截 → 反复重试"的 livelock
-//     （《凡骨》ch204..347 案例的根因）。
+// applyCompletion decides whether this commit completes the whole book, and if so calls MarkComplete and returns true.
+//   - Non-layered: finishing the agreed total chapter count completes the book.
+//   - Layered: an explicit architect save_foundation type=complete_book is the main path; this adds a second
+//     deterministic backstop (see layeredComplete) -- stopping the model from reaching the end with neither append_volume nor
+//     complete_book, which produces the livelock "the writer runs on into out-of-range chapters -> the out-of-range guard blocks it -> repeated retries"
+//     (the root cause of the 《凡骨》ch204..347 case).
 func (t *CommitChapterTool) applyCompletion(result *domain.CommitResult, progress *domain.Progress) (bool, error) {
 	if progress == nil {
 		return false, nil
@@ -878,18 +878,18 @@ func (t *CommitChapterTool) applyCompletion(result *domain.CommitResult, progres
 	return false, nil
 }
 
-// ── 分层完结判定（包级：commit_chapter 与 save_volume_summary 两个触发点共用）──
+// ── Layered completion determination (package level: shared by the two trigger points commit_chapter and save_volume_summary) ──
 //
-// 完结检查永远发生在"最后一块事实落地"的工具里：
-//   - 未宣告收官：末章 commit（layeredBookComplete 质量级）
-//   - 已宣告收官：正向主路径的最后一块拼图是卷末收尾三连（评审→弧摘要→卷摘要），
-//     故触发点在 save_volume_summary；返工 drain 后三连已齐时由 commit 触发。
+// The completion check always happens in the tool where the last fact lands:
+//   - Finale not declared: the last chapter's commit (the quality-level layeredBookComplete)
+//   - Finale declared: the last piece of the forward main path is the end-of-volume wrap-up trio (review -> arc summary -> volume summary),
+//     so the trigger point is save_volume_summary; after a rework drain, once the trio is complete the commit triggers it.
 
-// layeredStructurallyComplete 判定分层长篇是否"结构上写完"：返工队列空 + 无骨架弧待展开
-// + 所有已展开章节都已写。这是确定性的终态事实，不含伏笔/长线等语义判断——用作"防终态
-// 死循环"的安全网（返工排空后据此重新完结）。
+// layeredStructurallyComplete determines whether a layered long book is "structurally written": rework queue empty + no skeleton arc left to expand
+// + all expanded chapters written. This is a deterministic terminal fact containing no semantic judgement such as foreshadowing / long threads -- it serves as the safety net
+// against a "terminal-state livelock" (re-completing the book once the rework has drained).
 func layeredStructurallyComplete(st *store.Store, progress *domain.Progress) (bool, error) {
-	// 1. 返工队列必须清空
+	// 1. The rework queue must be empty
 	if len(progress.PendingRewrites) > 0 {
 		return false, nil
 	}
@@ -900,7 +900,7 @@ func layeredStructurallyComplete(st *store.Store, progress *domain.Progress) (bo
 	if len(volumes) == 0 {
 		return false, nil
 	}
-	// 2. 不能还有骨架弧待展开（计划内仍有内容要写）
+	// 2. No skeleton arc may be left to expand (there is still planned content to write)
 	for i := range volumes {
 		for j := range volumes[i].Arcs {
 			if !volumes[i].Arcs[j].IsExpanded() {
@@ -908,14 +908,14 @@ func layeredStructurallyComplete(st *store.Store, progress *domain.Progress) (bo
 			}
 		}
 	}
-	// 3. 已展开章节必须全部写完
+	// 3. All expanded chapters must be fully written
 	expanded := len(domain.FlattenOutline(volumes))
 	return expanded > 0 && len(progress.CompletedChapters) >= expanded, nil
 }
 
-// finaleWrapped 收官卷的卷末收尾三连（弧评审/弧摘要/卷摘要）是否齐备。
-// 收官完结不要求伏笔/长线归零，但必须等末弧过完编辑质量闸——结局是全书最要紧的部分，
-// 完结不能抢在 editor 评审（可能入队返工）与摘要落盘之前。
+// finaleWrapped reports whether a finale volume has the complete end-of-volume wrap-up trio (arc review / arc summary / volume summary).
+// Finale completion does not require foreshadowing / long threads to reach zero, but it must wait for the last arc to pass the editorial quality gate -- the ending is the most important part of the book,
+// so completion must not jump ahead of the editor review (which may enqueue a rework) and the summary being persisted.
 func finaleWrapped(st *store.Store, progress *domain.Progress) (bool, error) {
 	last := progress.LatestCompleted()
 	if last <= 0 {
@@ -943,13 +943,13 @@ func finaleWrapped(st *store.Store, progress *domain.Progress) (bool, error) {
 	return hasReview && hasArcSummary && hasVolumeSummary, nil
 }
 
-// layeredComplete 分层正向写作的完结总判定：
-//   - 已宣告收官卷（layered_outline 最后一卷带 final）→ 结构写完 + 卷末收尾三连齐备
-//     即完结，不再要求伏笔/长线归零。收官卷整卷以收线为目标（架构师规划时已把长线/
-//     伏笔分配进各弧），个别遗漏属编辑质量问题，不该把全书卡在终态之外——否则
-//     estimated_scale 高估的书永远无法合法完本（140 章 stop guard 熔断案例的根因侧）。
-//   - 未宣告 → 质量级 layeredBookComplete，防模型既不收官也不完本时在大纲耗尽处
-//     过早收尾。
+// layeredComplete is the overall completion determination for layered forward writing:
+//   - A declared finale volume (the last volume of layered_outline carries final) -> structurally written + the end-of-volume wrap-up trio complete
+//     means complete, with no further requirement that foreshadowing / long threads reach zero. A finale volume targets thread closure for the whole volume (the architect already distributed the long threads /
+//     foreshadowing among the arcs at planning time), so an individual omission is an editorial quality issue and should not hold the whole book outside the terminal state -- otherwise
+//     a book whose estimated_scale is overestimated could never legitimately finish (the other side of the root cause of the 140-chapter stop guard circuit-breaker case).
+//   - Not declared -> the quality-level layeredBookComplete, preventing the model from wrapping up prematurely where the outline
+//     is exhausted when it neither declares a finale nor completes the book.
 func layeredComplete(st *store.Store, progress *domain.Progress) (bool, error) {
 	volumes, err := st.Outline.LoadLayeredOutline()
 	if err != nil {
@@ -965,9 +965,9 @@ func layeredComplete(st *store.Store, progress *domain.Progress) (bool, error) {
 	return layeredBookComplete(st, progress)
 }
 
-// ReconcileLayeredCompletion 根据当前持久化事实补齐分层书的完结状态。
-// save_volume_summary 正常路径和 Engine 崩溃恢复共用这一入口，避免卷摘要已落盘、
-// Progress 尚未来得及 MarkComplete 时永久丢失自动完结触发点。
+// ReconcileLayeredCompletion fills in the completion state of a layered book from the current persisted facts.
+// The normal path of save_volume_summary and the Engine's crash recovery share this entry point, which prevents the automatic completion trigger from being lost forever
+// when the volume summary has already landed but Progress has not yet had the chance to MarkComplete.
 func ReconcileLayeredCompletion(st *store.Store) (bool, error) {
 	progress, err := st.Progress.Load()
 	if err != nil {
@@ -992,16 +992,16 @@ func ReconcileLayeredCompletion(st *store.Store) (bool, error) {
 	return true, nil
 }
 
-// layeredBookComplete 用客观事实判断分层长篇是否真正写完，对照 architect-long.md 完结判定
-// 清单里可量化的几项 + 结构性事实。结构完整之上再要求伏笔归零、长线收束——任一不满足都
-// 让位给架构师继续 expand_next_arc / append_volume，绝不抢在故事没写完时收尾。无 compass 时保守
-// 判为未完结。这是未宣告收官卷时的"质量级"完结判定，比 layeredStructurallyComplete 更严。
+// layeredBookComplete judges with objective facts whether a layered long book is truly finished, against the quantifiable items in the completion
+// checklist of architect-long.md plus the structural facts. On top of structural completeness it further requires foreshadowing to reach zero and long threads to be resolved -- if either is unmet it
+// yields to the architect to keep doing expand_next_arc / append_volume, and it never wraps up while the story is unfinished. With no compass it conservatively
+// judges the book unfinished. This is the "quality-level" completion determination used when no finale volume is declared, and it is stricter than layeredStructurallyComplete.
 func layeredBookComplete(st *store.Store, progress *domain.Progress) (bool, error) {
 	structurallyComplete, err := layeredStructurallyComplete(st, progress)
 	if err != nil || !structurallyComplete {
 		return structurallyComplete, err
 	}
-	// 4. 活跃伏笔必须归零（承诺已兑现）
+	// 4. Active foreshadowing must reach zero (the promises have been kept)
 	active, err := st.World.LoadActiveForeshadow()
 	if err != nil {
 		return false, fmt.Errorf("load active foreshadow: %w", err)
@@ -1009,7 +1009,7 @@ func layeredBookComplete(st *store.Store, progress *domain.Progress) (bool, erro
 	if len(active) > 0 {
 		return false, nil
 	}
-	// 5. 指南针活跃长线必须收束（无 compass / 长线未清都交回架构师裁定）
+	// 5. The compass' active long threads must be resolved (no compass / unresolved threads both go back to the architect's judgement)
 	compass, err := st.Outline.LoadCompass()
 	if err != nil {
 		return false, fmt.Errorf("load compass: %w", err)

@@ -7,8 +7,8 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 )
 
-// validateCommitArgs 在创建 PendingCommit 前校验模型提交的完整语义载荷。
-// 错误直接返回模型修正；不生成半成品状态，也不猜测缺失值。
+// validateCommitArgs validates the model's full semantic payload before the PendingCommit is created.
+// Errors go straight back to the model to fix; no half-baked state is produced and no missing value is guessed.
 func (t *CommitChapterTool) validateCommitArgs(a commitArgs) error {
 	if err := chapterfacts.Validate(a.ChapterFacts); err != nil {
 		return fmt.Errorf("%v: %w", err, errs.ErrToolArgs)
@@ -19,9 +19,9 @@ func (t *CommitChapterTool) validateCommitArgs(a commitArgs) error {
 		if err != nil {
 			return fmt.Errorf("load foreshadow ledger: %w: %w", errs.ErrStoreRead, err)
 		}
-		// 账本是全书投影，而 Projector 按章序重放章节记录。重写早期章节时账本里
-		// 还躺着后续章节才种下的伏笔——放行它们，提交前校验就与重放结论相反，
-		// 模型无从修正，返工队列随之锁死。故一律以"本章可见"为准。
+		// The ledger is a whole-book projection, while the Projector replays chapter records in chapter order. When an early chapter is
+		// is rewritten, the ledger still holds foreshadowing that only later chapters planted -- letting those through makes the pre-commit validation
+		// contradict the replay outcome, the model has no way to correct it, and the rework queue then deadlocks. So "visible in this chapter" is always the yardstick.
 		plantedAt := make(map[string]int, len(ledger))
 		for _, entry := range ledger {
 			plantedAt[entry.ID] = entry.PlantedAt

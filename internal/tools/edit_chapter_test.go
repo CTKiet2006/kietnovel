@@ -32,7 +32,7 @@ func queueCompletedChapterForEdit(t *testing.T, s *store.Store, chapter int, wor
 	}
 }
 
-// TestEditChapterAppliesEdit 正常路径：drafts 已有内容，唯一匹配替换成功。
+// TestEditChapterAppliesEdit happy path: drafts already has content and the unique match is replaced successfully.
 func TestEditChapterAppliesEdit(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -106,7 +106,7 @@ func TestEditChapterRejectsIncompleteChapter(t *testing.T) {
 	}
 }
 
-// TestEditChapterSeedsFromFinalChapter drafts 不存在但 chapters 有 → 自动从 chapters 播种。
+// TestEditChapterSeedsFromFinalChapter drafts does not exist but chapters does -> seed automatically from chapters.
 func TestEditChapterSeedsFromFinalChapter(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -118,7 +118,7 @@ func TestEditChapterSeedsFromFinalChapter(t *testing.T) {
 	}
 	enterEditWritingPhase(t, s)
 
-	// 模拟第 3 章已提交且进入打磨队列
+	// Simulate chapter 3 already committed and sitting in the polish queue
 	original := "风从窗缝里钻进来，带着潮湿的泥土气味。"
 	if err := s.Drafts.SaveFinalChapter(3, original); err != nil {
 		t.Fatalf("SaveFinalChapter: %v", err)
@@ -143,7 +143,7 @@ func TestEditChapterSeedsFromFinalChapter(t *testing.T) {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	// drafts 应被播种且包含新文本
+	// drafts should be seeded and contain the new text
 	draft, err := s.Drafts.LoadDraft(3)
 	if err != nil {
 		t.Fatalf("LoadDraft: %v", err)
@@ -152,7 +152,7 @@ func TestEditChapterSeedsFromFinalChapter(t *testing.T) {
 		t.Fatalf("expected draft seeded + edited, got %q", draft)
 	}
 
-	// chapters 保持原样（edit_chapter 不碰终稿）
+	// chapters stays as it is (edit_chapter never touches the final version)
 	final, err := s.Drafts.LoadChapterText(3)
 	if err != nil {
 		t.Fatalf("LoadChapterText: %v", err)
@@ -162,7 +162,7 @@ func TestEditChapterSeedsFromFinalChapter(t *testing.T) {
 	}
 }
 
-// TestEditChapterRejectsCompletedWithoutQueue 已完成且不在重写队列中 → 拒绝。
+// TestEditChapterRejectsCompletedWithoutQueue already complete and not in the rewrite queue -> rejected.
 func TestEditChapterRejectsCompletedWithoutQueue(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -199,7 +199,7 @@ func TestEditChapterRejectsCompletedWithoutQueue(t *testing.T) {
 	}
 }
 
-// TestEditChapterRejectsAmbiguousMatch 多处匹配且未开 replace_all → 报错。
+// TestEditChapterRejectsAmbiguousMatch multiple matches and replace_all not enabled -> error.
 func TestEditChapterRejectsAmbiguousMatch(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -226,7 +226,7 @@ func TestEditChapterRejectsAmbiguousMatch(t *testing.T) {
 	}
 }
 
-// TestEditChapterReplaceAll replace_all=true 时所有匹配均被替换。
+// TestEditChapterReplaceAll with replace_all=true every match gets replaced.
 func TestEditChapterReplaceAll(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -262,7 +262,7 @@ func TestEditChapterReplaceAll(t *testing.T) {
 	}
 }
 
-// TestEditChapterRejectsEmptyOldString 空 old_string → 参数非法。
+// TestEditChapterRejectsEmptyOldString empty old_string -> invalid argument.
 func TestEditChapterRejectsEmptyOldString(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -289,7 +289,7 @@ func TestEditChapterRejectsEmptyOldString(t *testing.T) {
 	}
 }
 
-// TestEditChapterRejectsNoDraftNoFinal drafts 与 chapters 都不存在 → 报错提示先 draft_chapter。
+// TestEditChapterRejectsNoDraftNoFinal neither drafts nor chapters exists -> error telling the user to draft_chapter first.
 func TestEditChapterRejectsNoDraftNoFinal(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)
@@ -317,8 +317,8 @@ func TestEditChapterRejectsNoDraftNoFinal(t *testing.T) {
 	}
 }
 
-// TestEditChapterWorksWithCommitValidation 整条链路：edit_chapter → commit_chapter 成功 drain 队列。
-// 验证新工具与 commit_chapter 的 drafts≠chapters 硬校验配合良好。
+// TestEditChapterWorksWithCommitValidation the whole chain: edit_chapter -> commit_chapter drains the queue successfully.
+// Verifies that the new tool cooperates well with commit_chapter's strict drafts != chapters check.
 func TestEditChapterWorksWithCommitValidation(t *testing.T) {
 	dir := t.TempDir()
 	s := store.NewStore(dir)

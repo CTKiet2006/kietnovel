@@ -200,7 +200,7 @@ func TestDraftChapterWrite(t *testing.T) {
 		t.Fatal("expected non-zero word count")
 	}
 
-	// 验证能读回来
+	// Verify that it can be read back
 	content, err := store.Drafts.LoadDraft(1)
 	if err != nil {
 		t.Fatalf("LoadDraft: %v", err)

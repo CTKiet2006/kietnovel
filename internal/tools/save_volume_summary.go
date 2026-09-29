@@ -14,7 +14,7 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// SaveVolumeSummaryTool 保存卷级摘要，Editor 在卷结束时调用。
+// SaveVolumeSummaryTool saves the volume-level summary; the Editor calls it at the end of a volume.
 type SaveVolumeSummaryTool struct {
 	store *store.Store
 }
@@ -29,7 +29,7 @@ func (t *SaveVolumeSummaryTool) Description() string {
 }
 func (t *SaveVolumeSummaryTool) Label() string { return "保存卷摘要" }
 
-// 写工具，禁止并发。
+// A writing tool; concurrency is forbidden.
 func (t *SaveVolumeSummaryTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *SaveVolumeSummaryTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
@@ -89,9 +89,9 @@ func (t *SaveVolumeSummaryTool) Execute(_ context.Context, args json.RawMessage)
 	}
 
 	result := map[string]any{"saved": true, "type": "volume_summary", "volume": a.Volume}
-	// 收官主路径的完结触发点：卷末收尾三连的最后一块拼图是卷摘要，落盘后若全书已
-	// 满足完结条件则就地 MarkComplete（完结检查始终发生在最后一块事实落地的工具里，
-	// 与 commit_chapter 同一模式；谓词见 commit_chapter.go 的 layeredComplete）。
+	// The completion trigger point on the finale main path: the last piece of the end-of-volume wrap-up trio is the volume summary, and once it lands, if the book already
+	// satisfies the completion condition, MarkComplete is called in place (the completion check always happens in the tool where the last fact lands,
+	// the same pattern as commit_chapter; the predicate is layeredComplete in commit_chapter.go).
 	complete, err := ReconcileLayeredCompletion(t.store)
 	if err != nil {
 		return nil, fmt.Errorf("reconcile book completion: %w", err)

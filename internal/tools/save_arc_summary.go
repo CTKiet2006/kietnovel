@@ -16,7 +16,7 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// SaveArcSummaryTool 保存弧级摘要、角色快照和写作规则，Editor 在弧结束时调用。
+// SaveArcSummaryTool saves the arc-level summary, the character snapshot and the writing rules; the Editor calls it at the end of an arc.
 type SaveArcSummaryTool struct {
 	store *store.Store
 }
@@ -31,7 +31,7 @@ func (t *SaveArcSummaryTool) Description() string {
 }
 func (t *SaveArcSummaryTool) Label() string { return "保存弧摘要" }
 
-// 写工具，禁止并发。
+// A writing tool; concurrency is forbidden.
 func (t *SaveArcSummaryTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *SaveArcSummaryTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
@@ -120,8 +120,8 @@ func (t *SaveArcSummaryTool) Execute(_ context.Context, args json.RawMessage) (j
 			return nil, fmt.Errorf("save style rules: %w: %w", errs.ErrStoreWrite, err)
 		}
 
-		// 弧摘要是 Router 的完成标记，作为最后一个语义工件写入。此前任一步
-		// 失败时摘要保持缺失，恢复后 Router 仍会重派本任务。
+		// The arc summary is the Router's completion marker and is written as the last semantic artifact. If an earlier step
+		// fails, the summary stays missing and after recovery the Router still re-dispatches this task.
 		if err := t.store.Summaries.SaveArcSummary(arcSummary); err != nil {
 			return nil, fmt.Errorf("save arc summary: %w: %w", errs.ErrStoreWrite, err)
 		}
@@ -147,8 +147,8 @@ func (t *SaveArcSummaryTool) Execute(_ context.Context, args json.RawMessage) (j
 	})
 }
 
-// arcSummaryReplay 只放行内容完全相同的幂等收尾，用于语义工件已落盘但
-// checkpoint 追加失败的重试。任何差异都显式冲突，不能借重试覆盖历史聚合事实。
+// arcSummaryReplay only lets through an idempotent wrap-up whose content is exactly identical, for retries where the semantic artifact is already on disk but
+// the checkpoint append failed. Any difference is an explicit conflict; a retry must never overwrite historical aggregate facts.
 func (t *SaveArcSummaryTool) arcSummaryReplay(
 	summary domain.ArcSummary,
 	snapshots []domain.CharacterSnapshot,
