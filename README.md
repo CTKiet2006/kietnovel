@@ -8,9 +8,24 @@ Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định 
 
 - 🇻🇳 **Giao diện TUI Việt hóa 100%**: Từ Setup Wizard cài đặt ban đầu, màn hình chào mừng, thanh trạng thái, Activity stream trực tiếp, bảng quản lý Provider/Model (`/config`, `/model`) đến thông báo lỗi và phím tắt đều được dịch sang Tiếng Việt chuẩn mực, tự nhiên.
 - 🌐 **Tùy chọn Ngôn ngữ sáng tác truyện**: Viết truyện bằng Tiếng Việt (mặc định) hoặc Tiếng Trung nguyên bản qua `"language": "vi"` / `"language": "zh"`. Bộ prompt giữ nguyên bản gốc (đã kiểm chứng), chỉ đổi lớp văn phong kèm chỉ dẫn buộc ngôn ngữ đầu ra.
-- 🦙 **Tích hợp sẵn Ollama Local**: Hỗ trợ chạy 100% offline, miễn phí không tốn tiền API với các model mã nguồn mở chạy trên GPU nội bộ (Qwen 2.5 / 3.5, Llama, v.v.).
+- 🔑 **Chạy thẳng với API cloud**: Hỗ trợ OpenRouter, DeepSeek, Gemini, Anthropic, OpenAI. Một API key là viết được ngay, không cần Docker.
 - ✍️ **Văn phong chống AI sáo rỗng**: kèm quy chuẩn hành văn tiểu thuyết Tiếng Việt (`assets/voice.md`) và bộ chống sáo rỗng (`assets/references/anti-ai-tone.md`) với danh sách cụm cấm cụ thể cho tiếng Việt — "ở một mức độ nào đó", "như thể", "bất giác", "không khỏi"... giúp hành văn sống động, gãy gọn, có chiều sâu.
 - 🚀 **Đồng bộ toàn diện Upstream mới nhất**: Kiến trúc Đa Agent, quy hoạch cuộn 2 tầng (Rolling planning), nén ngữ cảnh 4 cấp, điểm phục hồi step-level, và toàn bộ 14 lệnh slash commands.
+
+## 🛡️ Đã kiểm tra bảo mật
+
+| Hạng mục | Kết quả |
+|---|---|
+| Dependency chain | Chỉ 10 dep trực tiếp, tất cả từ nguồn công khai. `go mod verify` + `GOSUMDB=sum.golang.org` → mọi hash khớp cơ sở dữ liệu checksum chính thức của Google |
+| `govulncheck` | **No vulnerabilities found** (bao gồm standard library) |
+| Mọi request mạng | Chỉ tới `provider` bạn tự cấu hình. Ngoài ra: kiểm tra phiên bản (đọc) và lấy giá model từ OpenRouter |
+| API key | Chỉ nằm trong header gửi tới provider. Không log, không ghi file, không gửi đi nơi khác |
+| Telemetry / analytics | Không có. Zero dependency ngoài stdlib ở tầng LLM |
+| Obfuscation | Không có `unsafe`, `go:linkname`, zero-width char, `func init()` ẩn, base64 blob |
+| Thực thi lệnh | Chỉ chạy lệnh **bạn tự cấu hình** trong `notify.command`, và tự cập nhật binary (có verify SHA256) |
+| Biến môi trường đọc | Đúng một biến: `NOVEL_DIR`. Không đọc biến môi trường ẩn nào khác |
+
+Điểm cần biết: đây là **agent framework** — mô hình được cấp tool đọc/ghi file và chạy shell. Nếu nội dung truyện bạn nhập vào chứa prompt injection, đó là đường thực thi. Đây là thiết kế của mọi công cụ agent, không phải backdoor.
 
 ## 📑 Mục Lục
 
@@ -28,68 +43,54 @@ Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định 
 
 ## 1. Yêu Cầu Hệ Thống
 
-- Khuyến nghị nhất: Docker & Docker Desktop (Windows / macOS / Linux).
-- Hoặc chạy từ Source: Máy tính đã cài đặt Go ≥ 1.21.
-- LLM:
-  - Máy có GPU (Nvidia VRAM ≥ 12GB) nếu muốn chạy Ollama cục bộ với model Qwen 2.5 / 3.5.
-  - Hoặc API Key từ OpenRouter, Anthropic, Google Gemini, OpenAI, DeepSeek.
+- **Go ≥ 1.25** để build từ source. Không cần Docker.
+- Một API key từ nhà cung cấp LLM: OpenRouter, DeepSeek, Gemini, Anthropic hoặc OpenAI.
+
+> **Vì sao không khuyến nghị chạy model local?** Công cụ này cần context rất lớn (mặc định 200k token, nén ở 85%) và gọi LLM **4-6 lần cho mỗi chương** — Architect lên kế hoạch, Writer viết nháp, Editor đánh giá 7 chiều, rồi commit. Model local địa phương không đáp ứng: model 14B cần ~40GB RAM để đạt 64k context, và trên CPU tốc độ 2-5 tok/s nên một chương mất hàng giờ. Hãy dùng API cloud.
 
 ## 2. Cài Đặt & Khởi Chạy Nhanh
 
-**Bước 1: Clone Repo & Chuẩn Bị Thư Mục**
+Yêu cầu duy nhất: **Go ≥ 1.25** (để build từ source). Không cần Docker.
+
+**Bước 1: Clone & Build**
 
 ```bash
 git clone https://github.com/CTKiet2006/kietnovel.git
 cd kietnovel
-
-# Tạo thư mục chứa cấu hình và thư mục chứa truyện
-mkdir -p config workspace novels
+go build -o kietnovel.exe ./cmd/ainovel-cli
 ```
 
-**Bước 2: Build Docker Image**
+**Bước 2: Chạy**
 
-```bash
-docker compose build
+```powershell
+.\kietnovel.exe
 ```
 
-(Nếu build từ source Go: `go build -o kietnovel ./cmd/ainovel-cli`)
+Lần đầu chạy, hệ thống tự bật **Setup Wizard** tiếng Việt để chọn Provider, nhập API Key/Base URL, chọn Model và Ngôn ngữ sáng tác. Xong là viết được ngay.
 
-**Bước 3: Khởi Chạy TUI**
+### Vị trí dữ liệu
 
-```bash
-docker compose run --rm ainovel
+| Loại | Đường dẫn |
+|---|---|
+| Cấu hình | `~/.ainovel/config.json` (Wizard tự tạo) |
+| Cấu hình riêng cho thư mục hiện tại | `./.ainovel/config.json` (ưu tiên cao hơn) |
+| Quy tắc viết cá nhân | `~/.ainovel/rules/*.md` hoặc `./.ainovel/rules/*.md` |
+| Truyện đang viết | `./output/novel/` — hoặc đặt `NOVEL_DIR` (mục 6) |
+
+⚠️ Chạy binary trực tiếp thì **không** có thư mục `config/`. File cấu hình nằm trong home dir của bạn. Nếu chạy `--headless` mà báo *"headless không hỗ trợ thiết lập lần đầu"*, hãy mở TUI một lần để hoàn tất cấu hình.
+
+### Chạy nhiều bộ truyện
+
+Đặt biến môi trường `NOVEL_DIR` trước khi chạy:
+
+```powershell
+$env:NOVEL_DIR = ".\novels\tien-hiep-ky"
+.\kietnovel.exe
 ```
-
-(Nếu chạy từ file binary: `./kietnovel`)
-
-Lần đầu chạy, hệ thống sẽ tự động bật Setup Wizard tương tác bằng Tiếng Việt để bạn chọn Provider, nhập API Key/Base URL, chọn Model và Ngôn ngữ sáng tác.
-
-### ⚠️ Vị trí file cấu hình khác nhau giữa 2 chế độ chạy
-
-Đây là chỗ hay gây nhầm nhất. Hệ thống **không** đọc `./config/config.json` khi bạn chạy binary trực tiếp:
-
-| Chế độ chạy | File cấu hình | Ghi chú |
-|---|---|---|
-| `docker compose run --rm ainovel` | `./config/config.json` | `docker-compose.yml` map thư mục này vào `/root/.ainovel` |
-| `./kietnovel` (binary trực tiếp) | `~/.ainovel/config.json` | Không có `./config/` nào cả |
-
-Còn cấu hình riêng cho từng thư mục dự án (ưu tiên cao hơn cả hai) thì đặt ở `./.ainovel/config.json` — vị trí này luôn đúng dù chạy theo chế độ nào.
-
-Lần chạy đầu tiên Wizard sẽ tự tạo file ở đúng chỗ của chế độ bạn đang dùng. Nếu chạy `--headless` mà bị báo *"headless không hỗ trợ thiết lập lần đầu"*, hãy mở TUI một lần để hoàn tất cấu hình.
-
-### Quản lý nhiều bộ truyện
-
-Đặt biến môi trường `NOVEL_DIR` trỏ tới thư mục của bộ truyện bạn đang viết, mỗi bộ một thư mục độc lập (chi tiết ở mục 6). Với Docker:
-
-```bash
-NOVEL_DIR=./novels/tien-hiep-ky docker compose run --rm ainovel
-```
-
-Trên PowerShell: `$env:NOVEL_DIR = ".\novels\tien-hiep-ky"; docker compose run --rm ainovel`
 
 ## 3. Tùy Chọn Ngôn Ngữ Sáng Tác
 
-Trong file cấu hình (`~/.ainovel/config.json` khi chạy binary trực tiếp, hoặc `config/config.json` khi chạy qua Docker — xem mục 2), bạn có thể chỉ định trường `"language"`:
+Trong file cấu hình `~/.ainovel/config.json`, bạn có thể chỉ định trường `"language"`:
 
 - `"language": "vi"` (Mặc định): Toàn bộ dàn ý, nhân vật, bối cảnh thế giới, quy chuẩn văn phong chống AI và nội dung từng chương sẽ được sinh ra bằng Tiếng Việt tự nhiên, mượt mà.
 - `"language": "zh"`: Nội dung truyện được sinh ra bằng Tiếng Trung nguyên bản (phù hợp nếu bạn viết truyện Trung hoặc muốn dùng công cụ dịch sau).
@@ -109,47 +110,26 @@ Bản chất: một câu lệnh buộc ngôn ngữ + bộ quy chuẩn văn phong
 
 ## 4. Cấu Hình Nhà Cung Cấp AI (LLM)
 
-File cấu hình đặt tại `config/config.json` (Docker). **Nếu chạy binary trực tiếp, file nằm ở `~/.ainovel/config.json`** — cùng nội dung, khác chỗ. Xem mục 2.
+File cấu hình: `~/.ainovel/config.json`. Lần chạy đầu tiên Setup Wizard sẽ tạo file này cho bạn — dưới đây là các ví dụ tham khảo.
 
-### Dùng Ollama Cục Bộ (100% Offline)
-
-Tạo model trên Ollama với Context Window lớn (65536 tokens).
-
-Trên PowerShell (Windows):
-
-```powershell
-@"
-FROM qwen2.5:14b
-PARAMETER num_ctx 65536
-"@ | Out-File -FilePath "$env:TEMP\kietnovel.Modelfile" -Encoding ascii
-
-ollama create kietnovel-qwen -f "$env:TEMP\kietnovel.Modelfile"
-```
-
-Nội dung cấu hình:
+### DeepSeek (rẻ nhất, nên thử trước)
 
 ```json
 {
   "language": "vi",
-  "provider": "ollama",
-  "model": "kietnovel-qwen",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
   "providers": {
-    "ollama": {
-      "base_url": "http://host.docker.internal:11434/v1",
-      "stream_idle_timeout": "300s"
+    "deepseek": {
+      "api_key": "YOUR_DEEPSEEK_API_KEY"
     }
   },
-  "context_window": 65536,
-  "reasoning_effort": "off",
+  "context_window": 64000,
   "style": "default"
 }
 ```
 
-⚠️ Lưu ý mạng Docker: Khi chạy bằng Docker, bắt buộc dùng `http://host.docker.internal:11434/v1`. Nếu chạy binary trực tiếp trên máy không qua Docker, dùng `http://localhost:11434/v1`.
-
-### Dùng Cloud API (OpenRouter, Gemini, Claude, OpenAI, DeepSeek)
-
-OpenRouter:
+### OpenRouter
 
 ```json
 {
@@ -184,7 +164,9 @@ Google Gemini:
 }
 ```
 
-DeepSeek API:
+### Phối hợp nhiều Model theo vai trò
+
+Hệ thống cho phép gán model mạnh làm Biên tập / Kiến trúc sư và model rẻ, nhanh làm Người viết — cắt đáng kể chi phí:
 
 ```json
 {
@@ -192,34 +174,15 @@ DeepSeek API:
   "provider": "deepseek",
   "model": "deepseek-chat",
   "providers": {
-    "deepseek": {
-      "api_key": "YOUR_DEEPSEEK_API_KEY"
-    }
-  },
-  "context_window": 64000,
-  "style": "default"
-}
-```
-
-### Phối hợp nhiều Model theo vai trò
-
-Hệ thống cho phép gán model mạnh (Claude 3.5 Sonnet / DeepSeek Reasoner) làm Biên tập / Kiến trúc sư và model rẻ/nhanh (DeepSeek Chat / Ollama) làm Người viết:
-
-```json
-{
-  "language": "vi",
-  "provider": "ollama",
-  "model": "kietnovel-qwen",
-  "providers": {
-    "ollama": { "base_url": "http://host.docker.internal:11434/v1" },
+    "deepseek": { "api_key": "YOUR_DEEPSEEK_API_KEY" },
     "openrouter": { "api_key": "sk-or-v1-YOUR_KEY" }
   },
   "roles": {
     "architect": { "provider": "openrouter", "model": "anthropic/claude-3.5-sonnet" },
     "editor": { "provider": "openrouter", "model": "anthropic/claude-3.5-sonnet" },
-    "writer": { "provider": "ollama", "model": "kietnovel-qwen" }
+    "writer": { "provider": "deepseek", "model": "deepseek-chat" }
   },
-  "context_window": 65536,
+  "context_window": 128000,
   "style": "default"
 }
 ```
@@ -231,7 +194,7 @@ Hệ thống cho phép gán model mạnh (Claude 3.5 Sonnet / DeepSeek Reasoner)
 Chạy lệnh:
 
 ```bash
-docker compose run --rm ainovel
+./kietnovel.exe
 ```
 
 Tại màn hình chào mừng:
@@ -276,29 +239,31 @@ Sau khi nhấn Enter, Arbiter sẽ tự động đánh giá phạm vi ảnh hư�
 
 ### Chế độ chạy ngầm (Headless)
 
-Dành cho việc chạy tự động trên VPS, Server hoặc CI:
+Dành cho chạy tự động trên VPS, Server hoặc CI:
 
 ```bash
 # Bắt đầu truyện mới
-docker compose run --rm ainovel --headless --prompt "Tiểu thuyết huyền nghi đô thị phá án"
+./kietnovel.exe --headless --prompt "Tiểu thuyết huyền nghi đô thị phá án"
 
 # Viết tiếp truyện đang dở trong thư mục hiện tại
-docker compose run --rm ainovel --headless
+./kietnovel.exe --headless
 ```
 
 ## 6. Quản Lý Nhiều Bộ Truyện Độc Lập
 
-Mặc định output sẽ lưu vào thư mục `workspace/`. Để viết nhiều bộ truyện khác nhau mà không bị xung đột, hãy đặt biến môi trường `NOVEL_DIR`:
+Mặc định output lưu vào `./output/novel/`. Để viết nhiều bộ truyện mà không xung đột, đặt biến môi trường `NOVEL_DIR` trước khi chạy:
 
 ```powershell
-# Trên Windows PowerShell:
+# Bộ truyện 1
 $env:NOVEL_DIR = ".\novels\tien-hiep-ky"
-docker compose run --rm ainovel
+.\kietnovel.exe
 
-# Viết bộ truyện khác:
+# Bộ truyện 2
 $env:NOVEL_DIR = ".\novels\do-thi-di-nang"
-docker compose run --rm ainovel
+.\kietnovel.exe
 ```
+
+Mỗi bộ truyện có văn phong (`style/`), checkpoint và tiến độ riêng, không lẫn nhau. Bỏ `NOVEL_DIR` thì dùng `./output/novel` theo thư mục làm việc như bản gốc.
 
 Cấu trúc thư mục đầu ra của mỗi truyện:
 
@@ -467,6 +432,7 @@ Hệ thống sẽ tự động tổng hợp các yêu cầu này vào bộ quy t
 - **LLM Interface**: litellm
 - **TUI Framework**: Bubble Tea & Lip Gloss
 - **Cấu trúc prompt**: file Markdown embed vào binary (`//go:embed`), nạp theo ngôn ngữ lúc khởi động — không cần mạng để chọn bộ prompt
+- **Dependency**: 10 gói trực tiếp, tất cả từ nguồn công khai. `govulncheck` sạch, không có dependency ngoài stdlib ở tầng LLM
 
 ### License
 
