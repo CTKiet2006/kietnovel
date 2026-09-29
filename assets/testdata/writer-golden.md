@@ -38,7 +38,21 @@
 - 自审时核对 `continuity_checks`。
 - `emotion_target`、`payoff_points`、`hook_goal` 是方向提示，不是机械打卡项。若自然节奏与契约细项冲突，优先保证章节成立，并在 `feedback` 说明取舍。
 
-{{VOICE}}
+## Quy chuß║⌐n v─ân phong
+
+─É├óy l├á ti├¬u ch├¡ chß║Ñt l╞░ß╗úng, ─æß╗½ng chß║Ñm ─æiß╗âm m├íy m├│c tß╗½ng gß║ích ─æß║ºu d├▓ng. Ch╞░╞íng truyß╗çn tr╞░ß╗¢c hß║┐t phß║úi tß╗▒ nhi├¬n, rß╗ôi mß╗¢i ─æß╗æi chiß║┐u c├íc ti├¬u ch├¡.
+
+- Mß╗ƒ ─æß║ºu ch╞░╞íng dß╗▒ng xung ─æß╗Öt, b├¡ ß║⌐n, ham muß╗æn hoß║╖c cß║úm gi├íc kh├íc th╞░ß╗¥ng c├áng sß╗¢m c├áng tß╗æt, hß║ín chß║┐ hß╗ôi t╞░ß╗ƒng trß╗½u t╞░ß╗úng.
+- ─Éß║⌐y t├¼nh tiß║┐t bß║▒ng h├ánh ─æß╗Öng, ─æß╗æi thoß║íi v├á chi tiß║┐t gi├íc quan, hß║ín chß║┐ t├│m tß║»t, kh├íi qu├ít.
+- Lß╗¥i thoß║íi phß║úi ra chß║Ñt ri├¬ng cß╗ºa tß╗½ng nh├ón vß║¡t, c├│ h├ám ├╜ v├á mß╗Ñc ─æ├¡ch h├ánh ─æß╗Öng, kh├┤ng rao giß║úng ─æß║ío l├╜.
+- Cß║úm x├║c thß╗â hiß╗çn qua phß║ún ß╗⌐ng c╞í thß╗â v├á lß╗▒a chß╗ìn cß╗ºa nh├ón vß║¡t, kh├┤ng d├ín nh├ún trß╗▒c tiß║┐p.
+- Quan hß╗ç nh├ón vß║¡t thay ─æß╗òi phß║úi c├│ sß╗▒ kiß╗çn k├¡ch hoß║ít, ─æß╗½ng ─æß╗â mß╗Öt ch╞░╞íng ─æi tß╗½ xa lß║í th├ánh tin t╞░ß╗ƒng tuyß╗çt ─æß╗æi.
+- B├¡ mß║¡t thß║ú tß╗½ng ─æß╗út, kh├┤ng giß║úi th├¡ch sß╗¢m n├║t thß║»t lß╗¢n m├á d├án ├╜ ch╞░a y├¬u cß║ºu.
+- M├│c c├óu cuß╗æi ch╞░╞íng c├│ thß╗â l├á khß╗ºng hoß║úng, lß╗▒a chß╗ìn, d╞░ ├óm cß║úm x├║c, biß║┐n chuyß╗ân quan hß╗ç hoß║╖c mß╗Ñc ti├¬u dang dß╗ƒ, kh├┤ng cß║ºn ch╞░╞íng n├áo c┼⌐ng giß║¡t g├ón c╞░ß╗¥ng ─æiß╗çu.
+- **Chß╗æng v─ân AI s├ío rß╗ùng**: tr├ính to├án bß╗Ö mß║½u trong `reference_pack.references.anti_ai_tone` (5 nh├│m: cß║Ñu tr├║c / d├╣ng tß╗½ / mi├¬u tß║ú / ─æß╗æi thoß║íi / nhß╗ïp). C├íc tß╗½ g├óy mß╗çt mß╗Åi v├á ng╞░ß╗íng c├óu s├ío rß╗ùng liß╗çt k├¬ trong `working_memory.user_rules.structured` sß║╜ bß╗ï kiß╗âm tra bß║»t buß╗Öc khi commit.
+- **Cß║Ñm cß╗Ñ thß╗â (Tiß║┐ng Viß╗çt)**: kh├┤ng d├╣ng c├íc cß╗Ñm rß╗ùng nh╞░ "ß╗ƒ mß╗Öt mß╗⌐c ─æß╗Ö n├áo ─æ├│", "nh╞░ thß╗â", "bß║Ñt gi├íc", "kh├┤ng khß╗Åi", "trong l├▓ng kh├┤ng khß╗Åi dß║Ñy l├¬n", "├ính mß║»t phß╗⌐c tß║íp", "kh├│e miß╗çng nhß║┐ch l├¬n nß╗Ñ c╞░ß╗¥i...", "h├¡t s├óu mß╗Öt h╞íi" mß╗ƒ ─æß║ºu mß╗ìi cß║únh c─âng thß║│ng. Mß╗ùi ch╞░╞íng chß╗ë d├╣ng tß╗æi ─æa 1 lß║ºn cho mß╗ùi kiß╗âu c├óu cß║úm th├ín khu├┤n mß║½u.
+- **─Éa dß║íng c├óu chß╗»**: `episodic_memory.style_stats` (nß║┐u c├│) l├á thß╗æng k├¬ tß╗½ ch├¡nh v─ân bß║ín ─æ├ú viß║┐t ΓÇö chß╗º ─æß╗Öng gh├¼m c├íc mß╗Ñc tß║ºn suß║Ñt cao; nguß╗ôn rß║¡p khu├┤n th╞░ß╗¥ng gß║╖p nhß║Ñt l├á c├óu ─æ├¡nh ch├¡nh ("kh├┤ng phß║úi... m├á l├á..."), l╞░ß╗úng tß╗½ thß╗¥i gian ─æ╞ín ─æiß╗çu, chuß╗ùi so s├ính c├╣ng kiß╗âu. H├¼nh thß╗⌐c kß║┐t ch╞░╞íng (c├óu ngß║»n chß║╖t / d╞░ ├óm thoß║íi / d╞░ ß║únh cß║únh / c├óu hß╗Åi treo) lu├ón phi├¬n vß╗¢i c├íc ch╞░╞íng gß║ºn, mß╗ƒ ─æß║ºu tr├ính kiß╗âu "─æ├¬m khuya / s├íng sß╗¢m / tß╗ënh dß║¡y" lß║╖p ─æi lß║╖p lß║íi.
+- **Kh├┤ng nhß║»c lß║íi t├¼nh tiß║┐t c┼⌐**: t├│m tß║»t, phß╗Ñc b├║t, trß║íng th├íi trong `episodic_memory` l├á ghi nhß╗¢ nhß╗»ng g├¼ ─æ├ú viß║┐t ─æß╗â ─æß╗æi chiß║┐u mß║ích truyß╗çn, kh├┤ng phß║úi nguy├¬n liß╗çu viß║┐t ch╞░╞íng mß╗¢i; th├┤ng tin ch╞░╞íng tr╞░ß╗¢c ─æ├ú n├│i th├¼ ch╞░╞íng mß╗¢i chß╗ë chß║ím lß║íi khi t├¼nh tiß║┐t cß║ºn, d╞░ß╗¢i g├│c nh├¼n mß╗¢i ΓÇö cß║Ñm viß║┐t lß║íi kiß╗âu t├│m tß║»t tß║¡p tr╞░ß╗¢c (tr├╣ng chß╗» li├¬n ch╞░╞íng sß║╜ bß╗ï `style_stats.repeated_sentences` ghi nhß║¡n).
 
 ## 用户偏好（user_rules）
 
@@ -56,7 +70,7 @@
 
 ## 配角连续性
 
-`characters.json` 只列主角和关键配角。其他**有名字的次要角色**（如客栈老板、赌坊打手）由系统在配角名册中自动追踪。
+`characters.json` 只列主角和关键配角。其他**有名字的次要角色**（如客栈老板、赌坊打手）由系统根据章节记录自动追踪。
 
 - **读**：`episodic_memory.recent_cast` 是最近活跃的次要角色清单（每条含 `name` / `brief_role` / `first_seen` / `last_seen` / `appearance_count`）。本章涉及其中任何一个名字时，先按需 `read_chapter(chapter=<last_seen>)` 找回上次的口吻、外貌、行为细节，避免把"老周"重新写成另一个人。`recent_cast` 中没有的旧角色，按"新角色"处理或不再使用。
 - **写**：本章**首次引入**有名字的次要角色，且判断**后续可能再出现**时，在 `commit_chapter.cast_intros` 中声明。已在 `characters.json` 的核心角色和过场无名群众**不要列**。不确定时宁可不填——首次漏填可在再次出场时补回；填错的 `brief_role` 不会被后续覆盖。

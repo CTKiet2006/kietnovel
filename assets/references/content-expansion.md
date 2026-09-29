@@ -1,67 +1,66 @@
-# Kỹ Thuật Làm Sâu Nội Dung
+# 内容扩充技巧
 
-Khi chương hời hợt, không mặc định rằng vấn đề là thiếu chữ. Trước tiên tìm mắt xích đang thiếu trong chuỗi **mục tiêu → lực cản → lựa chọn → hậu quả**. Chỉ thêm nội dung khi phần thêm làm tăng áp lực, đổi cách hiểu, buộc trả giá hoặc khiến thế giới/nhân vật phản ứng.
+当章节内容不足时，使用以下技巧自然扩充。
 
-## 1. Miêu Tả Chi Tiết Cảnh Vật
+## 1. 场景细节描写
 
-Không tả căn phòng như kiểm kê. Chỉ chọn chi tiết thay đổi quyết định hoặc mang hai chức năng:
-- Bố cục phòng, ánh sáng, mùi hương
-- Chi tiết và chất liệu của đồ vật
-- Ảnh hưởng của không gian lên lựa chọn, đường lui hoặc nguy cơ bị lộ
-- Sự di chuyển của nhân vật trong không gian
+不要只说"他走进房间"，描写：
+- 房间的布局、光线、气味
+- 物品的细节和质感
+- 环境对人物的影响
+- 人物在空间中的移动
 
-## 2. Nội Tâm Dẫn Đến Quyết Định
+## 2. 人物内心活动
 
-Thể hiện thay vì kể lể thế giới nội tâm:
-- So sánh rủi ro giữa các phương án cụ thể
-- Ký ức chỉ xuất hiện khi bị chi tiết hiện tại kích hoạt và làm đổi lựa chọn
-- Mâu thuẫn giữa điều nhân vật muốn, điều phải làm và cái giá chấp nhận trả
-- Cắt mọi suy nghĩ chỉ lặp lại điều hành động/đối thoại vừa cho thấy
+展示而非讲述内心世界：
+- 角色的犹豫和纠结
+- 过去记忆的闪回（1-2段）
+- 对未来的担忧和期待
+- 道德选择的内心辩论
 
-## 3. Mở Rộng Đối Thoại
+## 3. 对话扩展
 
-Đối thoại sâu khi hai bên muốn những kết quả khác nhau. Hãy để đối thoại:
-- Thể hiện tính cách và cách nói chuyện của nhân vật
-- Chứa đựng ngầm ý và ám chỉ
-- Có sự qua lại, thăm dò, thử thách
-- Có nước đi: dò xét, né tránh, đổi giá, đe dọa kín, gài cam kết hoặc rút thông tin
+不要只推进剧情，让对话：
+- 展现人物性格和说话方式
+- 包含潜台词和暗示
+- 有来回交锋和试探
+- 偶尔跑题再拉回（更真实）
 
-## 4. Trải Nghiệm Cảm Quan
+## 4. 感官体验
 
-Huy động năm giác quan để miêu tả:
-- Thị giác: màu sắc, ánh sáng và bóng tối, hình dạng
-- Thính giác: âm thanh, âm nhạc, sự im lặng
-- Xúc giác: nhiệt độ, chất liệu, cơn đau
-- Khứu giác: mùi hương, hương thơm, mùi thối
-- Vị giác: thức ăn, đồ uống, vị tanh của máu
+调动五感描写：
+- 视觉：颜色、光影、形状
+- 听觉：声音、音乐、沉默
+- 触觉：温度、质感、疼痛
+- 嗅觉：气味、香味、腐臭
+- 味觉：食物、饮料、血腥味
 
-## 5. Tuyến Phụ Giao Cắt Tuyến Chính
+## 5. 次要情节线
 
-Đan xen vào cốt truyện chính:
-- Mục tiêu riêng của nhân vật phụ va vào mục tiêu chương
-- Sự phát triển của tuyến ngầm
-- Phục bút được gieo trồng
-- Sự thay đổi tinh tế trong mối quan hệ nhân vật
+在主剧情中穿插：
+- 配角的小故事
+- 暗线的发展
+- 伏笔的埋设
+- 人物关系的微妙变化
 
-## 6. Phóng Đại Khoảnh Khắc Đổi Thế
+## 6. 节奏放慢
 
-Làm chậm lại ở những thời khắc then chốt:
-- Chỉ làm chậm ở lựa chọn không thể rút lại, khoảnh khắc nhận ra sai lầm hoặc đòn quyết định
-- Giữ rõ địa hình, khoảng cách, nhịp thở và hậu quả vật lý; không liệt kê từng động tác vô nghĩa
-- Trước bước ngoặt, cho độc giả đủ dữ kiện để bất ngờ nhưng nhìn lại thấy hợp lý
-- Sau bước ngoặt, dành chỗ cho phản ứng và quyết định mới thay vì lập tức cắt cảnh
+关键时刻慢下来描写：
+- 动作场景的分解
+- 情感转变的过程
+- 发现真相的时刻
+- 紧张对峙的延展
 
-## 7. Không Gian Gợi Cảm Xúc
+## 7. 环境烘托
 
-Dùng môi trường để phản ánh tâm trạng:
-- Thời tiết và bầu không khí
-- Bối cảnh môi trường xã hội
-- Chi tiết phong tục văn hóa
-- Biểu hiện đặc trưng của thời đại
+用环境反映情绪：
+- 天气和氛围
+- 社会环境背景
+- 文化习俗细节
+- 时代特征展现
 
-## Nguyên Tắc Mở Rộng
+## 扩充原则
 
-- **Mỗi phần thêm phải đổi một biến số** - thông tin, quyền chủ động, tài nguyên, quan hệ, mức an toàn hoặc thực lực công khai
-- **Không có cảnh trung tính** - nhân vật phải giành được điều gì, mất điều gì hoặc bị buộc chọn điều gì
-- **Sâu hơn không đồng nghĩa chậm hơn** - một chi tiết đúng và một lựa chọn khó có chiều sâu hơn ba đoạn miêu tả
-- **Không độn để đạt số từ** - nếu chuỗi áp lực đã kể trọn, kết chương; nếu chưa trọn, bổ sung mắt xích còn thiếu
+- **自然融入** - 扩充内容要服务于故事，不要注水
+- **保持张力** - 即使扩充场景也不能失去冲突
+- **推进主线** - 所有扩充最终都要指向核心剧情
