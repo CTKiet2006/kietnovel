@@ -21,7 +21,7 @@ var referencesFS embed.FS
 //go:embed styles/*.md
 var stylesFS embed.FS
 
-//go:embed voice.md voice_zh.md
+//go:embed voice.md voice_en.md voice_zh.md
 var voiceFS embed.FS
 
 // Prompts 表示嵌入的提示词集合。
@@ -84,13 +84,16 @@ func Load(style string, opts LoadOptions) Bundle {
 
 // LoadWithLanguage 加载指定创作语言对应的资源集合。
 // 提示词本身只有一套（上游中文协议，已验证），语言只影响两处：
-//   - voice 层：vi 走 assets/voice.md（越南语文风规范），zh 走 assets/voice_zh.md；
-//   - vi 时给 Architect/Writer/Editor 追加一条强制越南语产出的指令（见 ApplyLanguage）。
+//   - voice 层：vi→voice.md, en→voice_en.md, zh→voice_zh.md；
+//   - vi/en 时给 Architect/Writer/Editor 追加一条强制产出语言的指令（见 ApplyLanguage）。
 // 这样避免维护两整套易腐化的协议副本，同时保证产出语言正确。
 func LoadWithLanguage(language, style string, opts LoadOptions) Bundle {
-	zh := strings.EqualFold(strings.TrimSpace(language), "zh")
+	lang := strings.ToLower(strings.TrimSpace(language))
 	voiceFile := "voice.md"
-	if zh {
+	switch lang {
+	case "en":
+		voiceFile = "voice_en.md"
+	case "zh":
 		voiceFile = "voice_zh.md"
 	}
 	return Bundle{
@@ -98,7 +101,7 @@ func LoadWithLanguage(language, style string, opts LoadOptions) Bundle {
 		Prompts:    loadPrompts(),
 		Styles:     loadStyles(opts),
 		Voice:      resolveAppendable(mustRead(voiceFS, voiceFile), "voice.md", opts),
-		Language:   language,
+		Language:   lang,
 	}
 }
 
@@ -117,20 +120,32 @@ func BuildWriterPrompt(writerPrompt, voice, style string) string {
 	return out
 }
 
-// languageVietnameseDirective 强制产出语言的指令，附在 Architect/Writer/Editor 提示词末尾。
-// 协议文本本身保持上游中文（已验证），只在这里告知"产出必须是越南语"。
-const languageVietnameseDirective = `## Ngôn ngữ sáng tác
+// 各语言的产出指令，附在 Architect/Writer/Editor 提示词末尾。
+// 协议文本本身保持上游中文（已验证），只在这里告知"产出必须用什么语言"。
+var languageDirectives = map[string]string{
+	"vi": `## Ngôn ngữ sáng tác
 
-Toàn bộ sản phẩm của vai trò này — tên truyện, tóm tắt, tiền đề, dàn ý, hồ sơ nhân vật, quy tắc thế giới, phục bút, bản nháp và chương hoàn chỉnh — PHẢI viết bằng Tiếng Việt tự nhiên, mượt mà, đúng chuẩn văn phong trong phần văn phong (voice) phía trên. Không trộn tiếng Trung hay tiếng Anh trừ tên riêng. Tên tool, tên file và các khóa checkpoint hệ thống giữ nguyên không dịch.`
+Toàn bộ sản phẩm của vai trò này — tên truyện, tóm tắt, tiền đề, dàn ý, hồ sơ nhân vật, quy tắc thế giới, phục bút, bản nháp và chương hoàn chỉnh — PHẢI viết bằng Tiếng Việt tự nhiên, mượt mà, đúng chuẩn văn phong trong phần văn phong (voice) phía trên. Không trộn tiếng Trung hay tiếng Anh trừ tên riêng. Tên tool, tên file và các khóa checkpoint hệ thống giữ nguyên không dịch.`,
+
+	"en": `## Writing Language
+
+Every product of this role — story title, summary, premise, outline, character profiles, world rules, foreshadowing ledger, draft, and finished chapter — MUST be written in fluent, idiomatic English, following the prose standards given in the voice section above. Do not mix in Vietnamese or Chinese except for proper nouns. Tool names, file names, and system checkpoint keys stay untranslated.`,
+}
 
 // ApplyLanguage 给 Architect/Writer/Editor 追加产出语言指令。
-// "vi"（含空串，兼容旧配置）生效；"zh" 返回时不做任何改动，协议本就是中文。
+// "vi"/"en"（含空串，兼容旧配置）生效；"zh" 返回时不做任何改动，协议本就是中文。
 // 只在启动时调用一次，见 cmd/ainovel-cli/main.go。
 func (b *Bundle) ApplyLanguage(lang string) {
-	if strings.EqualFold(strings.TrimSpace(lang), "zh") {
+	key := strings.ToLower(strings.TrimSpace(lang))
+	if key == "zh" {
+		// 协议本身就是中文，无需再声明。
 		return
 	}
-	d := "\n\n" + languageVietnameseDirective
+	directive, ok := languageDirectives[key]
+	if !ok {
+		directive = languageDirectives["vi"] // 未知/空 → vi（兼容旧配置）
+	}
+	d := "\n\n" + directive
 	b.Prompts.ArchitectShort += d
 	b.Prompts.ArchitectLong += d
 	b.Prompts.Writer += d
