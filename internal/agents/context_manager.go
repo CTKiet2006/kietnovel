@@ -8,7 +8,7 @@ import (
 	corecontext "github.com/voocel/agentcore/context"
 )
 
-// contextManagerConfig 聚合 ContextManager 的全部配置参数。
+// contextManagerConfig aggregates every configuration parameter of the ContextManager.
 type contextManagerConfig struct {
 	Model            agentcore.ChatModel
 	ContextWindow    int
@@ -59,16 +59,16 @@ func newContextManager(cfg contextManagerConfig) *corecontext.ContextEngine {
 	return engine
 }
 
-// roleContextProfile 描述 Architect / Editor 这类"单任务、多次读取"Worker 的压缩档案：
-// 只清理旧的 novel_context 结果（落盘数据可随时重读），写工具结果与章节原文保留；
-// 仍超限时用角色专属提示词做全量摘要。
+// roleContextProfile describes the compaction profile for "single task, many reads" Workers such as Architect / Editor:
+// it only drops old novel_context results (persisted data can be re-read at any time) and keeps write-tool results and raw chapter text;
+// if it is still over the limit, it does a full summary with a role-specific prompt.
 type roleContextProfile struct {
 	Agent           string
-	KeepRecentReads int // 保留最近几次 novel_context 结果不清理
+	KeepRecentReads int // keep the most recent novel_context results, never drop them
 	Summary         corecontext.FullSummaryConfig
 }
 
-// newRoleContextManager 按当前模型窗口构建该档案的 ContextManager。
+// newRoleContextManager builds a ContextManager for that profile against the current model window.
 func newRoleContextManager(p roleContextProfile, model agentcore.ChatModel, window int, contextToolName string) *corecontext.ContextEngine {
 	summary := p.Summary
 	return newContextManager(contextManagerConfig{
@@ -86,8 +86,8 @@ func newRoleContextManager(p roleContextProfile, model agentcore.ChatModel, wind
 	})
 }
 
-// contextRewriteCallback 创建上下文重写的日志回调。
-// 新架构简化为只写 slog,不再写 runtime queue 和 UIEvent。
+// contextRewriteCallback creates the logging callback for context rewrites.
+// The new architecture simplifies this to slog only, no more runtime queue or UIEvent.
 func contextRewriteCallback(agent string) func(corecontext.RewriteEvent) {
 	return func(ev corecontext.RewriteEvent) {
 		attrs := []any{

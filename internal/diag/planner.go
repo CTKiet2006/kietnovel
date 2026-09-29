@@ -2,8 +2,8 @@ package diag
 
 import "fmt"
 
-// PlanActions 根据高置信 Finding 生成可执行动作。
-// 只有 Confidence==high && AutoLevel==safe 的 Finding 才会产出 Action。
+// PlanActions generates executable actions from high-confidence findings.
+// Only a finding with Confidence==high && AutoLevel==safe produces an Action.
 func PlanActions(findings []Finding) []Action {
 	var actions []Action
 	seen := make(map[string]struct{})

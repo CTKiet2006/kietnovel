@@ -7,7 +7,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
-// StaleForeshadow 检测长期未推进的伏笔。
+// StaleForeshadow detects a setup that has not been advanced for a long time.
 func StaleForeshadow(snap *Snapshot) []Finding {
 	if snap.Progress == nil || len(snap.Foreshadow) == 0 {
 		return nil
@@ -41,7 +41,7 @@ func StaleForeshadow(snap *Snapshot) []Finding {
 	}}
 }
 
-// CompassDrift 检测指南针长期未更新。
+// CompassDrift detects a compass that has not been updated for a long time.
 func CompassDrift(snap *Snapshot) []Finding {
 	if snap.Progress == nil || !snap.Progress.Layered {
 		return nil
@@ -80,7 +80,7 @@ func CompassDrift(snap *Snapshot) []Finding {
 	}}
 }
 
-// OutlineExhausted 检测大纲耗尽但小说未完结。
+// OutlineExhausted detects an exhausted outline while the novel is not finished.
 func OutlineExhausted(snap *Snapshot) []Finding {
 	if snap.Progress == nil {
 		return nil
@@ -120,7 +120,7 @@ func OutlineExhausted(snap *Snapshot) []Finding {
 	}}
 }
 
-// MissingSummaries 检测已完成章节缺少摘要。
+// MissingSummaries detects a completed chapter that is missing a summary.
 func MissingSummaries(snap *Snapshot) []Finding {
 	if snap.Progress == nil || len(snap.Progress.CompletedChapters) == 0 {
 		return nil

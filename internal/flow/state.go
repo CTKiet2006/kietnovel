@@ -7,10 +7,10 @@ import (
 	storepkg "github.com/CTKiet2006/kietnovel/internal/store"
 )
 
-// LoadState 从 Store 读取 Route 所需的全部事实。
-// 这是路由的"IO 边界"：所有读取集中在这里，Route 保持纯。
-// 任何读取失败都返回错误；损坏的工件与“尚未生成”是两种不同事实，Router 不得
-// 在不完整快照上继续派单。
+// LoadState reads every fact Route needs from the Store.
+// This is the routing "IO boundary": all reads are concentrated here and Route stays pure.
+// Any read failure returns an error; a corrupt artifact and "not generated yet" are two different facts, and the Router must not
+// keep dispatching on an incomplete snapshot.
 func LoadState(store *storepkg.Store) (State, error) {
 	var s State
 	missing, err := store.FoundationMissing()
@@ -18,8 +18,8 @@ func LoadState(store *storepkg.Store) (State, error) {
 		return s, fmt.Errorf("load foundation state: %w", err)
 	}
 	s.FoundationMissing = missing
-	// 规划级别:save_foundation 落 scale 时写入 RunMeta,补齐分支据此推导规划师。
-	// 读失败按未知处理(tier 空 → 补齐交 LLM 裁定),与其余事实的保守默认一致。
+	// Planning tier: written to RunMeta when save_foundation persists scale, and the completion branch derives the planner from it.
+	// A read failure is treated as unknown (empty tier → completion goes to LLM arbitration), consistent with the conservative default of the other facts.
 	meta, err := store.RunMeta.Load()
 	if err != nil {
 		return s, fmt.Errorf("load run meta: %w", err)
@@ -47,7 +47,7 @@ func LoadState(store *storepkg.Store) (State, error) {
 
 	s.LastCompleted = progress.LatestCompleted()
 
-	// 弧边界仅在分层模式且有已完成章节时才计算
+	// The arc boundary is only computed in layered mode and only when there is a completed chapter
 	if progress.Layered && s.LastCompleted > 0 {
 		boundaries, err := store.Outline.CompletedArcBoundaries(s.LastCompleted)
 		if err != nil {
@@ -108,7 +108,7 @@ func LoadState(store *storepkg.Store) (State, error) {
 		}
 	}
 
-	// 非分层全局审阅事实:仅在触发点读盘(其余组合 Route 不消费该字段)。
+	// Non-layered global review fact: only read from disk at the trigger point (Route does not consume this field for the other combinations).
 	if !progress.Layered && s.LastCompleted > 0 {
 		for completed := domain.ReviewInterval; completed <= len(progress.CompletedChapters); completed += domain.ReviewInterval {
 			chapter := progress.CompletedChapters[completed-1]

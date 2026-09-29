@@ -5,21 +5,21 @@ import (
 	"strings"
 )
 
-// BookMetadata 是面向读者和出版物的作品信息。
-// 创作设定属于 Foundation，运行进度属于 Progress，二者都不承载这份数据。
+// BookMetadata is the work information aimed at readers and publications.
+// The creative settings belong to Foundation and the writing progress to Progress, so neither of them carries this data.
 type BookMetadata struct {
 	Title    string `json:"title"`
 	Synopsis string `json:"synopsis"`
 }
 
-// Normalized 返回可持久化、可比较的规范值。
+// Normalized returns the canonical value that can be persisted and compared.
 func (b BookMetadata) Normalized() BookMetadata {
 	b.Title = strings.TrimSpace(b.Title)
 	b.Synopsis = strings.TrimSpace(b.Synopsis)
 	return b
 }
 
-// Validate 检查作品信息的必填字段。
+// Validate checks the required fields of the work information.
 func (b BookMetadata) Validate() error {
 	b = b.Normalized()
 	if b.Title == "" {
@@ -31,7 +31,7 @@ func (b BookMetadata) Validate() error {
 	return nil
 }
 
-// OutlineEntry 大纲条目，对应一章。
+// OutlineEntry is an outline entry, corresponding to one chapter.
 type OutlineEntry struct {
 	Chapter   int      `json:"chapter"`
 	Title     string   `json:"title"`
@@ -40,33 +40,33 @@ type OutlineEntry struct {
 	Scenes    []string `json:"scenes"`
 }
 
-// Character 角色档案。
+// Character is a character profile.
 type Character struct {
 	Name        string   `json:"name"`
-	Aliases     []string `json:"aliases,omitempty"` // 别名/称号/绰号（如"废物少年"、"炎哥"）
+	Aliases     []string `json:"aliases,omitempty"` // alias/title/nickname (e.g. "the useless boy", "Brother Yan")
 	Role        string   `json:"role"`
 	Description string   `json:"description"`
 	Arc         string   `json:"arc"`
 	Traits      []string `json:"traits"`
-	Tier        string   `json:"tier,omitempty"` // core / important / secondary / decorative（默认 important）
+	Tier        string   `json:"tier,omitempty"` // core / important / secondary / decorative (default important)
 }
 
-// VolumeOutline 卷级大纲（长篇分层模式）。
+// VolumeOutline is the volume-level outline (long-form layered mode).
 type VolumeOutline struct {
 	Index int          `json:"index"`
 	Title string       `json:"title"`
-	Theme string       `json:"theme"`           // 本卷核心冲突/主题
-	Final bool         `json:"final,omitempty"` // 收官卷：全书在本卷收束（架构师 append_volume 时宣告）
+	Theme string       `json:"theme"`           // the core conflict/theme of this volume
+	Final bool         `json:"final,omitempty"` // the closing volume: the whole book converges in this volume (declared by the architect on append_volume)
 	Arcs  []ArcOutline `json:"arcs"`
 }
 
-// IsExpanded 判断卷是否已展开（有弧级结构）。
+// IsExpanded reports whether the volume has been expanded (it has an arc-level structure).
 func (v *VolumeOutline) IsExpanded() bool { return len(v.Arcs) > 0 }
 
-// FinaleVolume 返回已宣告的收官卷序号，未宣告返回 0。
-// 收官事实 = "最后一卷带 Final 标记"：宣告后全书进入收束态（规划收线、终卷结构
-// 写完即完结）；若此后又追加了未标记的新卷，新卷成为最后一卷，收束态自然解除——
-// 因此无需撤销工具，状态永远可从大纲数据推导。
+// FinaleVolume returns the number of the declared closing volume, or 0 when none is declared.
+// The finale fact = "the last volume carries the Final flag": once declared the whole book enters the closing state (planning converges, and the final
+// volume finishes as soon as it is written); if an unmarked new volume is appended afterwards, that volume becomes the last one and the closing state is naturally lifted -
+// so no undo tool is needed and the state can always be derived from the outline data.
 func FinaleVolume(volumes []VolumeOutline) int {
 	if n := len(volumes); n > 0 && volumes[n-1].Final {
 		return volumes[n-1].Index
@@ -74,38 +74,38 @@ func FinaleVolume(volumes []VolumeOutline) int {
 	return 0
 }
 
-// StoryCompass 终局方向指南针，替代固定的骨架卷列表。
-// Architect 在每次卷边界时可更新，允许故事方向随创作演化。
+// StoryCompass is the endgame-direction compass, which replaces a fixed skeleton volume list.
+// The Architect may update it at every volume boundary, which lets the story direction evolve with the writing.
 type StoryCompass struct {
-	EndingDirection string   `json:"ending_direction"`          // 终局方向（主题性描述）
-	OpenThreads     []string `json:"open_threads,omitempty"`    // 活跃长线（需收束才能结局）
-	EstimatedScale  string   `json:"estimated_scale,omitempty"` // 模糊规模（如"预计 4-6 卷"）
-	LastUpdated     int      `json:"last_updated,omitempty"`    // 更新时的已完成章节数
+	EndingDirection string   `json:"ending_direction"`          // endgame direction (a thematic description)
+	OpenThreads     []string `json:"open_threads,omitempty"`    // active long threads (they must be closed off before the ending)
+	EstimatedScale  string   `json:"estimated_scale,omitempty"` // rough scale (e.g. "estimated 4-6 volumes")
+	LastUpdated     int      `json:"last_updated,omitempty"`    // the number of completed chapters at the time of the update
 }
 
-// ArcOutline 弧级大纲。
+// ArcOutline is the arc-level outline.
 type ArcOutline struct {
-	Index             int            `json:"index"` // 卷内弧序号
+	Index             int            `json:"index"` // the arc number within the volume
 	Title             string         `json:"title"`
-	Goal              string         `json:"goal"`                         // 弧目标（起承转合）
-	EstimatedChapters int            `json:"estimated_chapters,omitempty"` // 骨架弧的预估章数（展开后清零）
+	Goal              string         `json:"goal"`                         // the arc goal (setup, development, turn and conclusion)
+	EstimatedChapters int            `json:"estimated_chapters,omitempty"` // the estimated chapter count of a skeleton arc (cleared to zero after expansion)
 	Chapters          []OutlineEntry `json:"chapters"`
 }
 
-// IsExpanded 判断弧是否已展开（有详细章节）。
+// IsExpanded reports whether the arc has been expanded (it has detailed chapters).
 func (a *ArcOutline) IsExpanded() bool { return len(a.Chapters) > 0 }
 
-// ArcExpansion 是 Architect 在结构边界对一个未写弧作出的完整规划。
-// Title/Goal 不是骨架的机械副本：模型可依据已完成正文修订尚未发生的计划。
+// ArcExpansion is the complete plan the Architect makes for a not-yet-written arc at a structural boundary.
+// Title/Goal is not a mechanical copy of the skeleton: the model may revise the not-yet-happened plan based on the finished body text.
 type ArcExpansion struct {
 	Title    string         `json:"title"`
 	Goal     string         `json:"goal"`
 	Chapters []OutlineEntry `json:"chapters"`
 }
 
-// EstimatedChapterCapacity 计算分层大纲的内部容量估算：已展开弧按真实章节数，
-// 骨架弧按 EstimatedChapters。它只用于上下文策略，不是全书总章数；真正已细化、
-// 可写的章节始终来自 FlattenOutline，禁止把本值暴露给用户或模型。
+// EstimatedChapterCapacity computes the internal capacity estimate of the layered outline: an expanded arc uses its real chapter count,
+// a skeleton arc uses EstimatedChapters. It is only used by the context policy, not as the total chapter count of the book; the chapters that are genuinely
+// detailed and writable always come from FlattenOutline, so this value must never be exposed to the user or the model.
 func EstimatedChapterCapacity(volumes []VolumeOutline) int {
 	n := 0
 	for _, v := range volumes {
@@ -120,7 +120,7 @@ func EstimatedChapterCapacity(volumes []VolumeOutline) int {
 	return n
 }
 
-// FlattenOutline 将分层大纲展开为扁平章节列表，保持全局章节号连续。
+// FlattenOutline expands the layered outline into a flat chapter list, keeping the global chapter numbers continuous.
 func FlattenOutline(volumes []VolumeOutline) []OutlineEntry {
 	var result []OutlineEntry
 	ch := 1
@@ -136,9 +136,9 @@ func FlattenOutline(volumes []VolumeOutline) []OutlineEntry {
 	return result
 }
 
-// WorldRule 世界观规则条目。
+// WorldRule is a worldbuilding rule entry.
 type WorldRule struct {
 	Category string `json:"category"` // magic / technology / geography / society / other
-	Rule     string `json:"rule"`     // 规则描述
-	Boundary string `json:"boundary"` // 不可违反的边界
+	Rule     string `json:"rule"`     // the rule description
+	Boundary string `json:"boundary"` // a boundary that must not be violated
 }

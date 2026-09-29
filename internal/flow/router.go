@@ -1,13 +1,13 @@
-// Package flow 实现垂类路由：Host 根据事实决定下一个调哪个子代理做什么。
+// Package flow implements vertical routing: the Host decides from the facts which subagent to call next and what to do.
 //
-// 设计原则：
-//   - Route 是纯函数：输入 State，输出 *Instruction。无 IO、无 Store 调用，可单测。
-//   - State 由 LoadState（非纯）从 Store 构造，一次性把路由需要的事实读齐。
-//   - 返回 nil 是合法的：表示当前没有可由确定性事实推出的 Worker 指令；
-//     Engine 再按终态、启动补裁或等待用户干预处理。
+// Design principles:
+//   - Route is a pure function: it takes a State and returns an *Instruction. No IO, no Store calls, so it is unit-testable.
+//   - State is built by LoadState (not pure) from the Store, reading every fact routing needs in one pass.
+//   - Returning nil is legal: it means there is currently no Worker instruction derivable from the deterministic facts;
+//     the Engine then handles it by terminal state, start-up fallback arbitration or waiting for user intervention.
 //
-// Router 覆盖的是"查表型"决策（每章下一步、弧末后处理、队列驱动），
-// 不覆盖"语义理解型"决策（选规划师、处理用户 Steer、输出总结）。
+// Router covers "table lookup" decisions (the next step of each chapter, post-arc-end handling, queue-driven work),
+// and not "semantic understanding" decisions (picking a planner, handling a user Steer, producing a summary).
 package flow
 
 import (
@@ -18,8 +18,8 @@ import (
 	storepkg "github.com/CTKiet2006/kietnovel/internal/store"
 )
 
-// plannerForTier 从已落盘的规划级别推导规划师身份:short 归短篇规划师,
-// mid/long 归长篇规划师(与启动 Arbiter 的选型口径一致)。
+// plannerForTier derives the planner identity from the persisted planning tier: short maps to the short-form planner,
+// mid/long map to the long-form planner (consistent with the selection used by the start-up Arbiter).
 func plannerForTier(tier domain.PlanningTier) string {
 	if tier == domain.PlanningTierShort {
 		return "architect_short"
@@ -27,12 +27,12 @@ func plannerForTier(tier domain.PlanningTier) string {
 	return "architect_long"
 }
 
-// Instruction 指示 Engine 下一步直接运行的 Worker 与任务。
+// Instruction tells the Engine which Worker to run next and with what task.
 type Instruction struct {
 	Agent   string // architect_long / architect_short / writer / editor
-	Task    string // 给子代理的任务描述
-	Reason  string // 路由理由（用于事件、日志与失败裁定）
-	Chapter int    // writer 任务涉及的章节号（续写/重写/打磨）；0 表示不涉及（editor/architect 任务）
+	Task    string // the task description handed to the subagent
+	Reason  string // the routing rationale (used for events, logs and failure arbitration)
+	Chapter int    // the chapter number a writer task touches (continue / rewrite / polish); 0 means none (editor/architect tasks)
 }
 
 type AggregateKind string
@@ -52,70 +52,70 @@ type AggregateRefresh struct {
 	EndChapter   int
 }
 
-// State 是 Route 的输入：所有事实必须在此显式声明，禁止 Route 内部读 Store。
+// State is the input of Route: every fact must be declared here explicitly, and Route is forbidden from reading the Store.
 type State struct {
 	Progress *domain.Progress
 
-	// 已完成章节中的最大章节号；为 0 表示尚未开始写作。
+	// the largest chapter number among completed chapters; 0 means writing has not started yet.
 	LastCompleted int
 
-	// 上一章的弧边界信息；IsArcEnd=false 时其他字段无意义。
-	// 当 LastCompleted=0 或非 Layered 模式时应为 nil。
+	// arc boundary info of the previous chapter; the other fields are meaningless when IsArcEnd=false.
+	// should be nil when LastCompleted=0 or in non-Layered mode.
 	ArcBoundary *storepkg.ArcBoundary
 
-	// 弧末后处理的三个事实：评审 / 弧摘要 / 卷摘要是否已完成。
+	// the three post-arc-end facts: whether the review / arc summary / volume summary are done.
 	HasArcReview     bool
 	HasArcSummary    bool
 	HasVolumeSummary bool
 
-	// 基础设定缺项（规划阶段的补齐信号）。
+	// missing foundation entries (the completion signal of the planning phase).
 	FoundationMissing []string
 
-	// 已落盘的规划级别（save_foundation 落 scale 时写入 RunMeta）。
-	// 空 = 首次规划尚未产出任何设定，规划师身份不可判定。
+	// the persisted planning tier (written to RunMeta when save_foundation persists scale).
+	// empty = the first planning round has not produced any setting yet, so the planner identity cannot be determined.
 	PlanningTier domain.PlanningTier
 
-	// 非分层书：最近完成章是否已有 scope=global 的全局审阅
-	//（仅在 ShouldReview 触发点有意义；分层书恒 false）。
+	// non-layered book: whether the most recently completed chapter already has a global review with scope=global
+	// (only meaningful at the ShouldReview trigger point; always false for a layered book).
 	HasGlobalReview bool
 
-	// 必须在续写前由 Architect 处理的外部修订影响。普通 Writer 反馈留到下一次
-	// 自然结构操作统一吸收，不为每章额外派发规划师。
+	// external revision impacts the Architect must handle before continuing. Ordinary writer feedback is left to the next
+	// natural structural operation to absorb together, instead of dispatching a planner for every chapter.
 	ImmediateFeedbackCount int
 
-	// 外部修订后最早一个需要由 Editor 重新生成的弧/卷工件。
+	// the earliest arc/volume artifact the Editor has to regenerate after an external revision.
 	AggregateRefresh *AggregateRefresh
 }
 
-// Route 根据事实返回下一步确定性指令；返回 nil 由 Engine 按调用上下文处理。
+// Route returns the deterministic next-step instruction from the facts; returning nil is handled by the Engine per call context.
 //
-// 决策优先级（互斥，自上而下匹配第一个）：
-//  1. Phase=Complete        → nil（Host 确定性输出总结）
-//  2. 规划期设定缺项且规划师可判定 → 同一规划师补齐；否则 nil（Engine 启动补裁）
-//  3. PendingRewrites 非空  → writer 按队列重写/打磨
-//  4. Flow=Reviewing        → nil（dormant：当前无写入者，评审期 Flow 实为 writing）
-//  5. Flow=Steering         → nil（用户干预处理中）
-//  6. 外部修订导致聚合工件失效 → editor 重建
-//  7. 外部修订影响后续规划     → architect 处理
-//  8. 分层书到达弧末          → 评审、摘要、扩弧或续卷
-//  9. 非分层全局审阅到期       → editor(global review)
+// Decision priority (mutually exclusive, matching the first hit from the top):
+//  1. Phase=Complete        → nil (the Host deterministically produces the summary)
+//  2. planning-phase settings missing and the planner is determinable → the same planner completes them; otherwise nil (the Engine applies the start-up fallback)
+//  3. PendingRewrites non-empty  → writer rewrites/polishes per the queue
+//  4. Flow=Reviewing        → nil (dormant: there is no writer right now, and during a review the Flow is really writing)
+//  5. Flow=Steering         → nil (a user intervention is being handled)
+//  6. an external revision invalidated aggregate artifacts → editor rebuilds them
+//  7. an external revision affects later planning     → architect handles it
+//  8. a layered book reaches the end of an arc          → review, summarize, expand the arc or continue into the next volume
+//  9. the non-layered global review is due       → editor(global review)
 //
-// 10. 非分层大纲已耗尽        → architect(决定完结或续接大纲)
-// 11. 其它                   → writer(写 next_chapter)
+// 10. the non-layered outline is exhausted        → architect(decides to finish or to continue from an outline)
+// 11. everything else                   → writer(write next_chapter)
 func Route(s State) *Instruction {
 	p := s.Progress
 	if p == nil {
 		return nil
 	}
 
-	// 1. 终态：Host 根据 store 事实生成确定性总结
+	// 1. Terminal state: the Host generates a deterministic summary from the store facts
 	if p.Phase == domain.PhaseComplete {
 		return nil
 	}
 
-	// 2. 规划期补齐：查表型决策——缺什么在 store，规划师身份从已落盘的 scale 推导
-	//    （short → architect_short，其余 → architect_long）。tier 为空说明首次规划
-	//    尚未落盘任何设定（选型是语义判断），由 Engine 的 planStartFallback 补裁。
+	// 2. Planning-phase completion: a table-lookup decision — what is missing lives in the store and the planner identity
+	//    is derived from the persisted scale (short → architect_short, everything else → architect_long). An empty tier means the first
+	//    planning round has not persisted any setting yet (choosing is a semantic judgement), so the Engine's planStartFallback arbitrates it.
 	if p.Phase != domain.PhaseWriting {
 		if len(s.FoundationMissing) > 0 && s.PlanningTier != "" {
 			task := fmt.Sprintf("补齐基础设定与作品信息缺项：%s；book 使用 save_book，其余基础设定使用 save_foundation 落盘", strings.Join(s.FoundationMissing, "、"))
@@ -131,7 +131,7 @@ func Route(s State) *Instruction {
 		return nil
 	}
 
-	// 3. 重写/打磨队列优先（事实已在工具层落盘，Router 只照单派发）
+	// 3. The rewrite/polish queue takes priority (the facts are already persisted at the tool layer, the Router just dispatches them)
 	if len(p.PendingRewrites) > 0 {
 		ch := p.PendingRewrites[0]
 		verb := "重写"
@@ -146,15 +146,15 @@ func Route(s State) *Instruction {
 		}
 	}
 
-	// 4. 审阅中 → 交回 LLM。当前为 dormant 分支：save_review 只把 Flow 置为
-	//    writing/rewriting/polishing，无任何生产路径置 reviewing（评审期 Flow 实为 writing，
-	//    "评审先于续写"由 agentcore steering 优先级保证，不靠此分支）。保留以与 Steering
-	//    对称，并在未来 editor 评审期显式置 reviewing 时使路由让位于 LLM。
+	// 4. Reviewing → hand back to the LLM. Currently a dormant branch: save_review only sets Flow to
+	//    writing/rewriting/polishing, and no production path sets reviewing (during a review the Flow is really writing, and
+	//    "review before continuing" is guaranteed by the agentcore steering priority rather than by this branch). It is kept for symmetry
+	//    with Steering, and so that if the editor ever explicitly sets reviewing in a future review phase, routing yields to the LLM.
 	if p.Flow == domain.FlowReviewing {
 		return nil
 	}
 
-	// 5. 用户干预处理中：Arbiter 正在裁定，Engine 不抢占
+	// 5. A user intervention is being handled: the Arbiter is arbitrating and the Engine must not preempt it
 	if p.Flow == domain.FlowSteering {
 		return nil
 	}
@@ -198,7 +198,7 @@ func Route(s State) *Instruction {
 		}
 	}
 
-	// 8. 分层模式的弧末后处理
+	// 8. Post-arc-end handling in layered mode
 	if p.Layered && s.ArcBoundary != nil && s.ArcBoundary.IsArcEnd {
 		b := s.ArcBoundary
 		switch {
@@ -238,9 +238,9 @@ func Route(s State) *Instruction {
 		}
 	}
 
-	// 11. 非分层全局审阅：每 ReviewInterval 章一次(事实:该章的 global review 未落盘)。
-	//     原为 commit_chapter 返回值里的 review_required 信号,现按事实推导——
-	//     返回值只是事实的镜像,Route 从 store 直接看同一事实。
+	// 11. Non-layered global review: once every ReviewInterval chapters (fact: that chapter's global review is not persisted).
+	//     This used to be the review_required signal in commit_chapter's return value and is now derived from the facts —
+	//     the return value is only a mirror of the fact, and Route looks at the same fact directly in the store.
 	if !p.Layered && s.LastCompleted > 0 {
 		if due, reason := domain.ShouldReview(len(p.CompletedChapters)); due && !s.HasGlobalReview {
 			return &Instruction{
@@ -251,8 +251,8 @@ func Route(s State) *Instruction {
 		}
 	}
 
-	// 12. 非分层大纲耗尽时不能继续派发越界章节。让 Architect 基于当前故事事实
-	// 决定完结，或用 revise_outline 从 next 章续接计划。
+	// 12. When the non-layered outline is exhausted, out-of-range chapters must not be dispatched. Let the Architect decide
+	// to finish based on the current story facts, or use revise_outline to continue the plan from the next chapter.
 	next := p.NextChapter()
 	if next <= 0 {
 		return nil
@@ -268,7 +268,7 @@ func Route(s State) *Instruction {
 		}
 	}
 
-	// 13. 正常续写
+	// 13. Normal continuation
 	return &Instruction{
 		Agent:   "writer",
 		Task:    fmt.Sprintf("写第 %d 章", next),

@@ -1,15 +1,15 @@
 package agents
 
-// 端到端验证 save_review 硬停 + 任务感知 StopGuard 的组合行为（build.go editor
-// 配置的真实接线：StopAfterToolResult 命中 save_review/save_*_summary、
-// StopGuardFactory 用真 guard、工具落真 checkpoint）。
+// End-to-end verification of the combined behavior of the save_review hard stop and the task-aware StopGuard (build.go's editor
+// configuration is wired for real: StopAfterToolResult matches save_review/save_*_summary,
+// StopGuardFactory uses a real guard, and tools persist real checkpoints).
 //
-// 场景一（摘要任务先复核）：editor 被派生成弧摘要，却先调了 save_review——
-// 硬停触发但 guard 否决，注入催促后 editor 走到 save_arc_summary 才真正退出。
-// 这是恢复 save_review 硬停的安全前提，防止弧摘要永不落盘的死循环回归。
+// Scenario 1 (summary task reviews first): the editor is dispatched to write an arc summary but calls save_review first —
+// the hard stop fires but the guard vetoes it, and after the nudge is injected the editor only truly exits at save_arc_summary.
+// This is the safety premise for restoring the save_review hard stop, and it prevents a regression of the livelock where the arc summary never lands.
 //
-// 场景二（评审任务一步收尾）：editor 被派评审，save_review 落盘即硬停放行，
-// 不再多跑一轮 LLM 收尾。
+// Scenario 2 (review task finishes in one step): the editor is dispatched to review and save_review landing passes the hard stop right away,
+// with no extra LLM turn spent on wrapping up.
 
 import (
 	"context"
@@ -24,7 +24,7 @@ import (
 	"github.com/voocel/agentcore/subagent"
 )
 
-// editorStopAfterToolResult 与 build.go 中 editor 的配置保持同一判据。
+// editorStopAfterToolResult keeps the same criterion as the editor configuration in build.go.
 func editorStopAfterToolResult(toolName string, _ json.RawMessage) bool {
 	return toolName == "save_review" || toolName == "save_arc_summary" || toolName == "save_volume_summary"
 }
@@ -71,10 +71,10 @@ func TestEditorFlow_SummaryTaskSurvivesEarlyReview(t *testing.T) {
 	model := &contractModel{fn: func(i int, _ []agentcore.Message) (*agentcore.LLMResponse, error) {
 		switch i {
 		case 0:
-			// 跑偏：摘要任务却先复核。
+			// Off track: a summary task reviews first.
 			return &agentcore.LLMResponse{Message: assistantToolCall("save_review", `{}`)}, nil
 		default:
-			// guard 否决硬停并注入催促后，本轮才产出摘要。
+			// Only after the guard vetoes the hard stop and injects the nudge does this turn produce the summary.
 			calls.Add(1)
 			return &agentcore.LLMResponse{Message: assistantToolCall("save_arc_summary", `{}`)}, nil
 		}

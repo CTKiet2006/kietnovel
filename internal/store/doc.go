@@ -1,23 +1,23 @@
-// Package store 提供基于文件系统的持久化存储。
+// Package store provides filesystem-based persistent storage.
 //
-// 架构：1 个 IO 基座 + 多个子存储 + 1 个组合根。
-// 每个子存储持有独立的 IO 实例和独立的 sync.RWMutex。
-// 主要领域（Progress、Outline、Drafts、Summaries 等）的读写互不阻塞；
-// WorldStore 将多个低频小领域合并共享一把锁。
+// Architecture: 1 IO base + several sub-stores + 1 composition root.
+// Each sub-store holds its own IO instance and its own sync.RWMutex.
+// Reads and writes of the main domains (Progress, Outline, Drafts, Summaries, ...) never block one another;
+// WorldStore merges several low-traffic small domains so that they share a single lock.
 //
-// 组合根 Store 持有所有子存储的引用，并串行协调跨域操作
-// （ExpandArc、AppendVolume、ClearHandledSteer）；多个文件不构成事务原子提交，
-// 调用依靠安全写入顺序、显式错误与同参数幂等重放恢复。
+// The composition root Store holds references to all sub-stores and serializes cross-domain operations
+// (ExpandArc, AppendVolume, ClearHandledSteer); the multiple files do not form a transactional atomic commit,
+// so callers recover through a safe write order, explicit errors and idempotent replay with the same arguments.
 //
-// 子存储划分：
-//   - ProgressStore: 进度主状态（meta/progress.json）
-//   - OutlineStore: 前提、大纲（扁平/分层）、指南针
-//   - DraftStore: 章节构思、草稿、终稿
-//   - SummaryStore: 章/弧/卷摘要
-//   - RunMetaStore: 运行元数据（模型、干预历史）
-//   - SignalStore: 一次性信号文件（PendingCommit 恢复）
-//   - CheckpointStore: step 级 checkpoint（meta/checkpoints.jsonl）
-//   - RuntimeStore: 运行时事件队列（meta/runtime/*.jsonl）
-//   - CharacterStore: 角色档案、状态快照
-//   - WorldStore: 时间线、伏笔、关系、状态变化、世界规则、风格规则、审阅
+// Sub-store breakdown:
+//   - ProgressStore: main progress state (meta/progress.json)
+//   - OutlineStore: premise, outline (flat/layered), compass
+//   - DraftStore: chapter plans, drafts, final drafts
+//   - SummaryStore: chapter/arc/volume summaries
+//   - RunMetaStore: run metadata (model, intervention history)
+//   - SignalStore: one-shot signal files (PendingCommit recovery)
+//   - CheckpointStore: step-level checkpoints (meta/checkpoints.jsonl)
+//   - RuntimeStore: runtime event queue (meta/runtime/*.jsonl)
+//   - CharacterStore: character profiles, state snapshots
+//   - WorldStore: timeline, setups, relations, state changes, world rules, style rules, review
 package store

@@ -13,10 +13,10 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
 )
 
-// Command 是 `ainovel-cli eval` 子命令入口，返回进程退出码：
-// 0=PASS/WARN，1=有 case FAIL，2=用法/配置错误。
+// Command is the entry point of the `ainovel-cli eval` subcommand and returns the process exit code:
+// 0=PASS/WARN, 1=some case FAILed, 2=usage/config error.
 //
-// 清晰流程：加载配置 → 加载 case → 按 single/A-B 编排运行 → 采集 → 评分 → 聚合 → 报告。
+// Clear flow: load config → load cases → schedule runs as single/A-B → collect → grade → aggregate → report.
 func Command(argv []string) int {
 	fs := flag.NewFlagSet("eval", flag.ContinueOnError)
 	casesPath := fs.String("cases", "", "case 目录或单个 .json 文件（必填）")
@@ -40,8 +40,8 @@ func Command(argv []string) int {
 		return 2
 	}
 
-	// eval 的 -config 指向独立文件时按单文件加载（可复现、不被本机全局/项目污染）；
-	// 缺省则走默认的全局+项目两层合并。
+	// When eval's -config points at a standalone file it is loaded as a single file (reproducible, not polluted by this machine's global/project config);
+	// otherwise the default two-layer global+project merge is used.
 	loadConfig := bootstrap.LoadConfig
 	if strings.TrimSpace(*configPath) != "" {
 		loadConfig = func() (bootstrap.Config, error) { return bootstrap.LoadConfigFile(*configPath) }
@@ -93,13 +93,13 @@ func Command(argv []string) int {
 		}
 		var progressW io.Writer
 		if !*ci {
-			progressW = os.Stderr // CI 模式静默逐事件输出，保持日志干净
+			progressW = os.Stderr // CI mode prints events silently one by one, keeping the log clean
 		}
 
 		if variantName == "" {
 			runs := make([]RunResult, 0, *repeat)
 			for i := 1; i <= *repeat; i++ {
-				bundle := assets.Load(style, assets.LoadOptions{}) // 纯内置,确定性 baseline,不受本机覆盖污染
+				bundle := assets.Load(style, assets.LoadOptions{}) // purely built-in, deterministic baseline, not polluted by this machine's overrides
 				dir := runDir(*outDir, c.ID, ArmSingle, i, *repeat)
 				res := runOne(cfg, bundle, c, dir, *timeout, progressW)
 				res.Arm, res.Repeat = ArmSingle, i
@@ -172,7 +172,7 @@ func runDir(outDir, caseID, arm string, repeat, totalRepeats int) string {
 	return filepath.Join(outDir, "artifacts", caseID, fmt.Sprintf("r%d", repeat), arm)
 }
 
-// loadVariant 读取 variant 目录下所有 *.md（文件名→内容）。空目录返回空 map。
+// loadVariant reads every *.md under the variant directory (filename → content). An empty directory returns an empty map.
 func loadVariant(dir string) (map[string]string, error) {
 	if strings.TrimSpace(dir) == "" {
 		return nil, nil
@@ -200,8 +200,8 @@ func loadVariant(dir string) (map[string]string, error) {
 
 func applyVariant(b *assets.Bundle, prompts map[string]string) error {
 	for file, raw := range prompts {
-		// voice.md 是文风层独立 variant 入口:只替换文风段,协议模板不动,
-		// 组装仍走 BuildWriterPrompt 同一路径(docs/voice-layer.md §3.6)。
+		// voice.md is the standalone variant entry point of the style layer: it only replaces the style section and leaves the protocol template alone,
+		// and assembly still goes through the same BuildWriterPrompt path (docs/voice-layer.md §3.6).
 		if file == "voice.md" {
 			b.OverrideVoice(raw)
 			continue

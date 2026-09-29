@@ -28,7 +28,7 @@ func TestDecisionStore_AppendAndRecent(t *testing.T) {
 	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "继续写"}); err != nil {
 		t.Fatalf("append 2: %v", err)
 	}
-	// 失败裁定:error 是审计事实,必须原样落盘并可读回。
+	// A failed ruling: the error is an audit fact and must be persisted verbatim and be readable back.
 	if _, err := s.Decisions.Append(DecisionRecord{Kind: "plan_start", Decider: "arbiter", Input: "凡人修仙", Error: "USER_INACTIVE"}); err != nil {
 		t.Fatalf("append 3: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestDecisionStore_AppendAndRecent(t *testing.T) {
 		t.Fatalf("记录顺序应为旧→新: %+v", recent)
 	}
 
-	// n 截取:只要最近 1 条
+	// n truncation: only the most recent 1 record
 	last, err := s.Decisions.Recent(1)
 	if err != nil || len(last) != 1 || last[0].Input != "凡人修仙" {
 		t.Fatalf("Recent(1) 应取最新一条, got %+v err=%v", last, err)
@@ -59,7 +59,7 @@ func TestDecisionStore_InputTruncation(t *testing.T) {
 	if err := s.Init(); err != nil {
 		t.Fatalf("init: %v", err)
 	}
-	huge := strings.Repeat("长", maxDecisionInputBytes) // 3 字节/字,远超上限
+	huge := strings.Repeat("长", maxDecisionInputBytes) // 3 bytes per character, far above the cap
 	rec, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: huge})
 	if err != nil {
 		t.Fatalf("append: %v", err)
@@ -67,14 +67,14 @@ func TestDecisionStore_InputTruncation(t *testing.T) {
 	if !rec.InputTruncated || len(rec.Input) > maxDecisionInputBytes {
 		t.Fatalf("超限 input 必须截断并标记: truncated=%v len=%d", rec.InputTruncated, len(rec.Input))
 	}
-	// 截断后的记录仍然可读回
+	// the truncated record can still be read back
 	recent, err := s.Decisions.Recent(1)
 	if err != nil || len(recent) != 1 {
 		t.Fatalf("读回失败: %v", err)
 	}
 }
 
-// 文件中部的已提交损坏行(其后仍有完整提交的行)必须硬失败——不能在残缺历史上裁定。
+// A corrupted committed line in the middle of the file (more complete committed lines follow it) must fail hard - no ruling on a damaged history.
 func TestDecisionStore_RecentRejectsCommittedCorruptLine(t *testing.T) {
 	s := NewStore(t.TempDir())
 	if err := s.Init(); err != nil {
@@ -83,7 +83,7 @@ func TestDecisionStore_RecentRejectsCommittedCorruptLine(t *testing.T) {
 	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "好的"}); err != nil {
 		t.Fatalf("append: %v", err)
 	}
-	// 已 '\n' 收尾的损坏行(完整提交却损坏),其后再追加一条完整记录。
+	// A corrupted line that does end with '\n' (fully committed yet corrupt), followed by appending one more complete record.
 	if err := s.Decisions.io.AppendLine(decisionsFile, []byte("{\"schema_version\":1,\"kind\":\"interv\n")); err != nil {
 		t.Fatalf("append corrupt: %v", err)
 	}
@@ -95,8 +95,8 @@ func TestDecisionStore_RecentRejectsCommittedCorruptLine(t *testing.T) {
 	}
 }
 
-// 崩溃留下的尾部残行(末字节非 '\n' 的未提交追加)按 not-exist 容忍:丢弃残行、返回其前
-// 的完整记录,不硬失败——否则一次崩溃就永久毒化 append-only 审计。
+// The trailing fragment left by a crash (an uncommitted append whose last byte is not '\n') is tolerated as not-exist: the fragment is dropped and the complete records before it
+// are returned without a hard failure - otherwise a single crash would permanently poison the append-only audit.
 func TestDecisionStore_RecentToleratesUncommittedTail(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
@@ -106,7 +106,7 @@ func TestDecisionStore_RecentToleratesUncommittedTail(t *testing.T) {
 	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "好的"}); err != nil {
 		t.Fatalf("append: %v", err)
 	}
-	// 模拟崩溃打断的尾部残行:无换行结尾。
+	// Simulate the trailing fragment left by an interrupted crash: no trailing newline.
 	if err := s.Decisions.io.AppendLine(decisionsFile, []byte(`{"schema_version":1,"kind":"interv`)); err != nil {
 		t.Fatalf("append partial: %v", err)
 	}
@@ -117,8 +117,8 @@ func TestDecisionStore_RecentToleratesUncommittedTail(t *testing.T) {
 	if len(recent) != 1 || recent[0].Input != "好的" {
 		t.Fatalf("应丢弃残行并保留已提交记录,得到: %+v", recent)
 	}
-	// 恢复必须真正截断磁盘尾部，而不是只在本次读取中忽略；否则下一次追加会把两段
-	// JSON 拼成永久损坏。追加后再次读取应保持完整闭环。
+	// Recovery must really truncate the tail on disk instead of merely ignoring it in this read; otherwise the next append would splice two
+	// JSON fragments into permanent corruption. Reading again after the append must stay a complete closed loop.
 	if _, err := s.Decisions.Append(DecisionRecord{Kind: "intervention", Decider: "arbiter", Input: "恢复后"}); err != nil {
 		t.Fatalf("append after recovery: %v", err)
 	}
@@ -138,8 +138,8 @@ func TestDecisionStore_RecentToleratesUncommittedTail(t *testing.T) {
 	}
 }
 
-// 即使尾部恰好是完整 JSON，只要没有协议要求的换行，也属于未提交记录；恢复必须丢弃
-// 它并确保后续追加不会发生 `}{` 拼接。
+// Even when the tail happens to be complete JSON, without the newline the protocol requires it still counts as an uncommitted record; recovery must drop
+// it and make sure a later append never splices `}{` together.
 func TestDecisionStore_RecoveryDropsValidJSONWithoutCommitNewline(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(dir)
@@ -157,7 +157,7 @@ func TestDecisionStore_RecoveryDropsValidJSONWithoutCommitNewline(t *testing.T) 
 		t.Fatal(err)
 	}
 
-	// 模拟重启：下一次读取或追加就是审计恢复边界。
+	// Simulate a restart: the next read or append is the audit recovery boundary.
 	reopened := NewStore(dir)
 	if err := reopened.Init(); err != nil {
 		t.Fatalf("restart init: %v", err)

@@ -13,20 +13,20 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 )
 
-// ErrOutlineChapterNotFound 表示章节尚未进入当前大纲。
+// ErrOutlineChapterNotFound means the chapter has not entered the current outline yet.
 var ErrOutlineChapterNotFound = errors.New("outline chapter not found")
 
-// OutlineStore 管理故事前提、大纲（扁平/分层）和指南针。
+// OutlineStore manages the story premise, the outline (flat/layered) and the compass.
 type OutlineStore struct{ io *IO }
 
 func NewOutlineStore(io *IO) *OutlineStore { return &OutlineStore{io: io} }
 
-// SavePremise 保存故事前提到 premise.md。
+// SavePremise stores the story premise in premise.md.
 func (s *OutlineStore) SavePremise(content string) error {
 	return s.io.WriteMarkdown("premise.md", content)
 }
 
-// LoadPremise 读取 premise.md。不存在时返回空字符串。
+// LoadPremise reads premise.md. It returns an empty string when the file does not exist.
 func (s *OutlineStore) LoadPremise() (string, error) {
 	data, err := s.io.ReadFile("premise.md")
 	if os.IsNotExist(err) {
@@ -35,7 +35,7 @@ func (s *OutlineStore) LoadPremise() (string, error) {
 	return string(data), err
 }
 
-// SaveOutline 同时保存 outline.json 和 outline.md（原子写入）。
+// SaveOutline writes both outline.json and outline.md (atomically).
 func (s *OutlineStore) SaveOutline(entries []domain.OutlineEntry) error {
 	return s.io.WithWriteLock(func() error {
 		return s.saveOutlineUnlocked(entries)
@@ -49,7 +49,7 @@ func (s *OutlineStore) saveOutlineUnlocked(entries []domain.OutlineEntry) error 
 	return s.io.WriteMarkdownUnlocked("outline.md", renderOutline(entries))
 }
 
-// LoadOutline 从 outline.json 读取结构化大纲。
+// LoadOutline reads the structured outline from outline.json.
 func (s *OutlineStore) LoadOutline() ([]domain.OutlineEntry, error) {
 	var entries []domain.OutlineEntry
 	if err := s.io.ReadJSON("outline.json", &entries); err != nil {
@@ -61,7 +61,7 @@ func (s *OutlineStore) LoadOutline() ([]domain.OutlineEntry, error) {
 	return entries, nil
 }
 
-// GetChapterOutline 获取指定章节的大纲条目。
+// GetChapterOutline returns the outline entry of a given chapter.
 func (s *OutlineStore) GetChapterOutline(chapter int) (*domain.OutlineEntry, error) {
 	entries, err := s.LoadOutline()
 	if err != nil {
@@ -75,8 +75,8 @@ func (s *OutlineStore) GetChapterOutline(chapter int) (*domain.OutlineEntry, err
 	return nil, fmt.Errorf("%w: chapter %d", ErrOutlineChapterNotFound, chapter)
 }
 
-// SaveLayeredOutline 以分层大纲为唯一来源，保存分层视图并同步重建扁平派生视图。
-// 调用方不需要、也不应再单独维护 outline.json/outline.md。
+// SaveLayeredOutline treats the layered outline as the single source of truth: it stores the layered views and rebuilds the flat derived views in sync.
+// The caller neither needs nor should separately maintain outline.json/outline.md any more.
 func (s *OutlineStore) SaveLayeredOutline(volumes []domain.VolumeOutline) error {
 	return s.io.WithWriteLock(func() error {
 		assignLayeredIndexes(volumes)
@@ -84,7 +84,7 @@ func (s *OutlineStore) SaveLayeredOutline(volumes []domain.VolumeOutline) error 
 	})
 }
 
-// LoadLayeredOutline 读取分层大纲。
+// LoadLayeredOutline reads the layered outline.
 func (s *OutlineStore) LoadLayeredOutline() ([]domain.VolumeOutline, error) {
 	var volumes []domain.VolumeOutline
 	if err := s.io.ReadJSON("layered_outline.json", &volumes); err != nil {
@@ -97,7 +97,7 @@ func (s *OutlineStore) LoadLayeredOutline() ([]domain.VolumeOutline, error) {
 	return volumes, nil
 }
 
-// ClearLayeredOutline 清理分层大纲文件。
+// ClearLayeredOutline removes the layered outline files.
 func (s *OutlineStore) ClearLayeredOutline() error {
 	return s.io.WithWriteLock(func() error {
 		if err := s.io.RemoveFileUnlocked("layered_outline.json"); err != nil {
@@ -107,7 +107,7 @@ func (s *OutlineStore) ClearLayeredOutline() error {
 	})
 }
 
-// GetChapterFromLayered 从分层大纲中按全局章节号查找。
+// GetChapterFromLayered looks a chapter up in the layered outline by its global chapter number.
 func (s *OutlineStore) GetChapterFromLayered(chapter int) (*domain.OutlineEntry, error) {
 	volumes, err := s.LoadLayeredOutline()
 	if err != nil {
@@ -129,7 +129,7 @@ func (s *OutlineStore) GetChapterFromLayered(chapter int) (*domain.OutlineEntry,
 	return nil, fmt.Errorf("%w: chapter %d in layered outline", ErrOutlineChapterNotFound, chapter)
 }
 
-// LocateChapter 根据全局章节号定位所在的卷和弧。
+// LocateChapter determines the volume and arc a global chapter number belongs to.
 func (s *OutlineStore) LocateChapter(chapter int) (volume, arc int, err error) {
 	volumes, err := s.LoadLayeredOutline()
 	if err != nil {
@@ -149,7 +149,7 @@ func (s *OutlineStore) LocateChapter(chapter int) (volume, arc int, err error) {
 	return 0, 0, fmt.Errorf("%w: chapter %d in layered outline", ErrOutlineChapterNotFound, chapter)
 }
 
-// ArcBoundary 弧边界信息。
+// ArcBoundary holds the arc boundary information.
 type ArcBoundary struct {
 	IsArcEnd       bool
 	IsVolumeEnd    bool
@@ -160,17 +160,17 @@ type ArcBoundary struct {
 	NextVolume     int
 	NextArc        int
 	NeedsExpansion bool
-	NeedsNewVolume bool // 卷末且当前 layered_outline 没有下一卷
+	NeedsNewVolume bool // end of volume and the current layered_outline has no next volume
 	nextVolumePos  int
 	nextArcPos     int
 }
 
-// HasNextArc 是否还有后续弧。
+// HasNextArc reports whether any further arc follows.
 func (b *ArcBoundary) HasNextArc() bool {
 	return b.NextVolume > 0 || b.NextArc > 0
 }
 
-// CheckArcBoundary 检查某章是否为弧/卷的最后一章。
+// CheckArcBoundary checks whether a chapter is the last chapter of an arc/volume.
 func (s *OutlineStore) CheckArcBoundary(chapter int) (*ArcBoundary, error) {
 	volumes, err := s.LoadLayeredOutline()
 	if err != nil || len(volumes) == 0 {
@@ -225,7 +225,7 @@ func checkArcBoundary(volumes []domain.VolumeOutline, chapter int) *ArcBoundary 
 	isLastChInArc := cur.chInArc == cur.arcLen-1
 	isLastArcInVol := cur.arcIdx == len(volumes[cur.volIdx].Arcs)-1
 
-	// Next*/NeedsExpansion/NeedsNewVolume 只在弧末才有意义，否则会让协调者误以为要提前展开下一弧。
+	// Next*/NeedsExpansion/NeedsNewVolume are only meaningful at the end of an arc; otherwise the coordinator would think the next arc must be expanded early.
 	if !isLastChInArc {
 		return b
 	}
@@ -262,7 +262,7 @@ func checkArcBoundary(volumes []domain.VolumeOutline, chapter int) *ArcBoundary 
 	return b
 }
 
-// CompletedArcBoundaries 按故事顺序返回已完成的详细弧边界。
+// CompletedArcBoundaries returns the detailed boundaries of the completed arcs in story order.
 func (s *OutlineStore) CompletedArcBoundaries(lastCompleted int) ([]ArcBoundary, error) {
 	volumes, err := s.LoadLayeredOutline()
 	if err != nil {
@@ -290,7 +290,7 @@ func (s *OutlineStore) CompletedArcBoundaries(lastCompleted int) ([]ArcBoundary,
 	return result, nil
 }
 
-// expandArcAtUnlocked 展开故事顺序中的指定弧，不接受模型提供的结构主键。
+// expandArcAtUnlocked expands the given arc in story order and does not accept structural primary keys coming from the model.
 func (s *OutlineStore) expandArcAtUnlocked(volumes []domain.VolumeOutline, volumePos, arcPos int, expansion domain.ArcExpansion) ([]domain.VolumeOutline, error) {
 	if strings.TrimSpace(expansion.Title) == "" {
 		return nil, fmt.Errorf("弧标题不能为空")
@@ -323,7 +323,7 @@ func (s *OutlineStore) expandArcAtUnlocked(volumes []domain.VolumeOutline, volum
 	return volumes, nil
 }
 
-// appendVolumeUnlocked 内部方法，在 Store.AppendVolume 跨域协调中调用。
+// appendVolumeUnlocked is the internal method called by the cross-domain coordination in Store.AppendVolume.
 func (s *OutlineStore) appendVolumeUnlocked(vol domain.VolumeOutline) ([]domain.VolumeOutline, domain.VolumeOutline, error) {
 	var volumes []domain.VolumeOutline
 	if err := s.io.ReadJSONUnlocked("layered_outline.json", &volumes); err != nil {
@@ -335,9 +335,9 @@ func (s *OutlineStore) appendVolumeUnlocked(vol domain.VolumeOutline) ([]domain.
 		nextIndex = volumes[len(volumes)-1].Index + 1
 	}
 	numberVolume(&vol, nextIndex)
-	// AppendVolume 的下一步还要更新 Progress。若进程在“大纲已追加、Progress
-	// 未更新”之间中断，恢复会用同一持久化载荷重试；完全相同的末卷应视为幂等，
-	// 让同参数重试继续补齐 Progress，而不是重复追加。
+	// The step after AppendVolume also has to update Progress. If the process dies between "the outline is appended and Progress
+	// is not updated yet", recovery retries with the same persisted payload; a completely identical last volume must be treated as idempotent so that
+	// a retry with the same arguments keeps completing Progress instead of appending twice.
 	if len(volumes) > 0 && sameVolumePlan(volumes[len(volumes)-1], vol) {
 		vol = volumes[len(volumes)-1]
 	} else {
@@ -346,16 +346,16 @@ func (s *OutlineStore) appendVolumeUnlocked(vol domain.VolumeOutline) ([]domain.
 		}
 		volumes = append(volumes, vol)
 	}
-	// 即使末卷已存在也重写全部派生视图；上次可能恰好在 layered JSON 落盘后、
-	// flat outline/Markdown 写入前中断。
+	// Even when the last volume already exists, all derived views are rewritten; the previous run may have stopped exactly after the layered JSON hit the disk and
+	// before the flat outline/Markdown was written.
 	if err := s.saveLayeredViewsUnlocked(volumes); err != nil {
 		return nil, domain.VolumeOutline{}, err
 	}
 	return volumes, vol, nil
 }
 
-// saveLayeredViewsUnlocked 以分层大纲为唯一来源，统一重建其 Markdown 与扁平派生视图。
-// 调用方必须持有 OutlineStore 的写锁。
+// saveLayeredViewsUnlocked treats the layered outline as the single source of truth and rebuilds its Markdown and flat derived views together.
+// The caller must hold the OutlineStore write lock.
 func (s *OutlineStore) saveLayeredViewsUnlocked(volumes []domain.VolumeOutline) error {
 	repairMissingLayeredIndexes(volumes)
 	if err := s.io.WriteJSONUnlocked("layered_outline.json", volumes); err != nil {
@@ -407,8 +407,8 @@ func (s *OutlineStore) reviseLayeredTailUnlocked(fromChapter int, replacement []
 	return volumes, nil
 }
 
-// reviseLayeredTail 替换 fromChapter 所在弧从该章起的尾段。若 fromChapter 正好
-// 位于当前扁平大纲末尾之后，则追加到最后一个已展开弧。
+// reviseLayeredTail replaces the tail of the arc that fromChapter belongs to, starting at that chapter. If fromChapter lies
+// exactly after the end of the current flat outline, the tail is appended to the last expanded arc.
 func reviseLayeredTail(volumes []domain.VolumeOutline, fromChapter int, replacement []domain.OutlineEntry) error {
 	chapter := 1
 	targetVolume, targetArc, local := -1, -1, -1
@@ -466,8 +466,8 @@ func assignLayeredIndexes(volumes []domain.VolumeOutline) {
 	}
 }
 
-// repairMissingLayeredIndexes 兼容旧版本曾把可选 index 漏写为 0 的大纲。
-// 正数标识保持原样，避免改动已有摘要和 checkpoint 的作用域。
+// repairMissingLayeredIndexes stays compatible with older versions that once wrote the optional index as 0 when it was missing.
+// A positive index keeps its meaning, so existing summaries and checkpoint scopes are left untouched.
 func repairMissingLayeredIndexes(volumes []domain.VolumeOutline) {
 	for vi := range volumes {
 		if volumes[vi].Index <= 0 {
@@ -494,7 +494,7 @@ func sameVolumePlan(a, b domain.VolumeOutline) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-// SaveCompass 保存终局方向指南针。
+// SaveCompass stores the endgame-direction compass.
 func (s *OutlineStore) SaveCompass(compass domain.StoryCompass) error {
 	if compass.EndingDirection == "" {
 		return fmt.Errorf("ending_direction 不能为空")
@@ -502,7 +502,7 @@ func (s *OutlineStore) SaveCompass(compass domain.StoryCompass) error {
 	return s.io.WriteJSON("meta/compass.json", compass)
 }
 
-// LoadCompass 读取终局方向指南针。
+// LoadCompass reads the endgame-direction compass.
 func (s *OutlineStore) LoadCompass() (*domain.StoryCompass, error) {
 	var c domain.StoryCompass
 	if err := s.io.ReadJSON("meta/compass.json", &c); err != nil {
@@ -514,12 +514,12 @@ func (s *OutlineStore) LoadCompass() (*domain.StoryCompass, error) {
 	return &c, nil
 }
 
-// SaveFoundationAudit 保存 Architect 对当前基础设定版本的语义审查。
+// SaveFoundationAudit stores the Architect's semantic review of the current foundation version.
 func (s *OutlineStore) SaveFoundationAudit(a domain.FoundationAudit) error {
 	return s.io.WriteJSON("meta/foundation_audit.json", a)
 }
 
-// LoadFoundationAudit 读取最近一次基础设定语义审查。
+// LoadFoundationAudit reads the most recent semantic review of the foundation.
 func (s *OutlineStore) LoadFoundationAudit() (*domain.FoundationAudit, error) {
 	var a domain.FoundationAudit
 	if err := s.io.ReadJSON("meta/foundation_audit.json", &a); err != nil {
@@ -578,13 +578,13 @@ func renderOutline(entries []domain.OutlineEntry) string {
 	return b.String()
 }
 
-// ── Writer 大纲反馈池 ──
+// ── Writer outline feedback pool ──
 //
-// commit_chapter 的 feedback(偏离/建议)持久化于此,architect 下次结构操作
-// (expand_next_arc / append_volume / update_compass)经 novel_context 消费后清空。
-// 事实闭环:工具落盘 → 上下文注入 → 结构操作即消费(docs/engine-arbiter.md 阻断1)。
+// The feedback of commit_chapter (drift/suggestions) is persisted here and, once the architect's next
+// structural operation (expand_next_arc / append_volume / update_compass) has consumed it through novel_context, cleared.
+// Fact loop: tool writes to disk -> context is injected -> the structural operation consumes it (docs/engine-arbiter.md blocking rule 1).
 
-// ChapterFeedback 一条带章节号的大纲反馈。
+// ChapterFeedback is one outline feedback entry that carries a chapter number.
 type ChapterFeedback struct {
 	Chapter          int      `json:"chapter"`
 	StoryChanged     bool     `json:"story_changed,omitempty"`
@@ -595,8 +595,8 @@ type ChapterFeedback struct {
 	At               string   `json:"at"`
 }
 
-// RequiresImmediateReview 区分外部修订影响与普通写作反馈。普通反馈留到下一次
-// 自然结构操作统一吸收；外部修订可能使即将续写的大纲失效，必须先交 Architect。
+// RequiresImmediateReview separates the impact of an external revision from ordinary writing feedback. Ordinary feedback waits until the next
+// natural structural operation absorbs it in one go; an external revision can invalidate the outline that is about to be continued, so it must go to the Architect first.
 func (f ChapterFeedback) RequiresImmediateReview() bool {
 	return f.StoryChanged || strings.TrimSpace(f.ChangeSummary) != "" || len(f.DownstreamIssues) > 0
 }
@@ -604,8 +604,8 @@ func (f ChapterFeedback) RequiresImmediateReview() bool {
 const outlineFeedbackFile = "meta/outline_feedback.jsonl"
 const outlineFeedbackResolutionFile = "meta/outline_feedback_resolution.json"
 
-// AppendOutlineFeedback 追加一条 writer 反馈。相同章节与内容视为同一事实，
-// 使 commit 在 ProgressMarked 前崩溃重放时不会重复累加附属反馈。
+// AppendOutlineFeedback appends one writer feedback entry. The same chapter with the same content counts as the same fact,
+// so that a commit crashing before ProgressMarked and replaying does not accumulate the attached feedback twice.
 func (s *OutlineStore) AppendOutlineFeedback(fb ChapterFeedback) error {
 	return s.io.WithWriteLock(func() error {
 		existing, err := s.io.ReadFileUnlocked(outlineFeedbackFile)
@@ -634,8 +634,8 @@ func (s *OutlineStore) AppendOutlineFeedback(fb ChapterFeedback) error {
 	})
 }
 
-// LoadPendingOutlineFeedback 读取未消费的反馈(旧→新)。损坏行显式返回错误，
-// 防止 Architect 在缺失部分反馈的上下文上继续结构操作并随后清空原文件。
+// LoadPendingOutlineFeedback reads the unconsumed feedback (old -> new). A corrupted line surfaces an explicit error,
+// which prevents the Architect from carrying on with a structural operation on a context that is missing some feedback and then clearing the original file.
 func (s *OutlineStore) LoadPendingOutlineFeedback() ([]ChapterFeedback, error) {
 	s.io.mu.RLock()
 	defer s.io.mu.RUnlock()
@@ -673,7 +673,7 @@ func parseOutlineFeedback(data []byte) ([]ChapterFeedback, error) {
 	return out, nil
 }
 
-// ClearOutlineFeedback 清空反馈池(architect 结构操作成功 = 反馈已被参考)。
+// ClearOutlineFeedback empties the feedback pool (a successful architect structural operation = the feedback has been taken into account).
 func (s *OutlineStore) ClearOutlineFeedback() error {
 	s.io.mu.Lock()
 	defer s.io.mu.Unlock()

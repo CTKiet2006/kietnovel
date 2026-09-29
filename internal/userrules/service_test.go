@@ -10,8 +10,8 @@ import (
 	"github.com/voocel/agentcore"
 )
 
-// nil 模型 + 空规则目录：归一化全降级，但快照仍可产出（system_defaults 兜底）并落盘。
-// LoadOptions{} 的两个目录为空串，RawFileSources 返回 nil，测试不触碰真实磁盘。
+// nil model + empty rules directories: every normalization degrades, but a snapshot can still be produced (system_defaults as the fallback) and persisted.
+// The two directories in LoadOptions{} are empty strings, so RawFileSources returns nil and the test never touches a real disk.
 func newDegradedService(t *testing.T) (*Service, *store.Store) {
 	t.Helper()
 	st := store.NewStore(t.TempDir())
@@ -28,16 +28,16 @@ func TestService_Build_DegradesButPersists(t *testing.T) {
 	if snap.Status != rules.StatusDegraded {
 		t.Fatalf("无模型应降级，status=%q", snap.Status)
 	}
-	// system_defaults 始终兜底机械基线。
+	// system_defaults always backstops the mechanical baseline.
 	if len(snap.Structured.FatigueWords) == 0 || len(snap.Structured.ForbiddenPhrases) == 0 {
 		t.Fatalf("应保留 system_defaults 机械基线，got %+v", snap.Structured)
 	}
-	// 启动 prompt 降级为 raw preferences，原文不丢。
+	// The startup prompt degrades to raw preferences, the raw text is not lost.
 	if snap.Preferences == "" {
 		t.Fatal("降级应把启动 prompt 原文记入 preferences")
 	}
 
-	// 已落盘：GetOrBuild 读回同一份而非重建。
+	// Already persisted: GetOrBuild reads back the same one instead of rebuilding it.
 	reloaded, err := st.UserRules.Load()
 	if err != nil || reloaded == nil {
 		t.Fatalf("快照应已落盘：err=%v snap=%v", err, reloaded)
@@ -73,14 +73,14 @@ func TestService_AddRuntimeRule_PersistsAndReturnsCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AddRuntimeRule 不应报错：%v", err)
 	}
-	// 候选用于回显：无模型时降级，原文进 preferences。
+	// The candidate is meant for echoing back: with no model it degrades, the raw text goes into preferences.
 	if !cand.Degraded {
 		t.Fatal("无模型时本次候选应降级")
 	}
 	if cand.Preferences != text {
 		t.Fatalf("候选应保留原文，got %q", cand.Preferences)
 	}
-	// 叠加后快照含该条且已落盘。
+	// The overlaid snapshot contains that entry and has been persisted.
 	if merged.Preferences == "" {
 		t.Fatal("叠加后 preferences 不应为空")
 	}
@@ -93,8 +93,8 @@ func TestService_AddRuntimeRule_PersistsAndReturnsCandidate(t *testing.T) {
 	}
 }
 
-// alwaysRetryableModel 恒返回 retryable 错误：llmretry 会一直退避重试，
-// 只有 context 能终止它——这正是 issue #125 的卡死形态。
+// alwaysRetryableModel always returns a retryable error: llmretry keeps retrying with backoff,
+// and only the context can stop it — exactly the deadlock shape of issue #125.
 type alwaysRetryableModel struct{ scriptedModel }
 
 func (m *alwaysRetryableModel) Generate(context.Context, []agentcore.Message, []agentcore.ToolSpec, ...agentcore.CallOption) (*agentcore.LLMResponse, error) {
@@ -102,8 +102,8 @@ func (m *alwaysRetryableModel) Generate(context.Context, []agentcore.Message, []
 	return nil, retryableTestError{}
 }
 
-// issue #125 回归：provider 持续限流/不可用时，Build 必须由 context 终止并降级，
-// 不得无限重试卡死开书流程。
+// issue #125 regression: when the provider keeps rate-limiting or becoming unavailable, Build must be terminated by the context and degrade,
+// and must never retry forever and deadlock the book-creation flow.
 func TestService_BuildStopsAtContextDeadline(t *testing.T) {
 	st := store.NewStore(t.TempDir())
 	svc := NewService(st, &alwaysRetryableModel{}, rules.LoadOptions{})

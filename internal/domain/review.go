@@ -1,6 +1,6 @@
 package domain
 
-// TimelineEvent 时间线事件。
+// TimelineEvent is a timeline event.
 type TimelineEvent struct {
 	Chapter    int      `json:"chapter"`
 	Time       string   `json:"time"`
@@ -8,7 +8,7 @@ type TimelineEvent struct {
 	Characters []string `json:"characters,omitempty"`
 }
 
-// ForeshadowEntry 伏笔条目。
+// ForeshadowEntry is a foreshadowing entry.
 type ForeshadowEntry struct {
 	ID          string `json:"id"`
 	Description string `json:"description"`
@@ -17,16 +17,16 @@ type ForeshadowEntry struct {
 	ResolvedAt  int    `json:"resolved_at,omitempty"`
 }
 
-// ForeshadowUpdate 伏笔增量操作。
+// ForeshadowUpdate is an incremental foreshadowing operation.
 type ForeshadowUpdate struct {
 	ID          string `json:"id"`
 	Action      string `json:"action"` // plant / advance / resolve
 	Description string `json:"description,omitempty"`
 }
 
-// RestoreOwnPlants 把旧记录里本章种下、而新记录未再声明的伏笔 plant 补回队首。
-// 一章埋过哪些伏笔是它自身的历史事实，重写正文不改变这一点；丢掉它，章节记录
-// 全量重放时本章及后续章节的 advance/resolve 会找不到前置 plant，整条链报错。
+// RestoreOwnPlants puts the plant operations back at the head of the queue for the setups this chapter planted in the old record but no longer declares in the new record.
+// Which setups a chapter planted is a historical fact of that chapter itself and rewriting the body text does not change it; dropping it makes the
+// advance/resolve of this chapter and the later ones fail to find their prerequisite plant when the chapter records are fully replayed, and the whole chain errors out.
 func RestoreOwnPlants(prev, next []ForeshadowUpdate) []ForeshadowUpdate {
 	declared := make(map[string]struct{}, len(next))
 	for _, u := range next {
@@ -48,11 +48,11 @@ func RestoreOwnPlants(prev, next []ForeshadowUpdate) []ForeshadowUpdate {
 	if len(restored) == 0 {
 		return next
 	}
-	// plant 必须排在同章 advance/resolve 之前，重放才能先建起条目。
+	// plant must be ordered before the advance/resolve of the same chapter, so the replay can build the entry first.
 	return append(restored, next...)
 }
 
-// RelationshipEntry 人物关系条目。
+// RelationshipEntry is a character-relation entry.
 type RelationshipEntry struct {
 	CharacterA string `json:"character_a"`
 	CharacterB string `json:"character_b"`
@@ -60,40 +60,40 @@ type RelationshipEntry struct {
 	Chapter    int    `json:"chapter"`
 }
 
-// ConsistencyIssue 一致性问题。
+// ConsistencyIssue is a consistency problem.
 type ConsistencyIssue struct {
-	Type           string `json:"type"`     // 模型依据 rubric 给出的具体问题维度
+	Type           string `json:"type"`     // the concrete problem dimension the model derived from the rubric
 	Severity       string `json:"severity"` // critical / error / warning
 	Description    string `json:"description"`
-	Evidence       string `json:"evidence,omitempty"` // 证据：原文片段、具体情节或状态数据
+	Evidence       string `json:"evidence,omitempty"` // evidence: an excerpt of the original text, a concrete plot point or state data
 	Suggestion     string `json:"suggestion,omitempty"`
-	Chapters       []int  `json:"chapters,omitempty"` // 证据实际落在哪些章节
-	RequiresChange bool   `json:"requires_change"`    // 是否应立即进入返工队列，由 Editor 语义判断
+	Chapters       []int  `json:"chapters,omitempty"` // the chapters the evidence actually falls in
+	RequiresChange bool   `json:"requires_change"`    // whether it should enter the rework queue immediately, decided semantically by the Editor
 }
 
-// DimensionScore 单维度评审评分。
+// DimensionScore is a single-dimension review score.
 type DimensionScore struct {
-	Dimension string `json:"dimension"`         // 由评审 rubric 定义，可按任务扩展
+	Dimension string `json:"dimension"`         // defined by the review rubric, extendable per task
 	Score     int    `json:"score"`             // 0-100
-	Verdict   string `json:"verdict,omitempty"` // 兼容旧审阅；运行时不再用阈值覆盖模型判断
-	Comment   string `json:"comment,omitempty"` // 该维度的简要结论
+	Verdict   string `json:"verdict,omitempty"` // kept for compatibility with old reviews; the runtime no longer overrides the model judgement with a threshold
+	Comment   string `json:"comment,omitempty"` // the brief conclusion for this dimension
 }
 
-// ReviewEntry Editor 的审阅条目。
+// ReviewEntry is an Editor review entry.
 type ReviewEntry struct {
 	Chapter          int                `json:"chapter"`
 	Scope            string             `json:"scope"` // chapter / global / arc
 	Issues           []ConsistencyIssue `json:"issues"`
-	Dimensions       []DimensionScore   `json:"dimensions,omitempty"`      // 分维度评分
+	Dimensions       []DimensionScore   `json:"dimensions,omitempty"`      // per-dimension scores
 	ContractStatus   string             `json:"contract_status,omitempty"` // met / partial / missed
-	ContractMisses   []string           `json:"contract_misses,omitempty"` // 未达成的 contract 条目
-	ContractNotes    string             `json:"contract_notes,omitempty"`  // 对 contract 履行情况的简述
+	ContractMisses   []string           `json:"contract_misses,omitempty"` // contract entries that were not met
+	ContractNotes    string             `json:"contract_notes,omitempty"`  // a brief description of how well the contract was honoured
 	Verdict          string             `json:"verdict"`                   // accept / polish / rewrite
 	Summary          string             `json:"summary"`
-	AffectedChapters []int              `json:"affected_chapters,omitempty"` // 需要重写/打磨的章节号
+	AffectedChapters []int              `json:"affected_chapters,omitempty"` // the chapter numbers that need a rewrite/polish
 }
 
-// CriticalCount 返回 critical 级别问题数量。
+// CriticalCount returns the number of critical-level problems.
 func (r *ReviewEntry) CriticalCount() int {
 	n := 0
 	for _, issue := range r.Issues {
@@ -104,7 +104,7 @@ func (r *ReviewEntry) CriticalCount() int {
 	return n
 }
 
-// ErrorCount 返回 error 级别问题数量。
+// ErrorCount returns the number of error-level problems.
 func (r *ReviewEntry) ErrorCount() int {
 	n := 0
 	for _, issue := range r.Issues {
@@ -115,7 +115,7 @@ func (r *ReviewEntry) ErrorCount() int {
 	return n
 }
 
-// Dimension 返回指定维度的评分；不存在则返回 nil。
+// Dimension returns the score of a given dimension, or nil when it does not exist.
 func (r *ReviewEntry) Dimension(name string) *DimensionScore {
 	if r == nil {
 		return nil

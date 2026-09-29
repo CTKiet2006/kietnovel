@@ -6,7 +6,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
-// BuildCast 从接纳记录构建当前配角视图。
+// BuildCast builds the current supporting-cast view from the acceptance records.
 func (s *Store) BuildCast(chapters []int) ([]domain.CastEntry, error) {
 	records, err := s.ChapterRecords.LoadCompleted(chapters)
 	if err != nil {

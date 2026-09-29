@@ -121,8 +121,8 @@ const (
 	taskHeading          = "## 当前任务\n"
 )
 
-// leadingTask 取回协调器下发的任务：首次压缩来自首条 user 消息，之后来自上一份摘要。
-// store 摘要与 LLM 摘要（WriterSummaryPrompt）都把"当前任务"作为固定一节，按下一个标题结束。
+// leadingTask retrieves the task issued by the coordinator: the first compaction takes it from the first user message, later ones from the previous summary.
+// Both the store summary and the LLM summary (WriterSummaryPrompt) keep the "current task" as a fixed section, ending at the next heading.
 func leadingTask(msgs []agentcore.AgentMessage) string {
 	switch first := msgs[0].(type) {
 	case agentcore.Message:

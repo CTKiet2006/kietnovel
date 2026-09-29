@@ -12,28 +12,28 @@ import (
 	"github.com/voocel/agentcore"
 )
 
-// SkelEvent 是一条会话消息脱敏后的行为骨架：保留结构信号（角色 / 工具 / 错误 /
-// 重复指纹），所有自由文本（正文、prompt、思考）一律打码。这是比
-// store.compactMessage 更严的一层投影——后者按体积压（>4KB），这里不看体积，
-// 任何文本都不出包。
+// SkelEvent is the behaviour skeleton of a redacted session message: it keeps the structural signals (role / tool / error /
+// repeat fingerprint) and masks every free text (body, prompt, thinking). This is a stricter projection than
+// store.compactMessage - the latter compacts by size (>4KB), while here the size is irrelevant and
+// no text at all leaves the package.
 type SkelEvent struct {
-	Agent    string     // 来源会话：writer-ch07 / architect-arc02 …
+	Agent    string     // the source session: writer-ch07 / architect-arc02 …
 	Role     string     // assistant / tool / user
-	Tools    []SkelTool // 该消息内的工具调用
-	ErrClass string     // role=tool 且 is_error：错误首行（框架错误串，不含正文）
-	TextSha  string     // 打码正文的短哈希；同 sha = 反复生成同一段（循环信号）
-	Redacted int        // 本条打码的文本/思考块数（用于脱敏自检）
+	Tools    []SkelTool // the tool calls inside this message
+	ErrClass string     // role=tool and is_error: the first line of the error (a framework error string, no body text)
+	TextSha  string     // a short hash of the masked body text; the same sha = the same text is generated repeatedly (a loop signal)
+	Redacted int        // the number of text/thinking blocks masked in this entry (used by the redaction self-check)
 }
 
-// SkelTool 是一次工具调用的脱敏投影。
+// SkelTool is the redacted projection of one tool call.
 type SkelTool struct {
-	Name     string            // 工具名（结构信号，不含正文）
-	Args     map[string]string // key → 标量原值 / 短字符串带引号 / "<redacted len sha>"
-	Invalid  bool              // ArgsInvalid：模型发来的参数无法解析（#34 信号）
-	ParseErr string            // ArgsParseError：解析失败原因
+	Name     string            // the tool name (a structural signal, no body text)
+	Args     map[string]string // key -> raw scalar / short string quoted / "<redacted len sha>"
+	Invalid  bool              // ArgsInvalid: the arguments sent by the model cannot be parsed (a #34 signal)
+	ParseErr string            // ArgsParseError: the reason the parse failed
 }
 
-// redactMessage 把一条 agentcore.Message 投影成行为骨架。
+// redactMessage projects an agentcore.Message into a behaviour skeleton.
 func redactMessage(agent string, m agentcore.Message) SkelEvent {
 	ev := SkelEvent{Agent: agent, Role: string(m.Role)}
 	isErr, _ := m.Metadata["is_error"].(bool)
@@ -42,8 +42,8 @@ func redactMessage(agent string, m agentcore.Message) SkelEvent {
 	for _, b := range m.Content {
 		switch b.Type {
 		case agentcore.ContentText:
-			// tool 错误结果保留首行：这是我们自己的错误串（如 InputValidationError），
-			// 不含正文，且是定位循环的关键。其余文本一律进打码池。
+			// The first line of a tool error result is kept: it is our own error string (e.g. InputValidationError),
+			// it holds no body text and it is the key to locating a loop. All other text goes into the masking pool.
 			if m.Role == agentcore.RoleTool && isErr && ev.ErrClass == "" {
 				ev.ErrClass = firstLine(b.Text, 160)
 				continue
@@ -69,7 +69,7 @@ func redactMessage(agent string, m agentcore.Message) SkelEvent {
 	return ev
 }
 
-// redactToolCall 投影一次工具调用：工具名 + 参数（值脱敏）+ 解析异常标记。
+// redactToolCall projects one tool call: tool name + arguments (values redacted) + a parse-anomaly flag.
 func redactToolCall(tc *agentcore.ToolCall) SkelTool {
 	return SkelTool{
 		Name:     tc.Name,
@@ -79,8 +79,8 @@ func redactToolCall(tc *agentcore.ToolCall) SkelTool {
 	}
 }
 
-// redactArgs 把工具参数对象投影成 key → 脱敏值。非对象参数返回 nil
-// （ArgsInvalid/ParseErr 已在 SkelTool 另行记录）。
+// redactArgs projects a tool-arguments object into key -> redacted value. A non-object argument returns nil
+// (ArgsInvalid/ParseErr are recorded separately in SkelTool).
 func redactArgs(raw json.RawMessage) map[string]string {
 	if len(raw) == 0 {
 		return nil
@@ -96,11 +96,11 @@ func redactArgs(raw json.RawMessage) map[string]string {
 	return out
 }
 
-// projectValue 按 JSON 类型投影单个参数值：
-//   - 标量（数字 / bool / null）：原值即结构信号，保留（chapter: 7）
-//   - 短的标识符型字符串：带引号保留，暴露类型（chapter: "7" ← #34 的字符串化数字信号）
-//   - 含中文 / 空格 / 长文本的字符串、对象、数组：打码为 <redacted …>（正文零出包）
-//   - 已是 [session_compact: …] 占位：安全且有信息，原样保留
+// projectValue projects a single argument value by its JSON type:
+//   - scalar (number / bool / null): the raw value is itself a structural signal and is kept (chapter: 7)
+//   - short identifier-like string: kept with quotes, which exposes the type (chapter: "7" <- the stringified-number signal of #34)
+//   - string containing Chinese / spaces / long text, object, array: masked into <redacted …> (zero body text out of the package)
+//   - already a [session_compact: …] placeholder: safe and informative, kept as is
 func projectValue(raw json.RawMessage) string {
 	s := strings.TrimSpace(string(raw))
 	if s == "" {
@@ -115,8 +115,8 @@ func projectValue(raw json.RawMessage) string {
 		if strings.HasPrefix(str, store.CompactTag) {
 			return str
 		}
-		// 只保留"像标识符/数字/枚举"的短值（chapter:"7"、type:"premise"、agent:"writer"）；
-		// 任何含中文、空格或其他符号的字符串都视为正文，一律打码。
+		// only short values that "look like an identifier/number/enum" are kept (chapter:"7", type:"premise", agent:"writer");
+		// any string containing Chinese, spaces or other symbols counts as body text and is always masked.
 		if utf8.RuneCountInString(str) <= 32 && isStructuralToken(str) {
 			return strconv.Quote(str)
 		}
@@ -130,8 +130,8 @@ func projectValue(raw json.RawMessage) string {
 	}
 }
 
-// isStructuralToken 判断字符串是否"像标识符"——纯 ASCII 的字母 / 数字 / `_-.:/`，
-// 无空格、无中文。用来区分结构信号（保留）与正文片段（打码）。
+// isStructuralToken reports whether a string "looks like an identifier" - pure-ASCII letters / digits / `_-.:/`,
+// no spaces, no Chinese. It separates structural signals (kept) from body-text fragments (masked).
 func isStructuralToken(s string) bool {
 	if s == "" {
 		return false
@@ -151,14 +151,14 @@ func redactPlaceholder(s string) string {
 	return fmt.Sprintf("<redacted len=%d sha=%s>", utf8.RuneCountInString(s), shortHash(s))
 }
 
-// shortHash 取文本的短哈希；只用于"是否同一段文本反复出现"的判断，非加密用途。
+// shortHash takes a short hash of the text; it is only used to judge "whether the same text appears repeatedly", not for cryptography.
 func shortHash(s string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(s))
 	return fmt.Sprintf("%08x", h.Sum32())
 }
 
-// firstLine 取首行并按 rune 截断，供错误串摘要。
+// firstLine takes the first line and truncates it by rune, for an error-string summary.
 func firstLine(s string, max int) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexAny(s, "\n\r"); i >= 0 {

@@ -2,7 +2,7 @@ package domain
 
 import "encoding/json"
 
-// CommitStage 表示章节提交 Saga 的当前阶段。
+// CommitStage represents the current stage of the chapter commit saga.
 type CommitStage string
 
 const (
@@ -12,7 +12,7 @@ const (
 	CommitStageSignalSaved    CommitStage = "signal_saved"
 )
 
-// PendingCommit 记录章节提交中断时的恢复信息。
+// PendingCommit records the recovery information of an interrupted chapter commit.
 type PendingCommit struct {
 	Chapter        int             `json:"chapter"`
 	Stage          CommitStage     `json:"stage"`

@@ -53,7 +53,7 @@ func TestInitRunMeta_PreservesHistory(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(dir)
 
-	// 先建立带运行意图的 RunMeta
+	// first build a RunMeta that carries a run intent
 	_ = store.RunMeta.Save(domain.RunMeta{
 		StartedAt:    "old",
 		Provider:     "openai",
@@ -62,7 +62,7 @@ func TestInitRunMeta_PreservesHistory(t *testing.T) {
 		PendingSteer: "待处理",
 	})
 
-	// Init 应保留 PendingSteer 等运行意图事实
+	// Init must preserve run-intent facts such as PendingSteer
 	_ = store.RunMeta.Init("suspense", "openrouter", "new-model")
 
 	meta, _ := store.RunMeta.Load()
@@ -87,7 +87,7 @@ func TestSetAndClearPendingSteer(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(dir)
 
-	// 设置 PendingSteer
+	// set PendingSteer
 	if err := store.RunMeta.SetPendingSteer("主角改成女性"); err != nil {
 		t.Fatalf("SetPendingSteer: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestSetAndClearPendingSteer(t *testing.T) {
 		t.Errorf("expected pending steer, got %s", meta.PendingSteer)
 	}
 
-	// 清除
+	// clear
 	if err := store.RunMeta.ClearPendingSteer(); err != nil {
 		t.Fatalf("ClearPendingSteer: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestClearPendingSteer_Noop(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(dir)
 
-	// 空 meta 上调用不报错
+	// calling it on empty meta must not error
 	if err := store.RunMeta.ClearPendingSteer(); err != nil {
 		t.Fatalf("ClearPendingSteer on empty: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestInitRunMeta_PreservesAdvanceIntent(t *testing.T) {
 	_ = store.RunMeta.GrantAdvancePermit(7)
 	hold := domain.AdvanceHold{After: domain.AdvanceHoldAtBoundary, Reason: "验收"}
 	_ = store.RunMeta.SetAdvanceHold(hold)
-	// 进程重启路径：Host.New 每次都会调 Init，用户运行意图必须存活。
+	// process restart path: Host.New calls Init every time, so the user's run intent must survive.
 	_ = store.RunMeta.Init("fantasy", "openrouter", "m")
 
 	meta, _ := store.RunMeta.Load()
@@ -258,9 +258,9 @@ func TestInitRunMeta_UnknownAdvanceModeDoesNotWrite(t *testing.T) {
 	}
 }
 
-// TestRunMetaInit_PreservesPlanStart 规划期(裁定已落盘、首个 foundation 未落盘)
-// 崩溃重启时,Host.New 的 RunMeta.Init 不得清掉 PlanStart——它是恢复规划师身份的
-// 唯一依据(engine.planStartFallback)。
+// TestRunMetaInit_PreservesPlanStart planning-phase crash (the ruling is on disk, the first foundation is not)
+// on restart: RunMeta.Init inside Host.New must not wipe PlanStart - it is the only basis for
+// recovering the planner identity (engine.planStartFallback).
 func TestRunMetaInit_PreservesPlanStart(t *testing.T) {
 	store := NewStore(t.TempDir())
 	if err := store.RunMeta.SetStartPrompt("写个悬疑短篇"); err != nil {
@@ -270,7 +270,7 @@ func TestRunMetaInit_PreservesPlanStart(t *testing.T) {
 	if err := store.RunMeta.SetPlanStart(rec); err != nil {
 		t.Fatalf("set plan start: %v", err)
 	}
-	// 模拟进程重启:Host.New 会再次 Init
+	// simulate a process restart: Host.New will Init again
 	if err := store.RunMeta.Init("default", "openrouter", "m"); err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -281,7 +281,7 @@ func TestRunMetaInit_PreservesPlanStart(t *testing.T) {
 	if meta.PlanStart == nil || meta.PlanStart.Planner != "architect_short" {
 		t.Fatalf("Init 必须保留 PlanStart, got %+v", meta.PlanStart)
 	}
-	// StartPrompt 同样是跨重启事实:裁定失败后它是引擎补裁的唯一依据。
+	// StartPrompt is likewise a cross-restart fact: after a failed ruling it is the only basis for the engine's fallback ruling.
 	if meta.StartPrompt != "写个悬疑短篇" {
 		t.Fatalf("Init 必须保留 StartPrompt, got %q", meta.StartPrompt)
 	}

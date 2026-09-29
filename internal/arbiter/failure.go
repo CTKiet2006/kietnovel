@@ -10,16 +10,16 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// FailureFacts 是 worker_failure / deadlock 两个场景共用的事实包:
-// Engine 已做过确定性分类(重试/参数错等不到这里),送到 Arbiter 的都是
-// "确定性代码给不出出路"的残余。
+// FailureFacts is the fact packet shared by the worker_failure / deadlock scenarios:
+// the Engine has already done the deterministic classification (retry / bad arguments and the like never get here), so
+// everything reaching the Arbiter is the residue that "deterministic code cannot find a way out of".
 type FailureFacts struct {
 	Kind          string   `json:"kind"` // worker_failure | deadlock
 	Agent         string   `json:"agent,omitempty"`
 	Task          string   `json:"task,omitempty"`
-	Error         string   `json:"error,omitempty"` // worker_failure:错误文本
+	Error         string   `json:"error,omitempty"` // worker_failure: error text
 	ErrorKind     string   `json:"error_kind,omitempty"`
-	Repeats       int      `json:"repeats,omitempty"` // deadlock:同指令已派次数
+	Repeats       int      `json:"repeats,omitempty"` // deadlock: how many times the same instruction was dispatched
 	Phase         string   `json:"phase,omitempty"`
 	NextChapter   int      `json:"next_chapter,omitempty"`
 	PendingQueue  []int    `json:"pending_rewrites,omitempty"`
@@ -27,7 +27,7 @@ type FailureFacts struct {
 	FactWarnings  []string `json:"fact_warnings,omitempty"`
 }
 
-// FailureDecision 失败/僵局裁定。
+// FailureDecision is a failure / deadlock arbitration.
 type FailureDecision struct {
 	Action   string      `json:"action"` // retry | reroute | abort
 	Dispatch *DispatchOp `json:"dispatch,omitempty"`
@@ -54,8 +54,8 @@ func (d *FailureDecision) ValidateAgainst(f FailureFacts) error {
 	}
 }
 
-// failureContract 紧邻 FailureDecision:action 封闭枚举,dispatch 可空对象
-// (仅 reroute 时非 null);跨字段组合仍由 ValidateAgainst 按事实校验。
+// failureContract sits next to FailureDecision: action is a closed enum, dispatch is a nullable object
+// (non-null only for reroute); cross-field combinations are still checked against the facts by ValidateAgainst.
 var failureContract = llmcontract.Contract{
 	Name:        "arbiter_failure",
 	Description: "失败/僵局裁定:给出出路",
@@ -66,8 +66,8 @@ var failureContract = llmcontract.Contract{
 	),
 }
 
-// DecideFailure 失败/僵局咨询。失败语义:返回 error → Engine 按最保守路径处理
-// (暂停 + notify),绝不无限咨询。
+// DecideFailure arbitrates a failure / deadlock. Failure semantics: returning an error → the Engine takes the most
+// conservative path (pause + notify); it never arbitrates indefinitely.
 func DecideFailure(ctx context.Context, model agentcore.ChatModel, systemPrompt string, facts FailureFacts) (FailureDecision, error) {
 	payload, err := marshalPayload(facts)
 	if err != nil {

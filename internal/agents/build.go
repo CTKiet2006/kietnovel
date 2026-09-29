@@ -20,9 +20,9 @@ import (
 	"github.com/voocel/agentcore/subagent"
 )
 
-// agentToRole 把 subagent name 归一为 ModelSet 认得的 role 名。
-// architect_short / architect_long 都共用同一个 architect role 配置。
-// 跟 host.agentRoleName 同义，因为 build 与 host 互不依赖故各持一份。
+// agentToRole normalizes a subagent name into a role name that ModelSet recognizes.
+// architect_short / architect_long both share the same architect role configuration.
+// Synonymous with host.agentRoleName; build and host do not depend on each other, so each keeps its own copy.
 func agentToRole(name string) string {
 	if strings.HasPrefix(name, "architect_") {
 		return "architect"
@@ -30,34 +30,34 @@ func agentToRole(name string) string {
 	return name
 }
 
-// promptCacheBase 从书目录派生稳定短哈希，作为提示词缓存身份前缀：同一本书
-// 跨进程重启共享路由桶，且不向 provider 泄露本地路径。角色后缀由调用方拼接，
-// subagent 每次 spawn 再追加 "#seq"（一次会话一个键）。
+// promptCacheBase derives a stable short hash from the book directory as the prompt cache identity prefix: the same book
+// shares a routing bucket across process restarts without leaking local paths to the provider. The role suffix is appended by the caller,
+// and each subagent spawn appends "#seq" on top (one key per session).
 func promptCacheBase(bookDir string) string {
 	sum := sha256.Sum256([]byte(bookDir))
 	return "nvl-" + hex.EncodeToString(sum[:6])
 }
 
-// subagentMaxRetries 是所有 Worker 的 LLM retry 上限。
-// 退避策略：指数退避（受 maxDelay 上限约束），优先服从 server Retry-After。
-// 工具只在完整 Assistant 消息提交后启动，因此 stream-idle / 503 /
-// 短暂网络抖动可以在 Worker 内安全重试，不会重放工具副作用。
+// subagentMaxRetries is the LLM retry ceiling for every Worker.
+// Backoff policy: exponential backoff (bounded by the maxDelay ceiling), deferring to the server's Retry-After when there is one.
+// Tools only start once a complete Assistant message has been committed, so stream-idle / 503 /
+// brief network blips can be retried safely inside a Worker without replaying tool side effects.
 const subagentMaxRetries = 7
 
-// UsageRecorder 是 BuildWorkers 可选的用量回调；签名与 OnMessage 一致，
-// 每条 agent 消息都会调一次，由 Host 层负责聚合。task 是本次 spawn 的任务文本
-// 作为会话身份，供缓存链断裂检测按会话重置基线。
-// nil 表示不追踪。
+// UsageRecorder is the optional usage callback for BuildWorkers; its signature matches OnMessage,
+// it is called once per agent message, and the Host layer does the aggregating. task is the task text of this spawn
+// used as the session identity, so cache-chain-break detection can reset the baseline per session.
+// nil means no tracking.
 type UsageRecorder func(agentName, task string, msg agentcore.AgentMessage)
 
-// ApplyThinking 把某具体角色的推理强度应用到 Worker（运行时 /model 调整用）。
-// architect → 两个 architect_* 子代理；writer/editor → 对应子代理。
-// 空 level = 沿用模型/provider 默认。其它 role 名忽略。
+// ApplyThinking applies one specific role's reasoning effort to its Workers (used by the runtime /model command).
+// architect → both architect_* subagents; writer/editor → the matching subagent.
+// An empty level = inherit the model/provider default. Other role names are ignored.
 type ApplyThinking func(role string, level agentcore.ThinkingLevel)
 
-// ParseThinkingLevel 把配置字符串转 agentcore.ThinkingLevel。
-// "" 合法（= 不覆盖/继承）；其余须是 off/low/medium/high/xhigh/max 之一，
-// 否则返回 error（启动时降级当空并 warn，运行时把 error 回显给用户）。
+// ParseThinkingLevel converts a config string into an agentcore.ThinkingLevel.
+// "" is legal (= no override / inherit); anything else must be one of off/low/medium/high/xhigh/max,
+// otherwise it returns an error (at startup that degrades to empty with a warning; at runtime the error is echoed back to the user).
 func ParseThinkingLevel(s string) (agentcore.ThinkingLevel, error) {
 	lv := agentcore.NormalizeThinkingLevel(agentcore.ThinkingLevel(s))
 	switch lv {
@@ -71,7 +71,7 @@ func ParseThinkingLevel(s string) (agentcore.ThinkingLevel, error) {
 
 func ResolveThinkingForModel(model agentcore.ChatModel, level agentcore.ThinkingLevel) (agentcore.ThinkingLevel, bool) {
 	level = agentcore.NormalizeThinkingLevel(level)
-	// 对不支持 thinking 的普通 chat 模型，显式 off 不是 no-op，而是非法参数。
+	// For a plain chat model with no thinking support, an explicit off is not a no-op but an illegal argument.
 	if cp, ok := model.(llm.CapabilityProvider); ok && cp.Capabilities().Thinking.Supported == llm.SupportNo {
 		return agentcore.ThinkingAuto, level == agentcore.ThinkingAuto
 	}
@@ -85,7 +85,7 @@ func AvailableThinkingForModel(model agentcore.ChatModel) []agentcore.ThinkingLe
 	return llm.ThinkingPolicyFor(model).Available
 }
 
-// roleThinking 解析某角色生效的推理强度；非法值降级为空（不覆盖）并 warn。
+// roleThinking resolves the reasoning effort in effect for a role; an illegal value degrades to empty (no override) with a warning.
 func roleThinking(cfg bootstrap.Config, role string) agentcore.ThinkingLevel {
 	lv, err := ParseThinkingLevel(cfg.ResolveReasoningEffort(role))
 	if err != nil {
@@ -100,12 +100,12 @@ func resolvedRoleThinking(model agentcore.ChatModel, cfg bootstrap.Config, role 
 	return resolved
 }
 
-// BuildWorkers 组装三个 Worker(architect_short/long、writer、editor)为可程序化
-// 调用的 subagent.Runner。Engine 直接调用其类型化入口，无 LLM 工具层
-// (docs/engine-rfc.md §1)。
-// 返回 Runner、WriterRestorePack 与 ApplyThinking(运行时 /model 联动各角色推理强度;
-// 各 Worker 的 ContextManager 走工厂自动重建)。
-// onGuardBlock 可选(nil 安全):各 Worker StopGuard 的拦截/升级审计回调。
+// BuildWorkers assembles three Workers (architect_short/long, writer, editor) into a programmatically
+// callable subagent.Runner. The Engine calls its typed entry points directly, with no LLM tool layer
+// (docs/engine-rfc.md §1).
+// It returns the Runner, WriterRestorePack and ApplyThinking (the runtime /model command links each role's reasoning effort;
+// each Worker's ContextManager is rebuilt automatically via the factory).
+// onGuardBlock is optional (nil-safe): the block/escalation audit callback for each Worker's StopGuard.
 func BuildWorkers(
 	cfg bootstrap.Config,
 	store *store.Store,
@@ -115,7 +115,7 @@ func BuildWorkers(
 	recordUsage UsageRecorder,
 	onGuardBlock guard.BlockHook,
 ) (*subagent.Runner, *ctxpack.WriterRestorePack, ApplyThinking) {
-	// 共享工具
+	// Shared tools
 	contextTool := tools.NewContextTool(store, bundle.References, cfg.Style, styleStats)
 	readChapter := tools.NewReadChapterTool(store)
 
@@ -146,7 +146,7 @@ func BuildWorkers(
 		tools.NewSaveVolumeSummaryTool(store),
 	}
 
-	// Provider failover 只记日志,不通知宿主
+	// Provider failover is only logged, not reported to the host
 	reportFailover := func(ev bootstrap.FailoverEvent) {
 		slog.Warn("provider 切换",
 			"module", "agent",
@@ -162,7 +162,7 @@ func BuildWorkers(
 	writerModel := models.ForRoleWithFailover("writer", reportFailover)
 	editorModel := models.ForRoleWithFailover("editor", reportFailover)
 
-	// ContextManager 由工厂每次调用重建，窗口随模型 swap 动态跟随（见下方工厂）。
+	// The ContextManager is rebuilt by the factory on every call and its window follows model swaps dynamically (see the factory below).
 	architectProvider, architectModelName, _ := models.CurrentSelection("architect")
 	architectContextWindow, architectSource := cfg.ResolveContextWindow(architectProvider, architectModelName)
 	bootstrap.LogContextWindowChoice("architect", architectModelName, architectContextWindow, architectSource)
@@ -175,8 +175,8 @@ func BuildWorkers(
 	editorContextWindow, editorSource := cfg.ResolveContextWindow(editorProvider, editorModelName)
 	bootstrap.LogContextWindowChoice("editor", editorModelName, editorContextWindow, editorSource)
 
-	// modelLookup 写入 session 时给每条 assistant 消息附 _meta:{provider,model}，
-	// 让 replay 不再依赖"当前 ModelSet"来反推历史 cost，运行中切换模型也能精确算。
+	// modelLookup attaches _meta:{provider,model} to every assistant message as it writes the session,
+	// so replay no longer depends on the "current ModelSet" to back out historical cost, and switching models mid-run still computes it exactly.
 	modelLookup := func(agentName string) (string, string) {
 		role := agentToRole(agentName)
 		provider, name, _ := models.CurrentSelection(role)
@@ -190,16 +190,16 @@ func BuildWorkers(
 		}
 	}
 
-	// 提示词缓存：一书一基、一角色一名、一会话一键（subagent spawn 追加 #seq）。
-	// OpenAI 系用 prompt_cache_key 做路由亲和；Claude 系用 cache_control 滚动断点
-	//（system 地板 + 末消息尖端）。provider 不支持时由 agentcore 按能力静默丢弃，
-	// 多轮会话下读缓存收益恒为正，故不设开关。
+	// Prompt cache: one base per book, one name per role, one key per session (subagent spawns append #seq).
+	// The OpenAI family uses prompt_cache_key for routing affinity; the Claude family uses cache_control rolling breakpoints
+	// (a system floor plus the tip of the last message). When the provider does not support it, agentcore silently drops it based on capability,
+	// because in multi-turn sessions the cache-read benefit is always positive, so there is no toggle.
 	cacheBase := promptCacheBase(store.Dir())
 
 	architectStopGuardFactory := func(_, _ string) agentcore.StopGuard {
 		return guard.NewArchitectStopGuard(store, onGuardBlock)
 	}
-	// Architect / Editor 的 ContextManager 每次运行按当前模型重建，窗口随模型 swap 跟随。
+	// The ContextManager for Architect / Editor is rebuilt per run against the current model, and its window follows model swaps.
 	roleContextFactory := func(profile roleContextProfile) func(agentcore.ChatModel) agentcore.ContextManager {
 		return func(model agentcore.ChatModel) agentcore.ContextManager {
 			window, _ := models.ResolveContextWindow(bootstrap.ModelProvider(model), bootstrap.ModelName(model))
@@ -242,8 +242,8 @@ func BuildWorkers(
 		StopGuardFactory:      architectStopGuardFactory,
 	}
 
-	// 唯一组装路径:协议模板 {{VOICE}} 原位回填文风段,再追加风格预设。
-	// eval 的 voice A/B 走同一函数,保证两臂等价(docs/voice-layer.md §3.2)。
+	// The only assembly path: the protocol template's {{VOICE}} placeholder is filled in place with the style section, then the style presets are appended.
+	// eval's voice A/B goes through the same function, so both arms are equivalent (docs/voice-layer.md §3.2).
 	writerPrompt := assets.BuildWriterPrompt(bundle.Prompts.Writer, bundle.Voice, bundle.Styles[cfg.Style])
 
 	restore := &ctxpack.WriterRestorePack{}
@@ -266,14 +266,14 @@ func BuildWorkers(
 			return guard.NewWriterStopGuard(store, onGuardBlock)
 		},
 		ContextManagerFactory: func(model agentcore.ChatModel) agentcore.ContextManager {
-			// 每章按当前 writer 模型重建上下文管理器。
+			// Rebuild the context manager per chapter against the current writer model.
 			window, _ := models.ResolveContextWindow(bootstrap.ModelProvider(model), bootstrap.ModelName(model))
 			return newContextManager(contextManagerConfig{
 				Model:         model,
 				ContextWindow: window,
 				ReserveTokens: bootstrap.CompactReserveTokens(window),
 				Agent:         "writer",
-				// 提交投影，避免后续轮次反复改写请求前缀。
+				// Commit the projection so later turns do not keep rewriting the request prefix.
 				CommitProjected: true,
 				ToolMicrocompact: &corecontext.ToolResultMicrocompactConfig{
 					MinResultTokens: 200,
@@ -308,9 +308,9 @@ func BuildWorkers(
 		CacheLastMessage:      "ephemeral",
 		PromptCacheKey:        cacheBase + "-editor",
 		ContextManagerFactory: roleContextFactory(editorContextProfile),
-		// 终态产物命中即停。终态退出仍会咨询 StopGuard（契约测试 TestContract_
-		// TerminalToolExitConsultsStopGuard），任务感知的 NewEditorStopGuard 负责
-		// 否决"被派生成摘要却只做了复核"的提前退出，所以 save_review 可以安全硬停。
+		// Stop as soon as a terminal artifact matches. A terminal exit still consults the StopGuard (contract test TestContract_
+		// TerminalToolExitConsultsStopGuard), and the task-aware NewEditorStopGuard is responsible for
+		// vetoing the "dispatched to write an arc summary but only reviewed" early exit, so save_review can hard stop safely.
 		StopAfterToolResult: func(toolName string, _ json.RawMessage) bool {
 			return toolName == "save_review" || toolName == "save_arc_summary" || toolName == "save_volume_summary"
 		},
@@ -321,7 +321,7 @@ func BuildWorkers(
 
 	runner := subagent.NewRunner(architectShort, architectLong, writer, editor)
 
-	// 运行时联动各角色推理强度（/model 调整用）。
+	// Link each role's reasoning effort at runtime (used by the /model command).
 	applyThinking := func(role string, level agentcore.ThinkingLevel) {
 		switch role {
 		case "architect":

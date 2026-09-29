@@ -7,12 +7,12 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 )
 
-// BookStore 管理作品对外信息，meta/book.json 是唯一事实源，book.md 是可读投影。
+// BookStore manages the book's public information; meta/book.json is the single source of truth and book.md is the readable projection.
 type BookStore struct{ io *IO }
 
 func NewBookStore(io *IO) *BookStore { return &BookStore{io: io} }
 
-// Load 读取作品信息；尚未生成时返回 nil。
+// Load reads the book information; it returns nil when none has been produced yet.
 func (s *BookStore) Load() (*domain.BookMetadata, error) {
 	var book domain.BookMetadata
 	if err := s.io.ReadJSON("meta/book.json", &book); err != nil {
@@ -28,7 +28,7 @@ func (s *BookStore) Load() (*domain.BookMetadata, error) {
 	return &book, nil
 }
 
-// Save 保存规范化的作品信息及其可读投影。
+// Save stores the canonical book information together with its readable projection.
 func (s *BookStore) Save(book domain.BookMetadata) error {
 	book = book.Normalized()
 	if err := book.Validate(); err != nil {

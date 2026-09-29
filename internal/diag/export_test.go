@@ -11,10 +11,10 @@ import (
 	"github.com/voocel/agentcore"
 )
 
-// sentinel 是一段绝不该出现在导出里的"小说正文"。
+// sentinel is a piece of "novel body text" that must never appear in an export.
 const sentinel = "雪夜里主角揭穿了反派的惊天阴谋这是机密正文"
 
-// writeSession 把若干消息按 sessions/*.jsonl 的格式写到临时 output 目录。
+// writeSession writes a few messages into a temporary output directory in the sessions/*.jsonl format.
 func writeSession(t *testing.T, rel string, msgs []agentcore.Message) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -58,16 +58,16 @@ func errResult(msg string) agentcore.Message {
 	}
 }
 
-// TestExport_DeathLoopShape 端到端复现 #34：模型把 commit_chapter 的 chapter
-// 字符串化导致校验循环。断言导出能定位、且小说正文零出包。
+// TestExport_DeathLoopShape reproduces #34 end to end: the model stringifies the chapter of commit_chapter
+// which causes a validation loop. It asserts the export can locate it and that no novel body text leaves the package.
 func TestExport_DeathLoopShape(t *testing.T) {
 	var msgs []agentcore.Message
-	// 一段 Worker 输出的裸正文（<4KB，绕过 session_compact），必须被打码。
+	// a bare body text of a Worker output (<4KB, bypassing session_compact), which must be masked.
 	msgs = append(msgs, agentcore.Message{
 		Role:    agentcore.RoleAssistant,
 		Content: []agentcore.ContentBlock{agentcore.TextBlock(sentinel)},
 	})
-	// 14 轮 commit_chapter(chapter:"7") + InputValidationError。
+	// 14 rounds of commit_chapter(chapter:"7") + InputValidationError.
 	for range 14 {
 		msgs = append(msgs, commitCall(`"7"`))
 		msgs = append(msgs, errResult("InputValidationError: chapter must be int"))
@@ -90,7 +90,7 @@ func TestExport_DeathLoopShape(t *testing.T) {
 	if !strings.Contains(out, "×14") {
 		t.Errorf("重复聚合未列出 ×14\n%s", out)
 	}
-	// Phase 2：运行时检测应把这个循环判成 critical 的 RepeatedToolError。
+	// Phase 2: the runtime detection should judge this loop as a critical RepeatedToolError.
 	if !strings.Contains(out, "工具反复报同一错误") {
 		t.Errorf("运行时检测未产出 RepeatedToolError\n%s", out)
 	}
@@ -99,8 +99,8 @@ func TestExport_DeathLoopShape(t *testing.T) {
 	}
 }
 
-// TestExport_NumberVsStringArg 证明标量与字符串投影能区分类型：
-// chapter:7（数字）保留为 7，chapter:"7"（字符串）保留为 "7"。
+// TestExport_NumberVsStringArg proves the scalar and string projections can tell the types apart:
+// chapter:7 (number) stays 7, chapter:"7" (string) stays "7".
 func TestExport_NumberVsStringArg(t *testing.T) {
 	intDir := writeSession(t, filepath.Join("agents", "writer-ch07.jsonl"), []agentcore.Message{commitCall(`7`)})
 	si := store.NewStore(intDir)
@@ -111,22 +111,22 @@ func TestExport_NumberVsStringArg(t *testing.T) {
 	}
 }
 
-// TestProjectValue_ProseArgRedacted 守护脱敏边界：标识符型短值保留、
-// 中文/带空格的短值（如 dispatch task、chapter title）一律打码。
+// TestProjectValue_ProseArgRedacted guards the redaction boundary: short identifier-like values are kept,
+// while Chinese/space-containing short values (e.g. dispatch task, chapter title) are always masked.
 func TestProjectValue_ProseArgRedacted(t *testing.T) {
 	keep := map[string]string{
-		`"7"`:       `"7"`,       // 字符串化数字（#34 信号）
-		`"premise"`: `"premise"`, // 枚举
-		`"writer"`:  `"writer"`,  // 角色名
-		`7`:         `7`,         // 数字标量
-		`true`:      `true`,      // bool 标量
+		`"7"`:       `"7"`,       // stringified number (a #34 signal)
+		`"premise"`: `"premise"`, // enumeration
+		`"writer"`:  `"writer"`,  // role name
+		`7`:         `7`,         // numeric scalar
+		`true`:      `true`,      // bool scalar
 	}
 	for in, want := range keep {
 		if got := projectValue([]byte(in)); got != want {
 			t.Errorf("应保留 %s：got %q want %q", in, got, want)
 		}
 	}
-	// 含中文 / 空格 → 必须打码，且不含原文。
+	// containing Chinese / spaces -> must be masked and must not contain the raw text
 	prose := []string{`"第7章 雪夜的真相"`, `"雪夜杀机"`, `"主角揭穿阴谋"`}
 	for _, in := range prose {
 		got := projectValue([]byte(in))
@@ -139,7 +139,7 @@ func TestProjectValue_ProseArgRedacted(t *testing.T) {
 	}
 }
 
-// TestWriteExport_WritesFile 证明纯函数路径：不依赖 TUI，写出固定相对路径。
+// TestWriteExport_WritesFile proves the pure function path: no TUI dependency, writes to a fixed relative path.
 func TestWriteExport_WritesFile(t *testing.T) {
 	dir := writeSession(t, filepath.Join("agents", "writer-ch07.jsonl"), []agentcore.Message{commitCall(`"7"`), errResult("boom")})
 	s := store.NewStore(dir)
@@ -164,7 +164,7 @@ func TestWriteExport_WritesFile(t *testing.T) {
 	}
 }
 
-// TestRedactMessage_DupSha 证明同一段文本反复出现产生同 sha（循环信号）。
+// TestRedactMessage_DupSha proves that the same text appearing repeatedly yields the same sha (a loop signal).
 func TestRedactMessage_DupSha(t *testing.T) {
 	a := redactMessage("writer-ch07", agentcore.Message{
 		Role:    agentcore.RoleAssistant,
