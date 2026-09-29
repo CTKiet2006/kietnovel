@@ -232,22 +232,36 @@ func ResolveOutputDir() string {
 	return filepath.Join(base, "output", "novel")
 }
 
-// Ngôn ngữ sáng tác truyện: "vi" (Tiếng Việt, mặc định) hoặc "zh" (Tiếng Trung).
-// TUI, thanh trạng thái và thông báo lỗi luôn hiển thị bằng Tiếng Việt.
+// Ngôn ngữ sáng tác truyện. Mã này điều khiển đồng thời ngôn ngữ đầu ra của
+// truyện VÀ ngôn ngữ hiển thị của TUI.
 const (
 	LangVietnamese = "vi"
+	LangEnglish    = "en"
 	LangChinese    = "zh"
 )
 
-// NormalizeLanguage chuẩn hóa mã ngôn ngữ về "vi"/"zh".
-// Chuỗi trống (cấu hình cũ chưa có trường language) được coi là "vi".
-func NormalizeLanguage(lang string) string {
-	switch lang {
+// ValidLanguage trả về mã ngôn ngữ hợp lệ, hoặc "" nếu không hợp lệ.
+// So sánh không phân biệt hoa thường và chấp nhận khoảng trắng thừa.
+func ValidLanguage(lang string) string {
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case LangVietnamese:
+		return LangVietnamese
+	case LangEnglish:
+		return LangEnglish
 	case LangChinese:
 		return LangChinese
 	default:
-		return LangVietnamese
+		return ""
 	}
+}
+
+// NormalizeLanguage chuẩn hóa mã ngôn ngữ về "vi"/"en"/"zh".
+// Chuỗi trống hoặc mã lạ (cấu hình cũ chưa có trường language) rơi về "vi".
+func NormalizeLanguage(lang string) string {
+	if v := ValidLanguage(lang); v != "" {
+		return v
+	}
+	return LangVietnamese
 }
 
 // Config là cấu hình ứng dụng tiểu thuyết.
@@ -328,8 +342,9 @@ func (c *Config) ValidateBase() error {
 	}
 
 	// Ngôn ngữ sáng tác chỉ chấp nhận "vi" hoặc "zh" (trống = "vi").
-	if c.Language != "" && NormalizeLanguage(c.Language) != c.Language {
-		return fmt.Errorf("language phải là %q hoặc %q (nhận được %q): %w", LangVietnamese, LangChinese, c.Language, errs.ErrConfig)
+	if c.Language != "" && ValidLanguage(c.Language) == "" {
+		return fmt.Errorf("language phải là %q, %q hoặc %q (nhận được %q): %w",
+			LangVietnamese, LangEnglish, LangChinese, c.Language, errs.ErrConfig)
 	}
 
 	// Provider mặc định phải có credentials

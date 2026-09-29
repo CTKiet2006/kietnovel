@@ -255,16 +255,18 @@ func runTypeSelect() (string, error) {
 	return result.items[result.cursor].name, nil
 }
 
-// languageOptions là lựa chọn ngôn ngữ sáng tác ở bước cuối wizard.
-// Tái dùng setupSelectModel: name là mã language ("vi"/"zh").
+// languageOptions là lựa chọn ngôn ngữ ở bước cuối wizard.
+// Tái dùng setupSelectModel: name là mã language ("vi"/"en"/"zh").
+// Ngôn ngữ này chi phối cả ngôn ngữ giao diện lẫn ngôn ngữ đầu ra của truyện.
 var languageOptions = []setupProvider{
-	{name: LangVietnamese, label: "Tiếng Việt (mặc định)"},
-	{name: LangChinese, label: "Tiếng Trung (中文 — sáng tác bằng tiếng Trung)"},
+	{name: LangVietnamese, label: "Tiếng Việt — giao diện + truyện tiếng Việt (mặc định)"},
+	{name: LangEnglish, label: "English — English UI + English stories"},
+	{name: LangChinese, label: "中文 — 中文界面与中文小说"},
 }
 
 func runLanguageSelect() (lang, label string, err error) {
 	m := setupSelectModel{
-		title: "[5/5] Ngôn ngữ sáng tác truyện",
+		title: "[5/5] Ngôn ngữ giao diện & sáng tác truyện",
 		items: languageOptions,
 	}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
