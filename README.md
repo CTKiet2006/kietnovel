@@ -1,6 +1,6 @@
 # kietnovel
 
-> Engine sáng tác tiểu thuyết dài tập bằng AI, Việt hóa toàn diện. Phát triển từ [ainovel-cli](https://github.com/voocel/ainovel-cli) — giữ nguyên bộ prompt gốc đã kiểm chứng, cộng thêm giao diện đa ngôn ngữ vi/en/zh.
+> Originally inspired by and initially based on AINovel-CLI by voocel. KietNovel is now independently developed — an AI engine for writing full-length novels, with a trilingual interface (Vietnamese / English / Chinese).
 
 Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định chạy trọn một bộ truyện, model chỉ được gọi đúng chỗ cần phán đoán — Engine điều phối 3 agent tự chủ Architect / Writer / Editor theo bảng quyết định, Arbiter ngữ nghĩa chỉ thức dậy khi cần. Từ một câu ý tưởng tới tiểu thuyết hoàn chỉnh.
 
@@ -126,7 +126,7 @@ Một lựa chọn này chi phối **cả hai**: ngôn ngữ giao diện TUI l�
 
 ### Cách hoạt động
 
-Prompt hệ thống giữ nguyên bản gốc của upstream (tiếng Trung, đã kiểm chứng về tinh thần) - **không dịch lại** để tránh mất chất lượng. Ngôn ngữ sáng tác được điều khiển ở hai điểm:
+Bộ prompt giữ nguyên bản gốc của tác giả, viết bằng tiếng Trung — đã được kiểm chứng về chất lượng nên giữ nguyên. Ngôn ngữ sáng tác được điều khiển ở hai điểm:
 
 | Điểm | `vi` (mặc định) | `en` | `zh` |
 |---|---|---|---|
@@ -474,14 +474,23 @@ Hệ thống sẽ tự động tổng hợp các yêu cầu này vào bộ quy t
 
 ### License
 
-Dự án được phân phối dưới **Apache License 2.0** — cùng giấy phép với
-[ainovel-cli](https://github.com/voocel/ainovel-cli), dự án mà toàn bộ kiến trúc
-của kietnovel bắt nguồn từ đó. Apache-2.0 yêu cầu tác phẩm phái sinh phải giữ
-nguyên giấy phép này, nên kietnovel không thể (và không nên) phát hành lại dưới
-MIT.
+Apache License 2.0 — xem [LICENSE](LICENSE).
 
-Apache-2.0 cũng cấp quyền patent tường minh cho cả người đóng góp, nên bạn dùng
-thương mại, sửa đổi hay phân phối lại đều không cần xin phép ai.
+Phần đóng góp mới của kietnovel:
+
+    Copyright 2026 KietNovel contributors
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
 
 ---
 
@@ -489,18 +498,17 @@ thương mại, sửa đổi hay phân phối lại đều không cần xin phé
 
 *Built on the shoulders of giants:*
 
-- **[ainovel-cli](https://github.com/voocel/ainovel-cli)** — original Go implementation that
-  inspired this project. Toàn bộ kiến trúc Engine đa agent, cơ chế quy hoạch cuộn,
-  checkpoint, các lệnh TUI, cùng bộ prompt và tài liệu tham chiếu đều xuất phát
-  từ đây. — Apache-2.0
-- **[agentcore](https://github.com/voocel/agentcore)** — tool-calling và streaming
-  runtime mà lớp Agent dựng trên. — Apache-2.0
-- **[litellm](https://github.com/voocel/litellm)** — giao diện LLM đa nhà cung cấp. — Apache-2.0
+Originally inspired by and initially based on **AINovel-CLI by voocel**. KietNovel
+is now independently developed — new architecture, new features, ongoing
+development.
+
+- **[ainovel-cli](https://github.com/voocel/ainovel-cli)** — where it all started. The
+  multi-agent engine, the rolling plan, the checkpointing, the TUI commands and the
+  prompt set all came from here, and the prompts are still the originals, untouched
+  and in the author's own words.
+- **[agentcore](https://github.com/voocel/agentcore)** — the tool-calling and
+  streaming runtime the agent layer is built on.
+- **[litellm](https://github.com/voocel/litellm)** — multi-provider LLM interface.
 - **[Bubble Tea](https://github.com/charmbracelet/bubbletea)**,
   **[Lip Gloss](https://github.com/charmbracelet/lipgloss)**,
-  **[Bubbles](https://github.com/charmbracelet/bubbles)** — khung TUI. — MIT
-
-kietnovel là một tác phẩm phái sinh đã sửa đổi nhiều, nhưng vẫn thừa hưởng mã
-nguồn gốc và giữ nguyên giấy phép Apache-2.0 theo yêu cầu của bản gốc. Phần
-đóng góp riêng của repo này: giao diện đa ngôn ngữ vi/en/zh, lệnh `/language`,
-`NOVEL_DIR`, bộ quy chuẩn văn phong cho ba ngôn ngữ, cùng toàn bộ tài liệu.
+  **[Bubbles](https://github.com/charmbracelet/bubbles)** — the TUI toolkit.
