@@ -109,6 +109,8 @@ func runWithConfig(cfg bootstrap.Config, opts cliOptions, args []string) {
 	// 否则默认配置下 <书目录>/style/ 的本书级文风覆盖永远不会被加载。
 	cfg.FillDefaults()
 	bundle := assets.Load(cfg.Style, assets.DefaultLoadOptions(cfg.OutputDir))
+	// Ngôn ngữ sáng tác (vi/zh) điều khiển nội dung truyện; TUI luôn tiếng Việt.
+	bundle.ApplyLanguage(cfg.Language)
 	if opts.Headless {
 		prompt, err := loadPrompt(opts)
 		if err != nil {

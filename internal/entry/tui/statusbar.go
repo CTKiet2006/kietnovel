@@ -61,7 +61,7 @@ func renderStatusBar(snap host.UISnapshot, outputDir string, width int) string {
 			s += dim.Render("/" + formatCostUSD(snap.BudgetLimitUSD))
 		}
 		if saved := formatCostUSD(snap.TotalSavedUSD); saved != "" {
-			s += dim.Render(" 省" + saved)
+			s += dim.Render(" tiết kiệm " + saved)
 		}
 		segs = append(segs, s)
 	}
@@ -72,7 +72,7 @@ func renderStatusBar(snap host.UISnapshot, outputDir string, width int) string {
 		right = dim.Render("./" + filepath.Base(outputDir))
 	}
 	if left == "" && right == "" {
-		return dim.Render("READY")
+		return dim.Render("SẴN SÀNG")
 	}
 	return joinInlineSides(left, right, width)
 }

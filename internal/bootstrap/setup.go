@@ -79,9 +79,9 @@ func ProviderPresets() []ProviderPreset {
 func RunSetup() (Config, error) {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99")).
-		Render("未检测到配置文件，开始初始化设置..."))
-	fmt.Fprintf(os.Stderr, "  配置文件路径：%s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(DefaultConfigPath()))
-	fmt.Fprintf(os.Stderr, "  完成后可随时编辑该文件调整高级设置。\n")
+		Render("Chưa thấy file cấu hình, bắt đầu thiết lập..."))
+	fmt.Fprintf(os.Stderr, "  Đường dẫn file cấu hình: %s\n", lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Render(DefaultConfigPath()))
+	fmt.Fprintf(os.Stderr, "  Xong có thể sửa file này để chỉnh các thiết lập nâng cao.\n")
 	fmt.Fprintln(os.Stderr)
 
 	// Step 1: 选择 Provider
@@ -96,7 +96,7 @@ func RunSetup() (Config, error) {
 
 	// 自定义代理：额外问名称和 API 协议类型
 	if sp.needType {
-		providerName, err = runTextInput("Provider 名称", "my-proxy")
+		providerName, err = runTextInput("Tên Provider", "my-proxy")
 		if err != nil {
 			return Config{}, err
 		}
@@ -110,27 +110,27 @@ func RunSetup() (Config, error) {
 	// Step 2: 输入 API Key
 	var apiKey string
 	if sp.apiKeyOptional {
-		apiKey, err = runOptionalTextInput("[2/4] API Key（可留空）", "留空表示不使用 API Key")
+		apiKey, err = runOptionalTextInput("[2/5] API Key (có thể bỏ trống)", "Bỏ trống nếu không dùng API Key")
 	} else {
-		apiKey, err = runTextInput("[2/4] API Key", "sk-xxx")
+		apiKey, err = runTextInput("[2/5] API Key", "sk-xxx")
 	}
 	if err != nil {
 		return Config{}, err
 	}
 	pc.APIKey = apiKey
 	if apiKey == "" {
-		printStepDone("API Key", "未设置")
+		printStepDone("API Key", "Chưa đặt")
 	} else {
 		printStepDone("API Key", maskKey(apiKey))
 	}
 
 	// Step 3: Base URL（直接回车使用官方默认地址）
 	baseDefault := sp.baseURL
-	baseHint := "留空使用官方地址"
+	baseHint := "Bỏ trống để dùng địa chỉ chính thức"
 	if baseDefault != "" {
 		baseHint = baseDefault
 	}
-	baseURL, err := runTextInputWithDefault("[3/4] Base URL（直接回车使用默认，代理用户填写代理地址）", baseHint, baseDefault)
+	baseURL, err := runTextInputWithDefault("[3/5] Base URL (Enter dùng mặc định, dùng proxy thì điền địa chỉ proxy)", baseHint, baseDefault)
 	if err != nil {
 		return Config{}, err
 	}
@@ -138,20 +138,28 @@ func RunSetup() (Config, error) {
 	if baseURL != "" {
 		printStepDone("Base URL", baseURL)
 	} else {
-		printStepDone("Base URL", "默认")
+		printStepDone("Base URL", "Mặc định")
 	}
 
 	// Step 4: 模型名（必填）
-	modelName, err := runTextInput("[4/4] 模型名称", "例如：gpt-4o / claude-sonnet-4 / gemini-2.5-pro")
+	modelName, err := runTextInput("[4/5] Tên model", "Ví dụ: gpt-4o / claude-sonnet-4 / gemini-2.5-pro")
 	if err != nil {
 		return Config{}, err
 	}
 	printStepDone("Model", modelName)
 	pc.Models = []ModelConfig{{Name: modelName}}
 
+	// Step 5: Ngôn ngữ sáng tác (mặc định Tiếng Việt)
+	lang, langLabel, err := runLanguageSelect()
+	if err != nil {
+		return Config{}, err
+	}
+	printStepDone("Ngôn ngữ", langLabel)
+
 	cfg := Config{
 		Provider:  providerName,
 		ModelName: modelName,
+		Language:  lang,
 		Providers: map[string]ProviderConfig{providerName: pc},
 		Roles:     map[string]RoleConfig{},
 		Style:     "default",
@@ -170,12 +178,12 @@ func RunSetup() (Config, error) {
 	rulesDir := rules.DefaultHomeRulesDir()
 
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "%s 配置已保存到 %s\n",
+	fmt.Fprintf(os.Stderr, "%s Đã lưu cấu hình vào %s\n",
 		lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Render("✓"), path)
-	fmt.Fprintf(os.Stderr, "  默认模型：%s\n", modelName)
-	fmt.Fprintln(os.Stderr, "  如需按角色配置不同模型，编辑配置文件即可。")
+	fmt.Fprintf(os.Stderr, "  Model mặc định: %s\n", modelName)
+	fmt.Fprintln(os.Stderr, "  Muốn mỗi vai trò dùng model khác nhau thì sửa file cấu hình.")
 	if rulesDir != "" {
-		fmt.Fprintf(os.Stderr, "  全局写作偏好可放 %s 下的 .md 文件（见其中 README.txt）\n", rulesDir)
+		fmt.Fprintf(os.Stderr, "  Quy tắc viết toàn cục đặt trong file .md ở %s (xem README.txt trong đó)\n", rulesDir)
 	}
 	fmt.Fprintln(os.Stderr)
 
@@ -209,7 +217,7 @@ func maskKey(key string) string {
 
 func runProviderSelect() (setupProvider, error) {
 	m := setupSelectModel{
-		title: "[1/4] 选择 Provider",
+		title: "[1/5] Chọn Provider",
 		items: setupProviders,
 	}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
@@ -225,14 +233,14 @@ func runProviderSelect() (setupProvider, error) {
 }
 
 var apiTypeOptions = []setupProvider{
-	{name: "openai", label: "OpenAI 兼容"},
-	{name: "anthropic", label: "Anthropic 兼容"},
-	{name: "gemini", label: "Gemini 兼容"},
+	{name: "openai", label: "Tương thích OpenAI"},
+	{name: "anthropic", label: "Tương thích Anthropic"},
+	{name: "gemini", label: "Tương thích Gemini"},
 }
 
 func runTypeSelect() (string, error) {
 	m := setupSelectModel{
-		title: "API 协议类型",
+		title: "Loại giao thức API",
 		items: apiTypeOptions,
 	}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
@@ -245,6 +253,31 @@ func runTypeSelect() (string, error) {
 		return "", fmt.Errorf("setup cancelled")
 	}
 	return result.items[result.cursor].name, nil
+}
+
+// languageOptions là lựa chọn ngôn ngữ sáng tác ở bước cuối wizard.
+// Tái dùng setupSelectModel: name là mã language ("vi"/"zh").
+var languageOptions = []setupProvider{
+	{name: LangVietnamese, label: "Tiếng Việt (mặc định)"},
+	{name: LangChinese, label: "中文（用中文创作）"},
+}
+
+func runLanguageSelect() (lang, label string, err error) {
+	m := setupSelectModel{
+		title: "[5/5] Ngôn ngữ sáng tác truyện",
+		items: languageOptions,
+	}
+	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
+	final, err := p.Run()
+	if err != nil {
+		return "", "", err
+	}
+	result := final.(setupSelectModel)
+	if result.cancelled {
+		return "", "", fmt.Errorf("setup cancelled")
+	}
+	picked := result.items[result.cursor]
+	return NormalizeLanguage(picked.name), picked.label, nil
 }
 
 func runTextInput(label, placeholder string) (string, error) {
@@ -334,7 +367,7 @@ func (m setupSelectModel) View() string {
 		}
 		b.WriteString(cursor + label + "\n")
 	}
-	b.WriteString(setupDimStyle.Render("\n  ↑↓ 选择  Enter 确认  Esc 取消"))
+	b.WriteString(setupDimStyle.Render("\n  ↑↓ Chọn · Enter Xác nhận · Esc Hủy"))
 	return b.String()
 }
 
@@ -389,7 +422,7 @@ func (m setupInputModel) View() string {
 		b.WriteString(m.value)
 		b.WriteString(setupCursorStyle.Render("▌"))
 	}
-	b.WriteString(setupDimStyle.Render("  (Enter 确认, Esc 取消)"))
+	b.WriteString(setupDimStyle.Render("  (Enter Xác nhận, Esc Hủy)"))
 	b.WriteString("\n")
 	return b.String()
 }
