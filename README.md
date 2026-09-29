@@ -50,21 +50,27 @@ Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định 
 
 ## 2. Cài Đặt & Khởi Chạy Nhanh
 
-Yêu cầu duy nhất: **Go ≥ 1.25** (để build từ source). Không cần Docker.
+Yêu cầu duy nhất: **Go ≥ 1.25**. Không cần Docker.
 
-**Bước 1: Clone & Build**
-
-```bash
-git clone https://github.com/CTKiet2006/kietnovel.git
-cd kietnovel
-go build -o kietnovel.exe ./cmd/ainovel-cli
-```
-
-**Bước 2: Chạy**
+**Cách 1 — script cài (giống cách bạn cài `agy` / `hermes`, lệnh nằm trên PATH ở mọi nơi):**
 
 ```powershell
+git clone https://github.com/CTKiet2006/kietnovel.git
+cd kietnovel
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+Script build, chép binary vào `%LOCALAPPDATA%\kietnovel\bin\` và tự thêm thư mục đó vào user PATH. Mở terminal mới là gõ `kietnovel` ở bất kỳ đâu cũng chạy.
+
+**Cách 2 — chạy tại chỗ, không cài (chỉ dùng được trong thư mục repo):**
+
+```powershell
+cd kietnovel
+go build -o kietnovel.exe ./cmd/ainovel-cli
 .\kietnovel.exe
 ```
+
+**Cập nhật sau khi có thay đổi mới:** chạy lại `scripts\install.ps1` (thoát `kietnovel` trước nếu đang mở — Windows không cho ghi đè file đang chạy).
 
 Lần đầu chạy, hệ thống tự bật **Setup Wizard** tiếng Việt để chọn Provider, nhập API Key/Base URL, chọn Model và Ngôn ngữ sáng tác. Xong là viết được ngay.
 
@@ -85,7 +91,7 @@ Lần đầu chạy, hệ thống tự bật **Setup Wizard** tiếng Việt đ�
 
 ```powershell
 $env:NOVEL_DIR = ".\novels\tien-hiep-ky"
-.\kietnovel.exe
+kietnovel
 ```
 
 ## 3. Tùy Chọn Ngôn Ngữ Sáng Tác
@@ -194,7 +200,7 @@ Hệ thống cho phép gán model mạnh làm Biên tập / Kiến trúc sư và
 Chạy lệnh:
 
 ```bash
-./kietnovel.exe
+kietnovel
 ```
 
 Tại màn hình chào mừng:
@@ -243,10 +249,9 @@ Dành cho chạy tự động trên VPS, Server hoặc CI:
 
 ```bash
 # Bắt đầu truyện mới
-./kietnovel.exe --headless --prompt "Tiểu thuyết huyền nghi đô thị phá án"
-
+kietnovel --headless --prompt "Tiểu thuyết huyền nghi đô thị phá án"
 # Viết tiếp truyện đang dở trong thư mục hiện tại
-./kietnovel.exe --headless
+kietnovel --headless
 ```
 
 ## 6. Quản Lý Nhiều Bộ Truyện Độc Lập
@@ -256,11 +261,10 @@ Mặc định output lưu vào `./output/novel/`. Để viết nhiều bộ truy
 ```powershell
 # Bộ truyện 1
 $env:NOVEL_DIR = ".\novels\tien-hiep-ky"
-.\kietnovel.exe
-
+kietnovel
 # Bộ truyện 2
 $env:NOVEL_DIR = ".\novels\do-thi-di-nang"
-.\kietnovel.exe
+kietnovel
 ```
 
 Mỗi bộ truyện có văn phong (`style/`), checkpoint và tiến độ riêng, không lẫn nhau. Bỏ `NOVEL_DIR` thì dùng `./output/novel` theo thư mục làm việc như bản gốc.
