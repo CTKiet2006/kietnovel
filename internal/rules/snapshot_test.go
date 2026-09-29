@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildSnapshot_FieldOverridePrecedence(t *testing.T) {
-	// 低→高：defaults 设 修仙，project 覆盖为 都市；高优先级胜出。
+	// low->high: defaults sets 修仙, project overrides it with 都市; the higher priority wins.
 	snap := BuildSnapshot([]Candidate{
 		{Source: "system_defaults", Structured: Structured{Genre: "修仙"}},
 		{Source: "project:a.md", Structured: Structured{Genre: "都市"}},
@@ -23,14 +23,14 @@ func TestBuildSnapshot_FieldOverridePrecedence(t *testing.T) {
 }
 
 func TestBuildSnapshot_EmptyAndZeroAreAbsent(t *testing.T) {
-	// 归一化器吐占位：genre:""、空串元素——都必须当缺失，不覆盖低优先级真值。
+	// the normalizer emits placeholders: genre:"" and empty-string elements -- both must count as missing and must not
 	snap := BuildSnapshot([]Candidate{
 		{Source: "system_defaults", Structured: Structured{
 			Genre: "修仙",
 		}},
 		{Source: "startup_prompt", Structured: Structured{
-			Genre:            "",                 // 占位空串 → 不覆盖
-			ForbiddenPhrases: []string{"", "  "}, // 全空 → 丢弃
+			Genre:            "",                 // placeholder empty string -> no override
+			ForbiddenPhrases: []string{"", "  "}, // all empty -> dropped
 		}},
 	})
 	if snap.Structured.Genre != "修仙" {
@@ -77,7 +77,7 @@ func TestBuildSnapshot_DegradedPropagates(t *testing.T) {
 	if snap.Status != StatusDegraded {
 		t.Fatalf("任一来源降级则 status=degraded，得到 %s", snap.Status)
 	}
-	// 降级来源仍以 raw preferences 进入，不阻断；其它来源 structured 照常。
+	// a degraded source still enters as raw preferences without blocking; other sources keep their structured fields.
 	if len(snap.Structured.FatigueWords) == 0 {
 		t.Fatalf("降级不应影响其它来源的 structured")
 	}

@@ -132,9 +132,9 @@ func TestReplaceExecutable(t *testing.T) {
 	if string(data) != "new" {
 		t.Fatalf("content = %q", data)
 	}
-	// 权限保持断言只在有 POSIX 权限位语义的平台上有意义：Windows 把一切上报为
-	// 0666/0444、执行位永不出现（可执行性来自 .exe 扩展名），此断言在该平台恒假。
-	// 替换/回滚/备份清理断言与平台相关（Windows rename 语义不同），必须继续运行。
+	// The permission-preservation assertion is only meaningful on platforms with POSIX permission bits: Windows reports
+	// everything as 0666/0444 and never reports an execute bit (executability comes from the .exe extension), so the assertion is always false there.
+	// The replace/rollback/backup-cleanup assertions are platform-dependent (Windows rename semantics differ) and must keep running.
 	if runtime.GOOS != "windows" {
 		info, err := os.Stat(dst)
 		if err != nil {

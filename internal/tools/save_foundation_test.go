@@ -534,7 +534,7 @@ func TestSaveFoundationUpdateCompassOverridesLastUpdated(t *testing.T) {
 	}
 	if err := s.Progress.Save(&domain.Progress{
 		Phase:             domain.PhaseWriting,
-		CompletedChapters: []int{1, 2, 3, 5, 4}, // 乱序，验证取 max 而非 len
+		CompletedChapters: []int{1, 2, 3, 5, 4}, // out of order, verifying that max is taken rather than len
 	}); err != nil {
 		t.Fatalf("Save progress: %v", err)
 	}
@@ -545,7 +545,7 @@ func TestSaveFoundationUpdateCompassOverridesLastUpdated(t *testing.T) {
 		"content": map[string]any{
 			"ending_direction": "主角面对最终抉择",
 			"open_threads":     []string{"线索A"},
-			"last_updated":     0, // LLM 通常忘填或留 0
+			"last_updated":     0, // the LLM usually forgets to fill this in or leaves 0
 		},
 	})
 	if _, err := tool.Execute(context.Background(), args); err != nil {

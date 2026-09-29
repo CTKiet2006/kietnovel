@@ -14,9 +14,9 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
-// MigrateLegacyBaseline 从旧版业务投影逆向生成章节记录。会话日志不是作品事实，
-// 因此不参与迁移。保存前正向投影一次与原状态比对，有出入只记日志：升级不改磁盘上的
-// 世界状态，也不因此拦住用户。
+// MigrateLegacyBaseline reverse-generates chapter records from the legacy business projection. Session logs are not work facts,
+// so they take no part in the migration. Before saving it projects forward once and compares against the original state; any
+// difference is only logged: the upgrade does not change the world state on disk, nor does it block the user for that.
 func MigrateLegacyBaseline(st *store.Store) error {
 	progress, err := st.Progress.Load()
 	if err != nil {
@@ -129,8 +129,8 @@ func loadLegacyProjection(st *store.Store, chapters []int, progress *domain.Prog
 	return result, nil
 }
 
-// normalizeLegacy 去掉旧版数据里不属于基线的条目：提交中途崩溃留下的未完成章引用、
-// 早期版本允许的空 ID 与重复埋设。它们不影响写作，待恢复的提交会在迁移后重新写入。
+// normalizeLegacy drops entries in the legacy data that do not belong to the baseline: unfinished chapter references left by a
+// mid-commit crash, plus the empty IDs and duplicate plants that early versions allowed. They do not affect writing, and a commit pending recovery is rewritten after the migration.
 func (p *projection) normalizeLegacy(chapters []int) {
 	completed := func(chapter int) bool {
 		_, ok := slices.BinarySearch(chapters, chapter)
@@ -150,7 +150,7 @@ func (p *projection) normalizeLegacy(chapters []int) {
 		if entry.Status == "resolved" && !completed(entry.ResolvedAt) {
 			entry.Status, entry.ResolvedAt = "advanced", 0
 		}
-		// 早期重复埋设会追加同 ID 条目，后一条才是当时的活动状态。
+		// An early duplicate plant appends a second entry with the same ID, and the later one is the state that was active at the time.
 		if i, seen := index[entry.ID]; seen {
 			ledger[i] = entry
 			continue
@@ -184,7 +184,7 @@ func buildLegacyRecord(st *store.Store, summary domain.ChapterSummary) (domain.C
 		content = final
 		slog.Info("旧章节无历史草稿，以当前正文建立 legacy 基线", "module", "migration", "chapter", chapter)
 	case !hasFinal:
-		// 草稿就是当年提交的正文，写回是确定性还原。
+		// The draft is exactly the body text that was committed back then, so writing it back is a deterministic restore.
 		if err := st.Drafts.SaveFinalChapter(chapter, draft); err != nil {
 			return domain.ChapterRecord{}, fmt.Errorf("恢复第 %d 章正文: %w", chapter, err)
 		}
@@ -271,8 +271,8 @@ func restoreLegacyFacts(existing []domain.ChapterRecord, pending map[int]*domain
 	restoreForeshadow(existing, pending, chapters, previous)
 }
 
-// restoreForeshadow 把账本条目还原成各章的 plant/advance/resolve。还原不了的条目
-// 说明已有记录与账本矛盾，丢弃并记日志，不让一条伏笔挡住升级。
+// restoreForeshadow turns ledger entries back into the plant/advance/resolve records of each chapter. An entry that cannot be
+// restored means the existing records contradict the ledger, so it is dropped and logged: a single foreshadow must not block the upgrade.
 func restoreForeshadow(existing []domain.ChapterRecord, pending map[int]*domain.ChapterRecord, chapters []int, previous *projection) {
 	kept := previous.foreshadow[:0]
 	for _, entry := range previous.foreshadow {
@@ -317,7 +317,7 @@ func restoreForeshadowEntry(existing []domain.ChapterRecord, pending map[int]*do
 	default:
 		return false
 	}
-	// 全部落点确认后再写入，避免半还原的条目混进记录。
+	// Only write once every landing point is confirmed, so a half-restored entry never mixes into the records.
 	for _, p := range placements {
 		record := pending[p.chapter]
 		record.Facts.ForeshadowUpdates = append(record.Facts.ForeshadowUpdates, p.update)

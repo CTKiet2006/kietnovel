@@ -8,19 +8,19 @@ import (
 	"strings"
 )
 
-// RawSource 是一个待归一化的原始来源（rules 文件的整段文本）。
+// RawSource is a raw source awaiting normalization (the whole text of a rules file).
 //
-// 砍 YAML 后，rules 文件就是普通自然语言提示词；归一化只需要原文，不再做 front matter 解析。
+// After dropping YAML a rules file is just a plain natural-language prompt; normalization needs only the raw text and no longer parses front matter.
 type RawSource struct {
-	Label string     // 来源标签，进入 Snapshot.Sources（如 global:my-style.md）
-	Kind  SourceKind // 优先级层级
-	Text  string     // 文件原始内容
+	Label string     // source label, lands in Snapshot.Sources (e.g. global:my-style.md)
+	Kind  SourceKind // priority tier
+	Text  string     // raw file contents
 }
 
-// RawFileSources 按 Global → Project 顺序枚举 rules 目录下的 .md 文件并返回原始文本。
+// RawFileSources enumerates the .md files under the rules directories in Global -> Project order and returns their raw text.
 //
-// 与 readDirFromDisk 同样的扫描约定（顶层 .md、字典序、跳过隐藏文件），但不解析 YAML，
-// 整段文本原样交给归一化器。System defaults / 启动 prompt / 运行中要求由 service 另行提供。
+// It follows the same scanning convention as readDirFromDisk (top-level .md, lexicographic order, hidden files skipped) but does not parse YAML;
+// the whole text goes to the normalizer verbatim. System defaults / the startup prompt / runtime requests are supplied separately by the service.
 func RawFileSources(opts LoadOptions) []RawSource {
 	var out []RawSource
 	out = append(out, rawDir(opts.HomeRulesDir, SourceGlobal)...)
@@ -34,8 +34,8 @@ func rawDir(dir string, kind SourceKind) []RawSource {
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		// 目录不存在是常态，静默跳过；但权限/路径其实是文件这类错误必须留痕——
-		// 否则用户写了规则却完全没生效、零反馈，排查成本极高（见 known_rules_path_stale_readme）。
+		// A missing directory is normal and skipped silently, but errors like a permission problem or a path that is really a file must leave a trace --
+		// otherwise the user writes rules that silently never take effect, with zero feedback and an extremely high debugging cost (see known_rules_path_stale_readme).
 		if !os.IsNotExist(err) {
 			slog.Warn("规则目录读取失败，已跳过", "module", "rules", "dir", dir, "err", err)
 		}

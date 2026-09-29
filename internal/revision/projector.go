@@ -10,7 +10,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
-// Projector 从章节记录重建所有章节级派生状态。
+// Projector rebuilds all chapter-level derived state from the chapter records.
 type Projector struct{ store *store.Store }
 
 func NewProjector(st *store.Store) *Projector { return &Projector{store: st} }
@@ -28,7 +28,7 @@ type projection struct {
 	style         domain.AuthorRevisionStyle
 }
 
-// ValidateRecords 校验完整章节记录集能否被确定性重放，不写入任何投影。
+// ValidateRecords checks whether a complete chapter record set can be replayed deterministically, without writing any projection.
 func ValidateRecords(records []domain.ChapterRecord) error {
 	records, err := prepareRecords(records)
 	if err != nil {
@@ -42,7 +42,7 @@ func prepareRecords(records []domain.ChapterRecord) ([]domain.ChapterRecord, err
 	records = slices.Clone(records)
 	slices.SortFunc(records, func(a, b domain.ChapterRecord) int { return a.Chapter - b.Chapter })
 	for _, record := range records {
-		// legacy 记录由旧版 store 状态重建，只受当时的合同约束；Validate 是新模型输出的合同。
+		// legacy records are rebuilt from the old store state and are bound only by the contract of that era; Validate is the contract for new model output.
 		if record.Origin == domain.ChapterOriginLegacy {
 			continue
 		}

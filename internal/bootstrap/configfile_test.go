@@ -220,15 +220,15 @@ func TestMergeConfig_DisableUpdateCheck(t *testing.T) {
 		t.Fatal("项目级 disable_update_check=true 应关闭更新检查")
 	}
 
-	// 禁用属于隐私偏好，较高层省略或写 false 都不应隐式重新开启。
+	// Disabling is a privacy preference, so omitting it at a higher level or writing false must not implicitly re-enable it.
 	cfg = mergeConfig(Config{DisableUpdateCheck: true}, Config{})
 	if !cfg.DisableUpdateCheck {
 		t.Fatal("项目层未声明时应保留全局禁用偏好")
 	}
 }
 
-// 根因 2（issue #37 核心复现）：项目级覆盖 provider 但没声明对应 providers 凭证，
-// ValidateBase 必须报 config 错误（而非放行后在更深处崩溃）。
+// Root cause 2 (the core repro of issue #37): a project-level override sets a provider but declares no matching
+// providers credentials, which ValidateBase must report as a config error instead of letting it through and crashing deeper down.
 func TestValidateBase_ProviderOverrideWithoutCredentials(t *testing.T) {
 	cfg := Config{
 		Provider:  "mimo",
@@ -283,8 +283,8 @@ func TestValidateBaseRejectsProviderAPIOnNonOpenAIProvider(t *testing.T) {
 	}
 }
 
-// 示例配置必须自洽：去注释后是合法 JSON、
-// 顶层 provider 指针不悬空、且点破了“指针”心智——它是用户照抄的样板，自己坏了就坑人。
+// The sample config must be self-consistent: valid JSON once uncommented,
+// no dangling top-level provider pointer, and it makes the "pointer" idea concrete -- users copy this template verbatim, so a broken one misleads them.
 func TestExampleConfigIsValidAndSelfConsistent(t *testing.T) {
 	if exampleConfig == "" {
 		t.Fatal("go:embed 未生效，exampleConfig 为空")

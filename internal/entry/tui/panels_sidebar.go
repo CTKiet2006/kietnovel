@@ -128,9 +128,10 @@ func renderAgentLine(agent host.AgentSnapshot, width int) string {
 	if agent.Tool != "" {
 		detail = agent.Tool
 	}
-	// detail là dữ liệu do host gửi, không phải chuỗi hiển thị của TUI, nên phải so
-	// với nguyên văn chứ không dịch: đổi sang en/zh thì host vẫn gửi tiếng Việt,
-	// dùng i18n.T ở đây sẽ hỏng so khớp. Giữ cả nhãn cũ "待命" cho snapshot cũ.
+	// detail is data sent by the host, not a TUI display string, so it must be
+	// compared verbatim and never translated: on en/zh the host still sends
+	// Vietnamese, so i18n.T here would break the comparison. The legacy label is
+	// kept for snapshots written by older versions.
 	if agent.State == "idle" && (detail == hostSummaryIdle || detail == "待命") {
 		detail = ""
 	}

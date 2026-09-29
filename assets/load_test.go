@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-// TestBuildWriterPrompt_ByteIdenticalToPreSplit 是文风层验收标准 ①:
-// 不放任何覆盖文件时,组装产物与拆分前的 writer.md 管线逐字节一致。
-// golden 是拆分前 writer.md 的原始快照(testdata/writer-golden.md)。
+// TestBuildWriterPrompt_ByteIdenticalToPreSplit is voice layer acceptance criterion 1:
+// with no override files present, the assembled output is byte-for-byte identical to the pre-split
+// writer.md pipeline. golden is the original snapshot of the pre-split writer.md (testdata/writer-golden.md).
 func TestBuildWriterPrompt_ByteIdenticalToPreSplit(t *testing.T) {
 	golden, err := os.ReadFile("testdata/writer-golden.md")
 	if err != nil {
@@ -18,12 +18,12 @@ func TestBuildWriterPrompt_ByteIdenticalToPreSplit(t *testing.T) {
 	protocol := mustRead(promptsFS, "prompts/writer.md")
 	voice := mustRead(voiceFS, "voice.md")
 
-	// 文件级:占位符回填 == 拆分前原文
+	// file level: placeholder substitution == the pre-split original
 	if got := strings.Replace(protocol, voicePlaceholder, strings.TrimSpace(voice), 1); got != string(golden) {
 		t.Fatalf("占位符回填与拆分前不一致:\n--- 长度 golden=%d got=%d", len(golden), len(got))
 	}
 
-	// 管线级:新组装 == 旧管线(writer.md → simGuidance → style)
+	// pipeline level: new assembly == old pipeline (writer.md → simGuidance → style)
 	const style = "## 某风格\n\n- 测试"
 	old := WithSimulationGuidance(string(golden), "writer") + "\n\n" + style
 	got := BuildWriterPrompt(WithSimulationGuidance(protocol, "writer"), voice, style)
@@ -31,13 +31,13 @@ func TestBuildWriterPrompt_ByteIdenticalToPreSplit(t *testing.T) {
 		t.Fatal("组装管线与拆分前不等价")
 	}
 
-	// 无风格追加时也等价
+	// still equivalent when no style is appended
 	if BuildWriterPrompt(WithSimulationGuidance(protocol, "writer"), voice, "") != WithSimulationGuidance(string(golden), "writer") {
 		t.Fatal("无 style 时组装管线与拆分前不等价")
 	}
 }
 
-// TestLoad_NoOverrides 零覆盖时 Voice/AntiAITone 与内置逐字节一致。
+// TestLoad_NoOverrides with zero overrides, Voice/AntiAITone are byte-for-byte identical to the builtin.
 func TestLoad_NoOverrides(t *testing.T) {
 	b := Load("default", LoadOptions{})
 	if b.Voice != mustRead(voiceFS, "voice.md") {
@@ -89,23 +89,23 @@ func writeFile(t *testing.T, path, content string) {
 	}
 }
 
-// TestLoad_ThreeTierAppendAndReplace 覆盖三层优先级与逐资产语义(验收标准 ②)。
+// TestLoad_ThreeTierAppendAndReplace covers the three-tier precedence and per-asset semantics (acceptance criterion 2).
 func TestLoad_ThreeTierAppendAndReplace(t *testing.T) {
 	home := t.TempDir()
 	book := t.TempDir()
 	opts := LoadOptions{HomeStyleDir: home, BookStyleDir: book}
 
-	// voice / anti-ai-tone:追加语义,全局在前、本书在后,带边界标记
+	// voice / anti-ai-tone: append semantics, global first and this book second, with boundary markers
 	writeFile(t, filepath.Join(home, "voice.md"), "全局:少用成语")
 	writeFile(t, filepath.Join(book, "voice.md"), "本书:多写对话")
 	writeFile(t, filepath.Join(book, "anti-ai-tone.md"), "本书判据:禁排比")
 
-	// styles:同名整文件替换 + 新名新增;非法名忽略
+	// styles: whole-file replacement on the same name + new names add styles; illegal names ignored
 	writeFile(t, filepath.Join(home, "styles", "fantasy.md"), "全局改写的奇幻")
 	writeFile(t, filepath.Join(book, "styles", "xianxia.md"), "自定义仙侠")
 	writeFile(t, filepath.Join(book, "styles", "Bad Name!.md"), "非法")
 
-	// 题材参考:同名整文件替换,本书 > 全局
+	// genre references: whole-file replacement on the same name, this book > global
 	writeFile(t, filepath.Join(home, "genres", "fantasy", "style-references.md"), "全局参考")
 	writeFile(t, filepath.Join(book, "genres", "fantasy", "style-references.md"), "本书参考")
 
@@ -142,7 +142,7 @@ func TestLoad_ThreeTierAppendAndReplace(t *testing.T) {
 	}
 }
 
-// TestLoad_BookOverridesHomeOnStyles 本书 styles 覆盖全局同名。
+// TestLoad_BookOverridesHomeOnStyles: this book's styles override the global one of the same name.
 func TestLoad_BookOverridesHomeOnStyles(t *testing.T) {
 	home := t.TempDir()
 	book := t.TempDir()
@@ -154,7 +154,7 @@ func TestLoad_BookOverridesHomeOnStyles(t *testing.T) {
 	}
 }
 
-// TestOverrideVoice_SharesAssemblyPath eval 的 voice A/B 与生产同组装路径(验收标准 ④)。
+// TestOverrideVoice_SharesAssemblyPath eval's voice A/B uses the same assembly path as production (acceptance criterion 4).
 func TestOverrideVoice_SharesAssemblyPath(t *testing.T) {
 	b := Load("default", LoadOptions{})
 	b.OverrideVoice("## 实验文风\n\n- 一句话")
@@ -165,7 +165,7 @@ func TestOverrideVoice_SharesAssemblyPath(t *testing.T) {
 	if strings.Contains(got, voicePlaceholder) {
 		t.Fatal("占位符必须被消耗")
 	}
-	// 协议部分不受 voice 覆盖影响
+	// the protocol section is unaffected by the voice override
 	if !strings.Contains(got, "## 执行协议") {
 		t.Fatal("协议模板不得被 voice 覆盖破坏")
 	}

@@ -109,7 +109,7 @@ func TestRunSetsCompletionHold(t *testing.T) {
 	syn := synthesisFixtureJSON(2, storyClosed)
 	m := &mockModel{responses: []string{seg, ana, syn}}
 
-	ch, err := Run(context.Background(), testDeps(st, m), Options{SourcePath: src, AutoConfirm: true}) // 无 --continue
+	ch, err := Run(context.Background(), testDeps(st, m), Options{SourcePath: src, AutoConfirm: true}) // no --continue
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}

@@ -13,19 +13,19 @@ import (
 //
 // "a row for the start and another row for the finish". Non-call events (SYSTEM / ERROR / CONTEXT) have an
 type Event struct {
-	ID         string    // 同一次调用的开始/结束共用；非调用事件为空
-	Time       time.Time // 首次发出时间（开始时刻）
-	FinishedAt time.Time // 零值 = 进行中；非零 = 已完成
-	Failed     bool      // 已完成但失败（仅完成态有意义）
+	ID         string    // shared by the start and the end of one call; empty for non-call events
+	Time       time.Time // when it was first emitted (the start moment)
+	FinishedAt time.Time // zero value = in progress; non-zero = finished
+	Failed     bool      // finished but failed (only meaningful in the finished state)
 	Category   string    // DISPATCH / MODEL / TOOL / DECISION / SYSTEM / REVIEW / CHECK / ERROR / CONTEXT
-	Agent      string    // 产生事件的 agent
+	Agent      string    // the agent that produced the event
 	Summary    string
-	Detail     string        // 完整文案，写入日志不截断供排查；为空回退 Summary。UI 只读 Summary
-	Kind       string        // 错误分类（如 stream_idle），随日志输出供过滤/告警；为空不输出
+	Detail     string        // full text, written to the log untruncated for troubleshooting; falls back to Summary when empty. The UI only reads Summary
+	Kind       string        // error classification (e.g. stream_idle), emitted with the log for filtering/alerting; not emitted when empty
 	Level      string        // info / warn / error / success
-	Depth      int           // 0 = Engine 层, 1 = Worker 层
-	Duration   time.Duration // 完成时的执行耗时
-	RetryAt    time.Time     // 重试类事件：下次重试的截止时刻；UI 据此逐秒倒计时，到点即清（请求已在途）
+	Depth      int           // 0 = Engine layer, 1 = Worker layer
+	Duration   time.Duration // how long the execution took, once finished
+	RetryAt    time.Time     // retry events: the deadline of the next retry; the UI counts down second by second from it and clears at zero (the request is already in flight)
 }
 
 // empty ID and are appended as independent rows. Running reports whether the event is in progress.
@@ -51,7 +51,7 @@ type UISnapshot struct {
 	Provider             string
 	BookTitle            string
 	ModelName            string
-	ModelContextWindow   int // 当前默认模型的上下文窗口（随 /model 切换实时解析）
+	ModelContextWindow   int // context window of the current default model (resolved live on /model switch)
 	ThinkingLevel        string
 	Style                string
 	RuntimeState         string // idle / running / pausing / paused / completed
@@ -80,15 +80,15 @@ type UISnapshot struct {
 	TotalCacheReadTokens  int
 	TotalCacheWriteTokens int
 	TotalCostUSD          float64
-	TotalSavedUSD         float64 // 因 CacheRead 命中省下的美元（相对全按非缓存输入价计费）
-	BudgetLimitUSD        float64 // 预算上限（config budget.book_usd）；0 = 未启用
+	TotalSavedUSD         float64 // USD saved thanks to CacheRead hits (relative to billing every input at the non-cached input price)
+	BudgetLimitUSD        float64 // budget cap (config budget.book_usd); 0 = not enabled
 
 	// cache diagnostics
-	OverallCacheCapable    bool // 至少一个 role 跑过支持 prompt cache 的模型（区分"未启用"和"0% 命中"）
-	OverallRecentCacheRead int  // 滑动窗最近 N 次的 cacheRead 总和
-	OverallRecentInput     int  // 滑动窗最近 N 次的 input 总和
-	OverallRecentSamples   int  // 滑动窗内的样本数（≤ recentSampleCap）
-	TotalCacheBreaks       int  // live 检测到的缓存链断裂次数（前缀未缩短而命中骤降），详见 usage.go noteCacheBreak
+	OverallCacheCapable    bool // at least one role has run a model that supports prompt cache (distinguishes "not enabled" from "0% hit rate")
+	OverallRecentCacheRead int  // sum of cacheRead over the most recent N samples in the sliding window
+	OverallRecentInput     int  // sum of input over the most recent N samples in the sliding window
+	OverallRecentSamples   int  // number of samples in the sliding window (<= recentSampleCap)
+	TotalCacheBreaks       int  // number of cache-chain breaks detected live (the prefix did not shorten while the hit rate dropped), see noteCacheBreak in usage.go
 
 	// MissingAssistantUsage > 0 usually means the upstream streaming did not send the final usage
 	// chunk per the OpenAI stream_options.include_usage protocol (common with self-hosted proxies),
@@ -105,8 +105,8 @@ type UISnapshot struct {
 	Premise          string
 	Outline          []OutlineSnapshot
 	Characters       []string
-	SupportingCount  int      // 章节记录中的次要角色总数
-	RecentSupporting []string // 最近活跃的次要角色（最多 5 个，按 LastSeenChapter 倒序）
+	SupportingCount  int      // total number of supporting characters recorded for the chapter
+	RecentSupporting []string // most recently active supporting characters (at most 5, sorted by LastSeenChapter descending)
 	Layered          bool
 	CurrentVolumeArc string
 	NextVolumeTitle  string

@@ -51,7 +51,7 @@ func TestBuildSourceUnitsRoundtrip(t *testing.T) {
 
 func TestBuildSourceUnitsVirtualShard(t *testing.T) {
 	// A whole line far exceeds the budget -> split into several virtual units, with the boundaries on UTF-8 character boundaries.
-	long := strings.Repeat("字", 100) // 每字 3 字节 = 300 字节
+	long := strings.Repeat("字", 100) // 3 bytes per character = 300 bytes
 	units := buildSourceUnits([]byte(long), 30)
 	if len(units) < 2 {
 		t.Fatalf("超预算行应分片，得到 %d", len(units))
@@ -61,7 +61,7 @@ func TestBuildSourceUnitsVirtualShard(t *testing.T) {
 		if u.Line != 1 || u.Part == 0 {
 			t.Fatalf("虚拟分片应同 Line、Part>=1：%+v", u)
 		}
-		b.WriteString(u.Text) // 分片同一行，无换行分隔
+		b.WriteString(u.Text) // the fragments come from one line, with no newline between them
 	}
 	if b.String() != long {
 		t.Fatal("虚拟分片拼回丢字")
@@ -167,9 +167,9 @@ func TestResolveSegmentationReordersAndDedups(t *testing.T) {
 	norm, units := segFixture()
 	seg, err := resolveSegmentation(norm, units, []BoundaryDecision{
 		{UnitID: "L3", Kind: kindChapter, Title: "第一章 风起"},
-		{UnitID: "L1", Kind: kindChapter, Title: "开篇"}, // 乱序：位置在 L3 之前
+		{UnitID: "L1", Kind: kindChapter, Title: "开篇"}, // out of order: positioned before L3
 		{UnitID: "L6", Kind: kindChapter, Title: "第二章 云涌"},
-		{UnitID: "L6", Kind: kindChapter, Title: "第二章 重复"}, // 同字节重复
+		{UnitID: "L6", Kind: kindChapter, Title: "第二章 重复"}, // duplicate at the same byte
 	})
 	if err != nil {
 		t.Fatalf("乱序/重复应被确定性修复而非拒绝：%v", err)
@@ -220,7 +220,7 @@ func TestResolveSegmentationNotesDuplicateTitles(t *testing.T) {
 	seg, err := resolveSegmentation(norm, units, []BoundaryDecision{
 		{UnitID: "L1", Kind: kindFrontMatter, Title: "前言"},
 		{UnitID: "L3", Kind: kindChapter, Title: "第一章 风起"},
-		{UnitID: "L6", Kind: kindChapter, Title: "第一章风起"}, // 同名（空白差异忽略）
+		{UnitID: "L6", Kind: kindChapter, Title: "第一章风起"}, // same name (whitespace differences ignored)
 	})
 	if err != nil {
 		t.Fatalf("同名章应放行并记 Notes：%v", err)
@@ -348,11 +348,11 @@ func (m *mockModel) Generate(_ context.Context, _ []agentcore.Message, _ []agent
 // TestResolveSegmentationSingleLineChapters guards #9: a single-line segment with no line break (the anchor segmentation case) is all body, so a
 // single-line / single-line-multi-chapter novel must not be misjudged as "empty body" and rejected.
 func TestResolveSegmentationSingleLineChapters(t *testing.T) {
-	normalized := []byte("第一章甲的故事第二章乙的故事") // 整篇一行，无换行
+	normalized := []byte("第一章甲的故事第二章乙的故事") // the whole text is one line, with no newline
 	units := buildSourceUnits(normalized, 0)
 	decisions := []BoundaryDecision{
-		{UnitID: "L1", Kind: kindChapter, Title: "第一章"},                // 无锚点 → byte 0
-		{UnitID: "L1", Anchor: "第二章", Kind: kindChapter, Title: "第二章"}, // 行内锚点切出第二章
+		{UnitID: "L1", Kind: kindChapter, Title: "第一章"},                // no anchor -> byte 0
+		{UnitID: "L1", Anchor: "第二章", Kind: kindChapter, Title: "第二章"}, // an in-line anchor cuts out the second chapter
 	}
 	seg, err := resolveSegmentation(normalized, units, decisions)
 	if err != nil {
@@ -411,7 +411,7 @@ func TestResolveSegmentationAbsorbsEmptyChapter(t *testing.T) {
 	}
 	// The first point is itself an empty-body chapter: there is no previous segment to merge into -> it lands as front_matter, and again does not fail.
 	seg, err = resolveSegmentation(norm, units, []BoundaryDecision{
-		{UnitID: "L1", Kind: kindChapter, Title: "占位"}, // [L1,L2) 单行标题无正文
+		{UnitID: "L1", Kind: kindChapter, Title: "占位"}, // [L1,L2) a single-line title with no body
 		{UnitID: "L2", Kind: kindChapter, Title: "第一章"},
 	})
 	if err != nil {
@@ -427,7 +427,7 @@ func TestResolveSegmentationAbsorbsEmptyChapter(t *testing.T) {
 // that boundary is governed by the adjacent chunk, which will report it in its own owned range, and keeping it would cause cross-chunk duplication / out-of-order.
 func TestSegmentClipsContextBoundaries(t *testing.T) {
 	norm, units := segFixture()
-	chunks := planChunks(units, planningBudget(40, "sys", "")) // 与 Segment 内部规划一致
+	chunks := planChunks(units, planningBudget(40, "sys", "")) // same as the planning inside Segment
 	if len(chunks) < 2 {
 		t.Fatalf("fixture 应分出至少 2 块，得 %d", len(chunks))
 	}
@@ -464,7 +464,7 @@ func TestSegmentClipsContextBoundaries(t *testing.T) {
 // whose digest matches are reused with zero model calls -- segmentation is the most expensive stage, so a failure of any single chunk must not re-pay the completed ones (the same philosophy as analyze/synthesize).
 func TestSegmentReusesChunkArtifacts(t *testing.T) {
 	norm, units := segFixture()
-	chunks := planChunks(units, planningBudget(40, "sys", "")) // 与 Segment 内部规划一致
+	chunks := planChunks(units, planningBudget(40, "sys", "")) // same as the planning inside Segment
 	responses := make([]string, len(chunks))
 	for ci, owned := range chunks {
 		responses[ci] = boundariesJSON(boundaryFixture(units[owned[0]].ID, "", kindChapter, ""))
@@ -502,12 +502,12 @@ func TestSegmentReusesChunkArtifacts(t *testing.T) {
 // TestSegmentShrinksChunkOnTruncation guards the output budget feedback loop: many short chapters make a chunk's boundary JSON
 // exceed the visible output (stop=length), so it must halve the chunk and retry rather than failing outright -- the same philosophy as analyze shrinking a batch.
 func TestSegmentShrinksChunkOnTruncation(t *testing.T) {
-	norm, units := segFixture() // 7 个 unit，单块 [0,7)，mid=3
+	norm, units := segFixture() // 7 units, a single chunk [0,7), mid=3
 	left := boundariesJSON(boundaryFixture("L1", "", kindChapter, ""))
 	right := boundariesJSON(boundaryFixture("L6", "", kindChapter, "第二章 云涌"))
 	m := &mockModel{
 		responses: []string{`{"boundaries":[]}`, left, right},
-		stops:     []agentcore.StopReason{agentcore.StopReasonLength}, // 首调截断，两个半块正常
+		stops:     []agentcore.StopReason{agentcore.StopReasonLength}, // the first call is truncated, the two half chunks are fine
 	}
 	seg, err := Segment(context.Background(), m, "sys", norm, units, "", 0, 0, 4096, callProfile{}, nil, "")
 	if err != nil {

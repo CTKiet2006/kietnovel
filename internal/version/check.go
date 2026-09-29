@@ -14,26 +14,26 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-// DefaultRepo 是版本检查与自更新默认指向的仓库。
+// DefaultRepo is the repository that version checks and self-update target by default.
 const DefaultRepo = "CTKiet2006/kietnovel"
 
-// DefaultCheckInterval 是两次联网检查之间的最小间隔。GitHub 匿名 API 限流
-// 60 req/h，且发版节奏是天级，更频繁的检查只有打扰没有收益。
+// DefaultCheckInterval is the minimum spacing between two online checks. The anonymous GitHub API rate-limits
+// to 60 req/h and releases ship on a daily cadence, so checking more often brings only annoyance, no benefit.
 const DefaultCheckInterval = 24 * time.Hour
 
-// CheckOptions 是一次版本检查的输入。CachePath 由调用方传入（通常为
-// 配置目录下的 update-check.json）；本包不依赖 bootstrap，保持 version
-// 作为叶子包的依赖方向。
+// CheckOptions is the input of a single version check. CachePath is supplied by the caller (usually
+// update-check.json under the config directory); this package deliberately does not depend on bootstrap, keeping
+// version a leaf package in the dependency direction.
 type CheckOptions struct {
 	Repo           string
 	CurrentVersion string
 	Client         *http.Client
-	CachePath      string        // 空 = 不落盘，每次调用都联网
-	MaxAge         time.Duration // 缓存有效期；<=0 取 DefaultCheckInterval
+	CachePath      string        // empty = no disk cache, every call goes online
+	MaxAge         time.Duration // cache lifetime; <=0 falls back to DefaultCheckInterval
 }
 
-// CheckResult 是版本检查的结论。Notes 携带 release 原文（markdown），
-// 调用方展示前必须按自身输出介质清理；升级与否由用户决定。
+// CheckResult is the outcome of a version check. Notes carries the raw release text (markdown),
+// which the caller must sanitize for its own output medium before displaying; whether to upgrade is the user's decision.
 type CheckResult struct {
 	Latest          string
 	Current         string
@@ -42,20 +42,20 @@ type CheckResult struct {
 	FromCache       bool
 }
 
-// checkCache 是 CachePath 的落盘结构。
+// checkCache is the on-disk structure behind CachePath.
 type checkCache struct {
 	LastCheck time.Time `json:"last_check"`
 	Latest    string    `json:"latest"`
 	Notes     string    `json:"notes"`
 }
 
-// CheckUpdate 查询上游最新 release 并判断是否需要提醒升级。只读不写任何
-// 二进制；是否升级、何时升级完全由用户经 `ainovel-cli update` 决定。
-// 缓存或网络失败均通过 error 暴露；缓存写入失败时仍返回已经取得的检查结果。
+// CheckUpdate queries the latest upstream release and decides whether to nudge an upgrade. It is read-only and never writes any
+// binary; whether and when to upgrade is entirely up to the user via `ainovel-cli update`.
+// Cache or network failures surface through error; when the cache write fails the already-obtained result is still returned.
 func CheckUpdate(ctx context.Context, opts CheckOptions) (*CheckResult, error) {
 	current := Normalize(opts.CurrentVersion)
 	if current == "dev" {
-		// 本地构建没有可比较的版本语义，跳过检查避免把任意构建误报成"可升级"。
+		// A local build has no comparable version semantics, so the check is skipped rather than misreporting any build as upgradable.
 		return &CheckResult{Current: current}, nil
 	}
 	repo := strings.TrimSpace(opts.Repo)
@@ -83,7 +83,7 @@ func CheckUpdate(ctx context.Context, opts CheckOptions) (*CheckResult, error) {
 				cacheErr = fmt.Errorf("validate update check cache: %w", resultErr)
 			}
 		case errors.Is(err, os.ErrNotExist):
-			// 首次检查没有缓存是正常状态。
+			// Having no cache on the first check is a normal state.
 		default:
 			cacheErr = fmt.Errorf("load update check cache: %w", err)
 		}
@@ -108,7 +108,7 @@ func CheckUpdate(ctx context.Context, opts CheckOptions) (*CheckResult, error) {
 	if err := writeCache(opts.CachePath, rel); err != nil {
 		cacheErr = errors.Join(cacheErr, fmt.Errorf("write update check cache: %w", err))
 	}
-	// 缓存错误作为伴随错误返回，调用方应记录它，但仍可使用检查结果。
+	// The cache error is returned alongside and the caller should log it, but the check result is still usable.
 	return result, cacheErr
 }
 
@@ -126,7 +126,7 @@ func newCheckResult(latest, current, notes string, fromCache bool) (*CheckResult
 	}, nil
 }
 
-// loadCache 读取并校验缓存；文件不存在、损坏和字段缺失由调用方分别处理。
+// loadCache reads and validates the cache; a missing file, corruption and missing fields are handled separately by the caller.
 func loadCache(path string) (*checkCache, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -142,12 +142,12 @@ func loadCache(path string) (*checkCache, error) {
 	return &c, nil
 }
 
-// result 把缓存内容转换为检查结论（FromCache=true）。
+// result converts cached content into a check outcome (FromCache=true).
 func (c *checkCache) result(current string) (*CheckResult, error) {
 	return newCheckResult(c.Latest, current, c.Notes, true)
 }
 
-// writeCache 原子落盘本次检查结果。目录不存在则创建。
+// writeCache atomically persists this check result, creating the directory if needed.
 func writeCache(path string, rel *release) error {
 	if path == "" {
 		return nil
@@ -192,7 +192,7 @@ func writeCache(path string, rel *release) error {
 	return nil
 }
 
-// isNewer 使用完整 SemVer 规则比较版本；非法版本显式返回错误，避免静默漏报。
+// isNewer compares versions with the full SemVer rules; an invalid version returns an explicit error so nothing is silently missed.
 func isNewer(latest, current string) (bool, error) {
 	latest = Normalize(latest)
 	current = Normalize(current)

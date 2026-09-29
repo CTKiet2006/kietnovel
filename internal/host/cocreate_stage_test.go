@@ -18,7 +18,7 @@ func newFlagTestHost(lc lifecycle, cocreating bool) *Host {
 	return &Host{
 		lifecycle:  lc,
 		cocreating: cocreating,
-		engine:     &engine{}, // acquireExclusive 查 engine.isRunning()（停止窗口门禁）
+		engine:     &engine{}, // acquireExclusive queries engine.isRunning() (the stop-window gate)
 		events:     make(chan Event, 16),
 	}
 }
@@ -66,7 +66,7 @@ func TestCancelCoCreate_ClearsFlag(t *testing.T) {
 
 func TestCancelCoCreate_NoopWhenNotCocreating(t *testing.T) {
 	h := newFlagTestHost(lifecycleRunning, false)
-	h.CancelCoCreate() // 不应 panic，不应改状态
+	h.CancelCoCreate() // must not panic, must not change the state
 	if h.cocreating || h.lifecycle != lifecycleRunning {
 		t.Error("非共创态 CancelCoCreate 应为 no-op")
 	}
@@ -96,7 +96,7 @@ func TestAcquireExclusive(t *testing.T) {
 		lc         lifecycle
 		cocreating bool
 		exclusive  string
-		wantErr    string // 空=期望放行
+		wantErr    string // empty = expect to be let through
 	}{
 		{"running", lifecycleRunning, false, "", "đang viết"},
 		{"cocreating", lifecyclePaused, true, "", "đồng sáng tác"},

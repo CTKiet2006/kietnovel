@@ -13,7 +13,7 @@ func newTextHandler(w io.Writer, level slog.Level) slog.Handler {
 	return slog.NewTextHandler(w, &slog.HandlerOptions{
 		Level: level,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-			// 保留日期、毫秒和时区；日志跨进程追加时仍能准确对齐代码版本与会话。
+			// Keeps the date, milliseconds and time zone, so logs appended across processes still line up exactly with code version and session.
 			if a.Key == slog.TimeKey {
 				a.Value = slog.StringValue(a.Value.Time().Format("2006-01-02T15:04:05.000Z07:00"))
 			}
@@ -31,9 +31,9 @@ func newSessionLogger(w io.Writer, level slog.Level, sessionAttrs ...slog.Attr) 
 	return slog.New(handler), sessionID
 }
 
-// FileLogger 返回写入 outputDir/logs/filename 的独立 logger 与清理函数，
-// 供需要独立日志文件的子系统（如导入流程）使用。打开失败回退默认 logger 不中断业务，
-// 但错误必须返回给调用方向用户呈现——否则 UI 指引用户去看一个并不存在的日志文件。
+// FileLogger returns an independent logger writing to outputDir/logs/filename together with a cleanup func,
+// for subsystems that need their own log file (such as the import flow). A failed open falls back to the default logger without breaking the run,
+// but the error must still be returned so the caller can surface it -- otherwise the UI points the user at a log file that does not exist.
 func FileLogger(outputDir, filename string) (*slog.Logger, func(), error) {
 	f, err := openLogFile(outputDir, filename)
 	if err != nil {
@@ -47,10 +47,10 @@ func FileLogger(outputDir, filename string) (*slog.Logger, func(), error) {
 	}, nil
 }
 
-// SetupFile 初始化默认 logger 到文件，返回清理函数。
-// alsoStderr=true 时同时输出到 stderr。
-// 日志目录或文件无法打开时返回错误，调用方必须显式处理；禁止切到 io.Discard
-// 后继续运行，否则恰好在最需要排障时丢失全部运行日志。
+// SetupFile points the default logger at a file and returns a cleanup func.
+// With alsoStderr=true it also writes to stderr.
+// It returns an error when the log directory or file cannot be opened and the caller must handle it explicitly; falling back to
+// io.Discard and carrying on is forbidden, or the whole run log is lost exactly when troubleshooting matters most.
 func SetupFile(outputDir, filename string, alsoStderr bool, sessionAttrs ...slog.Attr) (func(), error) {
 	f, err := openLogFile(outputDir, filename)
 	if err != nil {

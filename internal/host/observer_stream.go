@@ -15,7 +15,7 @@ func (o *observer) handleSubagentDelta(p *agentcore.ProgressPayload) {
 		return
 	}
 	if p.Tool == "" {
-		return // 工具名未就绪，下一个 delta 再试
+		return // tool name not ready yet, retry on the next delta
 	}
 	o.updateModelState(p.Agent, "生成 "+p.Tool)
 
@@ -75,7 +75,7 @@ func (o *observer) emitStreamDelta(delta string, thinking bool) {
 // theirs filled in when ProgressToolStart arrives.
 func (o *observer) emitFallbackStreamHeader(tool string) {
 	if _, has := toolDisplays[tool]; has {
-		return // 有 extractor，header 由 extractor 自行输出
+		return // an extractor exists, so the extractor emits the header itself
 	}
 	o.streamClear()
 	o.emitStreamDelta(streamHeaderFallback(tool)+"\n", false)

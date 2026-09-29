@@ -25,15 +25,15 @@ const (
 // Facts is the minimal fact snapshot read from the workspace, just enough to decide the next action.
 // It separates the pure decision (NextAction) from IO (LoadState): NextAction is constant for the same Facts (RFC §20.1).
 type Facts struct {
-	WorkspaceReady   bool // manifest + intent + source 三件套齐备
+	WorkspaceReady   bool // the manifest + intent + source trio is complete
 	Segmented        bool
 	Confirmed        bool
-	ExpectedChapters int // 切分确认的章节总数（阶段二起填充）
-	AnalyzedChapters int // 从第 1 章起连续、InputDigest 匹配的分析数（阶段三起填充）
+	ExpectedChapters int // total number of chapters the segmentation confirmed (filled from stage two on)
+	AnalyzedChapters int // number of analyses that are consecutive from chapter 1 and whose InputDigest matches (filled from stage three on)
 	Synthesized      bool
 	StoryUncertain   bool
 	StoryResolved    bool
-	Published        bool // 正式工件与 synthesis 完全一致（阶段五起填充）
+	Published        bool // the official artifact matches synthesis exactly (filled from stage five on)
 }
 
 // NextAction walks a fixed linear pipeline and returns the first missing or unsatisfied action. A pure function, with no IO.

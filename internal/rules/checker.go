@@ -4,16 +4,16 @@ import (
 	"strings"
 )
 
-// Check 对章节正文按结构化规则进行机械检查，返回违规事实列表。
+// Check runs mechanical checks of the chapter body against the structured rules and returns a list of violation facts.
 //
-// 设计契约：
-//   - 仅返事实，不下指令（铁律一）
-//   - 不阻断任何调用方流程
-//   - severity 按规则类型固定映射（参见 types.go 注释表）
+// Design contract:
+//   - facts only, never instructions (iron law one)
+//   - never blocks any caller's flow
+//   - severity is a fixed mapping from rule type (see the comment table in types.go)
 //
-// 参数：
-//   - text：章节正文（终稿或草稿都可）
-//   - s：合并后的结构化规则；IsEmpty 时直接返回 nil。
+// Parameters:
+//   - text: the chapter body (final or draft both work)
+//   - s: the merged structured rules; nil is returned directly when IsEmpty.
 func Check(text string, s Structured) []Violation {
 	if s.IsEmpty() {
 		return nil
@@ -26,8 +26,8 @@ func Check(text string, s Structured) []Violation {
 	return violations
 }
 
-// forbidden_chars：出现 ≥1 次即 error。
-// 同一条规则只产生一条 violation，actual 是出现次数。
+// forbidden_chars: one or more occurrences is an error.
+// A single rule yields a single violation, with actual set to the occurrence count.
 func appendForbiddenChars(vs []Violation, text string, list []string) []Violation {
 	for _, ch := range list {
 		if ch == "" {
@@ -47,7 +47,7 @@ func appendForbiddenChars(vs []Violation, text string, list []string) []Violatio
 	return vs
 }
 
-// forbidden_phrases：出现 ≥1 次即 error；行为与 forbidden_chars 一致，仅 rule 名区分。
+// forbidden_phrases: one or more occurrences is an error; behaviour matches forbidden_chars, differing only in the rule name.
 func appendForbiddenPhrases(vs []Violation, text string, list []string) []Violation {
 	for _, ph := range list {
 		if ph == "" {
@@ -67,8 +67,8 @@ func appendForbiddenPhrases(vs []Violation, text string, list []string) []Violat
 	return vs
 }
 
-// fatigue_words：本章出现次数超过阈值才违规，warning 级。
-// 不跨章累计——跨章问题后续交诊断。
+// fatigue_words: a violation only when the occurrence count in this chapter exceeds the threshold, at warning severity.
+// Counts do not accumulate across chapters -- cross-chapter problems are left to later diagnostics.
 func appendFatigueWords(vs []Violation, text string, m map[string]int) []Violation {
 	for word, limit := range m {
 		if word == "" || limit <= 0 {

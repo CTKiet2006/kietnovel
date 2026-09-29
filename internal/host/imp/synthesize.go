@@ -21,7 +21,7 @@ const (
 const (
 	synthesisSchemaVersion  = 3
 	synthesizePromptVersion = "synthesize-v3"
-	rangePromptVersion      = "range-v2" // 纳入 rangeInputDigest，改 Range prompt 时递增，否则旧区间摘要仍被误判有效
+	rangePromptVersion      = "range-v2" // folded into rangeInputDigest; bump it when changing the Range prompt, otherwise an old range summary is still misjudged as valid
 )
 
 // ImportedArcRange / ImportedVolumeRange: synthesis returns only volume/arc ranges and never repeats every chapter (RFC §10.3).
@@ -186,7 +186,7 @@ func reduceToFit(ctx context.Context, m callModel, rangePrompt string, digests [
 		}
 		groups := groupDigestsByBudget(digests, budgetBytes)
 		if len(groups) >= len(digests) {
-			return digests, nil // 无法再合并（每组仅一个摘要）
+			return digests, nil // no further merging is possible (each group holds a single summary)
 		}
 		round++
 		merged := make([]RangeDigest, 0, len(groups))

@@ -122,7 +122,7 @@ func TestBudgetSentinelRefuse(t *testing.T) {
 	if err := s.Refuse(); err != nil {
 		t.Errorf("below limit should pass: %v", err)
 	}
-	r.cost = 10 // 恰好等于上限 → 拒绝
+	r.cost = 10 // exactly at the cap -> refuse
 	if err := s.Refuse(); err == nil {
 		t.Error("at limit should refuse")
 	} else if !strings.Contains(err.Error(), "book_usd") {
@@ -164,10 +164,10 @@ func TestBudgetSentinelBlindWarningAfterModelSwitch(t *testing.T) {
 	s := r.sentinel(bootstrap.BudgetConfig{BookUSD: 100, WarnRatio: 0.8})
 
 	for i := range 5 {
-		s.OnCost(1.0 * float64(i+1)) // 计价阶段：总额递增到 $5
+		s.OnCost(1.0 * float64(i+1)) // pricing stage: the total climbs to $5
 	}
 	for range blindZeroStreak {
-		s.OnCost(5.0) // 切到无价模型：总额钉死
+		s.OnCost(5.0) // switch to a model with no price: the total is pinned
 	}
 	if len(r.reports) != 1 || !strings.Contains(r.reports[0], "Vùng mù") {
 		t.Fatalf("expected blind warning after switch to unpriced model, got %v", r.reports)

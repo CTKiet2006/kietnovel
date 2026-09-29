@@ -50,7 +50,7 @@ func TestComputePatterns(t *testing.T) {
 }
 
 func TestComputeTopPhrasesWithStopwords(t *testing.T) {
-	// 「青云山巅」高频出现；「陆九渊」是角色名应被过滤
+	// "青云山巅" appears frequently; "陆九渊" is a character name and must be filtered out
 	line := "众人望向青云山巅，陆九渊负手而立。\n"
 	chapters := make([]string, 10)
 	for i := range chapters {
@@ -124,12 +124,12 @@ func TestComputeTitleFormats(t *testing.T) {
 	for i := range chapters {
 		chapters[i] = chapterWith("正文。")
 	}
-	// 混用 → 上报
+	// mixed -> reported
 	s := Compute(Input{Chapters: chapters, Titles: []string{"第一章 风起", "云涌", "第3章 雷动"}})
 	if s.TitleFormats == nil || s.TitleFormats.WithPrefix != 2 || s.TitleFormats.WithoutPrefix != 1 {
 		t.Errorf("title formats: %+v", s.TitleFormats)
 	}
-	// 统一 → 不上报
+	// uniform -> not reported
 	s = Compute(Input{Chapters: chapters, Titles: []string{"风起", "云涌"}})
 	if s.TitleFormats != nil {
 		t.Errorf("uniform titles should not report: %+v", s.TitleFormats)

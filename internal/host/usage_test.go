@@ -90,7 +90,7 @@ func Test_pushSample_RingBuffer(t *testing.T) {
 // Test_UsageTracker_RecordAccumulates verifies that Record accumulates correctly across multiple roles,
 // with the overall total being the sum of all roles and each per-role total staying independent.
 func Test_UsageTracker_RecordAccumulates(t *testing.T) {
-	tk := NewUsageTracker(nil, nil) // modelSet=nil → 走 provider Cost 兜底，不影响累计逻辑
+	tk := NewUsageTracker(nil, nil) // modelSet=nil -> falls back to the provider Cost, which does not affect the accumulation logic
 
 	tk.Record("writer", "", makeUsageMsg(1000, 800, 0, 200))
 	tk.Record("writer", "", makeUsageMsg(1500, 1200, 100, 300))
@@ -277,7 +277,7 @@ func Test_computeSaved(t *testing.T) {
 		{
 			name:  "异常价差 saved=0",
 			usage: agentcore.Usage{Input: 100_000, CacheRead: 50_000},
-			entry: models.ModelEntry{InputCostPer1M: 1.0, CacheReadCostPer1M: 2.0}, // 缓存反而更贵
+			entry: models.ModelEntry{InputCostPer1M: 1.0, CacheReadCostPer1M: 2.0}, // caching ends up more expensive
 			want:  0,
 		},
 	}
@@ -374,7 +374,7 @@ func Test_UsageTracker_MissingAssistantUsageCounted(t *testing.T) {
 // backend really returned CacheRead or CacheWrite > 0, that proves the model objectively supports prompt
 // cache, so the per-role row must not show "not enabled".
 func Test_UsageTracker_CacheCapableFromFacts(t *testing.T) {
-	tk := NewUsageTracker(nil, nil) // modelSet=nil → resolveCost 永远 capable=false
+	tk := NewUsageTracker(nil, nil) // modelSet=nil -> resolveCost is always capable=false
 
 	// one call with CacheWrite (simulating the first cache write; the registry does not mark it capable, but the facts prove support)
 	tk.Record("writer", "", makeUsageMsg(1000, 0, 200, 100))

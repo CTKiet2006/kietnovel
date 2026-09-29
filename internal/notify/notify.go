@@ -1,8 +1,8 @@
-// Package notify 提供无人值守告警通道。
+// Package notify provides an unattended alert channel.
 //
-// 合宪定位（architecture.md §2.3）：纯观察层动作——告警永不介入控制流
-// （不重试、不改派、不停机），只是把 TUI 内已有的事件"喊"到屏幕之外。
-// Send 异步执行、永不阻塞 Host、失败只记 slog。
+// Constitutional role (architecture.md 2.3): a purely observational-layer action -- alerts never intervene in control flow
+// (no retry, no reassignment, no shutdown); they only "shout" events that already exist inside the TUI out to the screen.
+// Send runs asynchronously, never blocks the Host, and only records failures with slog.
 package notify
 
 import (
@@ -17,9 +17,9 @@ import (
 	"time"
 )
 
-// Notification 一条告警的全部事实。
+// Notification holds every fact about a single alert.
 type Notification struct {
-	Kind  string `json:"kind"`  // Kinds 返回的稳定事件名
+	Kind  string `json:"kind"`  // the stable event name returned by Kinds
 	Level string `json:"level"` // info / warn / error
 	Title string `json:"title"`
 	Body  string `json:"body"`
@@ -35,8 +35,8 @@ const (
 	KindWorkerFailure = "worker_failure"
 )
 
-// Kinds 返回当前版本可用于 notify.events 的全部事件名。
-// 这里是通知事件契约的唯一事实源。
+// Kinds returns every event name that this version accepts in notify.events.
+// This is the single source of truth for the notification event contract.
 func Kinds() []string {
 	return []string{
 		KindRunEnd,
@@ -58,15 +58,15 @@ func IsKnownKind(kind string) bool {
 	return false
 }
 
-// Notifier 按配置分发通知。零值不可用，必须经 New 创建；nil 安全（Send noop）。
+// Notifier dispatches notifications according to configuration. The zero value is unusable and must be built with New; nil is safe (Send is a noop).
 type Notifier struct {
-	command string          // 非空时替代 system 通道（手机推送走这里）
-	events  map[string]bool // nil = 全部 kind 放行
+	command string          // when non-empty, replaces the system channel (phone push goes through here)
+	events  map[string]bool // nil = every kind passes
 	timeout time.Duration
 }
 
-// New 创建 Notifier。command 为空走内置 system 通道（Windows 通知气泡 /
-// macOS osascript / Linux notify-send）；events 非空时只放行列出的 kind。
+// New builds a Notifier. An empty command uses the built-in system channel (Windows toast bubbles /
+// macOS osascript / Linux notify-send); a non-empty events map only lets the listed kinds through.
 func New(command string, events []string) *Notifier {
 	n := &Notifier{command: strings.TrimSpace(command), timeout: 10 * time.Second}
 	if len(events) > 0 {
@@ -78,7 +78,7 @@ func New(command string, events []string) *Notifier {
 	return n
 }
 
-// Send 异步发送一条通知。过滤、执行、失败处理全部不影响调用方。
+// Send delivers one notification asynchronously. Filtering, execution and failure handling never affect the caller.
 func (n *Notifier) Send(nt Notification) {
 	if !n.allows(nt.Kind) {
 		return
@@ -86,7 +86,7 @@ func (n *Notifier) Send(nt Notification) {
 	go n.deliver(nt)
 }
 
-// allows 返回该 kind 是否放行（nil Notifier / 未列入 events 时拦截）。
+// allows reports whether a kind passes (a nil Notifier, or a kind missing from events, is blocked).
 func (n *Notifier) allows(kind string) bool {
 	if n == nil {
 		return false
@@ -94,15 +94,15 @@ func (n *Notifier) allows(kind string) bool {
 	return n.events == nil || n.events[kind]
 }
 
-// deliver 同步执行一次发送并记录失败，由 Send 在 goroutine 中调用。
+// deliver performs one synchronous send and records failures; Send calls it from a goroutine.
 func (n *Notifier) deliver(nt Notification) {
 	if err := n.deliverError(nt); err != nil {
 		slog.Warn("通知发送失败", "module", "notify", "kind", nt.Kind, "err", err)
 	}
 }
 
-// deliverError 同步执行一次发送并返回原始错误。Send 在 goroutine
-// 中调用 deliver 记录失败；测试直接调用本方法，避免错误被二次症状掩盖。
+// deliverError performs one synchronous send and returns the raw error. Send calls deliver from a
+// goroutine to record failures; tests call this method directly, so the error is not masked by a secondary symptom.
 func (n *Notifier) deliverError(nt Notification) error {
 	ctx, cancel := context.WithTimeout(context.Background(), n.timeout)
 	defer cancel()
@@ -113,8 +113,8 @@ func (n *Notifier) deliverError(nt Notification) error {
 	return runSystem(ctx, nt)
 }
 
-// runCommand 执行用户配置的命令：字段经环境变量传入（一行 curl 零依赖、无注入
-// 风险），完整 JSON 同时写 stdin（复杂分发场景自行解析）。超时由 ctx 强杀。
+// runCommand runs the user-configured command: the fields come in through environment variables (a one-line curl has zero
+// dependencies and no injection risk), and the full JSON is also written to stdin (for complex fan-out scenarios to parse). ctx force-kills it on timeout.
 func runCommand(ctx context.Context, command string, nt Notification) error {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
@@ -147,7 +147,7 @@ func notificationEnv(nt Notification) []string {
 	)
 }
 
-// runSystem 内置桌面通知：只覆盖"人在电脑旁"的场景，找不到命令静默降级。
+// runSystem is the built-in desktop notification: it only covers the "person is at the computer" case and degrades silently when the command is missing.
 func runSystem(ctx context.Context, nt Notification) error {
 	switch runtime.GOOS {
 	case "windows":
@@ -167,9 +167,9 @@ func runSystem(ctx context.Context, nt Notification) error {
 	}
 }
 
-// runWindowsNotification 使用系统自带 PowerShell + WinForms NotifyIcon。
-// Windows 10/11 会把气泡显示在右上角并纳入系统通知体验；无需安装模块、注册应用
-// 或携带额外二进制。调用方本就异步执行，短暂保活只用于让系统接收气泡消息。
+// runWindowsNotification uses the PowerShell that ships with Windows plus a WinForms NotifyIcon.
+// Windows 10/11 shows the bubble in the top-right corner and folds it into the system notification experience; no module to install, no app to
+// register and no extra binary to carry. The caller already runs asynchronously; the short-lived process only exists so the system can receive the bubble.
 func runWindowsNotification(ctx context.Context, nt Notification) error {
 	powershell, err := findPowerShell()
 	if err != nil {
@@ -182,8 +182,8 @@ func runWindowsNotification(ctx context.Context, nt Notification) error {
 }
 
 func findPowerShell() (string, error) {
-	// 优先 PowerShell 7：GitHub Windows runner 和现代 Windows 环境中 pwsh
-	// 对重定向 stdin 的行为更稳定；Windows PowerShell 5.1 仅作兼容后备。
+	// Prefer PowerShell 7: on GitHub Windows runners and modern Windows, pwsh
+	// behaves more predictably with redirected stdin; Windows PowerShell 5.1 is only the compatibility fallback.
 	for _, name := range []string{"pwsh.exe", "pwsh", "powershell.exe", "powershell"} {
 		if path, err := exec.LookPath(name); err == nil {
 			return path, nil
@@ -209,7 +209,7 @@ $notify.ShowBalloonTip(4000)
 Start-Sleep -Milliseconds 4500
 $notify.Dispose()`
 
-// appleScriptString 把任意文本包装为 AppleScript 字符串字面量。
+// appleScriptString wraps arbitrary text as an AppleScript string literal.
 func appleScriptString(s string) string {
 	s = strings.ReplaceAll(s, `\`, `\\`)
 	s = strings.ReplaceAll(s, `"`, `\"`)

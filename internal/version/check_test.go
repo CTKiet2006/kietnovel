@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-// roundTripFunc 把函数适配为 http.RoundTripper。生产代码固定请求 api.github.com，
-// 测试经 Transport 拦截注入响应，不触网。
+// roundTripFunc adapts a function to http.RoundTripper. Production code always requests api.github.com,
+// while tests inject responses by intercepting the Transport and never touch the network.
 type roundTripFunc func(req *http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -126,7 +126,7 @@ func TestCheckUpdateCacheExpiry(t *testing.T) {
 		return httpResp(200, releasePayload("v1.2.4", "")), nil
 	})}
 	cachePath := filepath.Join(t.TempDir(), "update-check.json")
-	// 距上次检查超过 MaxAge 的缓存应视为过期，重新联网。
+	// a cache older than MaxAge must be treated as stale and go online again.
 	stale := checkCache{LastCheck: time.Now().Add(-2 * time.Hour), Latest: "v1.2.4"}
 	if err := os.WriteFile(cachePath, mustJSON(stale), 0o644); err != nil {
 		t.Fatalf("write stale cache: %v", err)

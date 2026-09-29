@@ -6,13 +6,13 @@ import (
 	"strings"
 )
 
-// Snapshot 是本书归一化后的用户规则快照（meta/user_rules.json）。
+// Snapshot is this book's normalized user-rule snapshot (meta/user_rules.json).
 //
-// 它是运行时唯一事实源：开书/导入/刷新时由各来源归一化合并而成，之后 novel_context
-// 注入与 commit_chapter 检查都只读这一份，不再反复读 rules 文件（避免漂移与双读者发散）。
+// It is the single source of truth at runtime: normalized and merged from every source when a book is created, imported or
+// refreshed, after which both novel_context injection and commit_chapter checks read only this one copy instead of re-reading the rules files (avoiding drift and divergence between two readers).
 //
-// 注入给模型的只有 Structured + Preferences（见 Payload）；Version / Status / Sources /
-// Uncertain 是运维与诊断元数据，不进 working_memory.user_rules。
+// Only Structured + Preferences are injected into the model (see Payload); Version / Status / Sources /
+// Uncertain are operational and diagnostic metadata and stay out of working_memory.user_rules.
 type Snapshot struct {
 	Version     int        `json:"version"`
 	Status      Status     `json:"status"`
@@ -22,36 +22,36 @@ type Snapshot struct {
 	Uncertain   []string   `json:"uncertain"`
 }
 
-// Status 标记快照归一化是否完整成功。
+// Status records whether snapshot normalization completed successfully.
 type Status string
 
 const (
-	// StatusReady 所有来源都成功归一化。
+	// StatusReady means every source normalized successfully.
 	StatusReady Status = "ready"
-	// StatusDegraded 至少一个来源归一化失败，已降级为 raw preferences（详见 Uncertain / 日志）。
+	// StatusDegraded means at least one source failed to normalize and was degraded to raw preferences (see Uncertain / the log).
 	StatusDegraded Status = "degraded"
 )
 
-// SnapshotVersion 是当前快照 schema 版本，便于未来迁移。
-// v2：chapter_words 退出 structured（字数是语义软约束，走 preferences）。
-// v1 快照直接加载兼容：未知字段被反序列化忽略，下次叠加保存时自然收敛为 v2；
-// 刻意不做"版本不符即重建"——那会丢掉 AddRuntimeRule 运行中追加的不可再生规则。
+// SnapshotVersion is the current snapshot schema version, kept for future migration.
+// v2: chapter_words leaves structured (word count is a soft semantic constraint and travels through preferences).
+// v1 snapshots load unchanged: unknown fields are ignored during deserialization and converge naturally to v2 on the next overlay save;
+// "rebuild on version mismatch" is deliberately not done -- that would throw away the non-reproducible rules AddRuntimeRule appends at runtime.
 const SnapshotVersion = 2
 
-// Candidate 是单个来源归一化后的候选结果。
+// Candidate is the normalized candidate result of a single source.
 //
-// 来源按优先级低→高排列后交给 BuildSnapshot 确定性合并。LLM 只负责把单一来源的
-// 自然语言变成候选 Structured/Preferences；优先级与字段覆盖由 BuildSnapshot（Go）裁定。
+// Sources are ordered by ascending priority and handed to BuildSnapshot for a deterministic merge. The LLM only turns a single source's
+// natural language into a candidate Structured/Preferences; priority and field overrides are decided by BuildSnapshot (Go).
 type Candidate struct {
-	Source      string     // 可读来源标签，进入 Snapshot.Sources（如 system_defaults / startup_prompt / global:my.md）
-	Structured  Structured // 该来源候选结构化字段
-	Preferences string     // 该来源的自然语言偏好正文
-	Uncertain   []string   // 该来源故意未提升到 structured 的项 + 原因（诊断）
-	Degraded    bool       // 该来源归一化失败、已降级为 raw preferences
+	Source      string     // readable source label, lands in Snapshot.Sources (e.g. system_defaults / startup_prompt / global:my.md)
+	Structured  Structured // the source's candidate structured fields
+	Preferences string     // the source's natural-language preference body
+	Uncertain   []string   // items deliberately not promoted to structured, plus the reason (diagnostics)
+	Degraded    bool       // the source failed to normalize and was degraded to raw preferences
 }
 
-// Payload 返回注入 working_memory.user_rules 的形态：只暴露 structured + preferences。
-// 即便都为空也返回稳定结构，避免 LLM 看到 user_rules=null 走异常分支。
+// Payload returns the shape injected into working_memory.user_rules, exposing only structured + preferences.
+// It returns a stable structure even when both are empty, so the LLM never sees user_rules=null and takes an exceptional branch.
 func (s Snapshot) Payload() map[string]any {
 	return map[string]any{
 		"structured":  s.Structured,
@@ -59,13 +59,13 @@ func (s Snapshot) Payload() map[string]any {
 	}
 }
 
-// BuildSnapshot 把按优先级（低→高）排好的候选确定性合并成快照。
+// BuildSnapshot deterministically merges candidates ordered by priority (low -> high) into a snapshot.
 //
-// 合并规则（全部 Go 侧确定性，不交给 LLM）：
-//   - structured：按字段覆盖，高优先级来源覆盖低优先级；fatigue_words 按词叠加
-//   - preferences：不覆盖，按来源顺序拼接（高优先级在后），带来源标题
-//   - 空值/零值视为字段缺失，不覆盖已有值（sanitizeStructured）
-//   - 任一来源 Degraded → 快照 status=degraded
+// Merge rules (all deterministic on the Go side, never handed to the LLM):
+//   - structured: overridden field by field, higher-priority sources beating lower ones; fatigue_words merged per word
+//   - preferences: never overridden, concatenated in source order (higher priority last), each with its source heading
+//   - an empty or zero value counts as a missing field and does not override an existing value (sanitizeStructured)
+//   - any source Degraded -> snapshot status=degraded
 func BuildSnapshot(cands []Candidate) Snapshot {
 	snap := Snapshot{
 		Version: SnapshotVersion,
@@ -107,10 +107,10 @@ func BuildSnapshot(cands []Candidate) Snapshot {
 	return snap
 }
 
-// OverlaySnapshot 把一个高优先级候选叠加到已有快照上（候选胜出）。
+// OverlaySnapshot overlays a higher-priority candidate onto an existing snapshot (the candidate wins).
 //
-// 用于运行中 Arbiter rules 动作：不重新归一化所有来源，只把新规则覆盖进当前快照——
-// structured 按字段覆盖、preferences 追加一段、sources/uncertain 累加、降级传播。
+// It backs the runtime Arbiter rules action: instead of re-normalizing every source it overlays just the new rules onto the current snapshot --
+// structured overridden field by field, preferences gets a section appended, sources/uncertain accumulate, and degradation propagates.
 func OverlaySnapshot(base Snapshot, cand Candidate) Snapshot {
 	out := base
 	out.Version = SnapshotVersion
@@ -150,8 +150,8 @@ func OverlaySnapshot(base Snapshot, cand Candidate) Snapshot {
 	return out
 }
 
-// mergeFatigueWords 按词叠加疲劳词阈值，src 覆盖 dst 中的同词阈值（就近优先）。
-// 让用户只需新增少量疲劳词，而不必重列内置基线。
+// mergeFatigueWords merges fatigue-word thresholds per word, with src overriding the same word's threshold in dst (nearest wins).
+// That lets a user add only a few fatigue words instead of relisting the whole built-in baseline.
 func mergeFatigueWords(dst, src map[string]int) map[string]int {
 	if len(src) == 0 {
 		return dst
@@ -172,16 +172,16 @@ func cloneFatigue(m map[string]int) map[string]int {
 	return out
 }
 
-// SystemDefaults 是代码内置的机械基线（最低优先级来源），不走 LLM 归一化。
+// SystemDefaults is the mechanical baseline built into the code (the lowest-priority source) and does not go through LLM normalization.
 //
-// 数值迁自旧 assets/rules/default.md 的 front matter。阈值依据一并保留：
-// 后段疲劳词（像一/沉默了/没有说话/X息）来自 196 章长跑产物实证——传统 AI 套话被前段
-// 表灭绝后，模型转而把这些"节拍词"用到章均 5-7 次，阈值放宽以容忍正常使用。
+// The values were migrated from the front matter of the old assets/rules/default.md, with the threshold reasoning kept:
+// the later-stage fatigue words (像一 / 沉默了 / 没有说话 / X息) come from evidence in a 196-chapter long run -- once the
+// early-stage cliche table was wiped out, the model used these "beat words" 5-7 times per chapter, so the thresholds are loose enough to tolerate normal use.
 func SystemDefaults() Candidate {
 	return Candidate{
 		Source: "system_defaults",
 		Structured: Structured{
-			// 定长固定串的 AI 套句；checker 字面子串匹配，带变量的模式（不是X而是Y）归语义层。
+			// Fixed-length AI cliches; the checker does literal substring matching, while patterns with a variable slot (not X but Y) belong to the semantic layer.
 			ForbiddenPhrases: []string{"某种程度上", "值得注意的是", "不知为何", "五味杂陈"},
 			FatigueWords: map[string]int{
 				"不禁": 1, "竟然": 1, "仿佛": 2, "此外": 1, "然而": 2,
@@ -192,8 +192,8 @@ func SystemDefaults() Candidate {
 	}
 }
 
-// sanitizeStructured 落实"空值/零值=字段缺失"：归一化器可能吐 genre:"" 这类占位
-// （原型实测），必须当作未声明，避免污染合并与机械检查。
+// sanitizeStructured enforces "empty or zero means the field is missing": a normalizer may emit placeholders like genre:""
+// (observed in prototype testing); they must be treated as undeclared so they cannot pollute merging or the mechanical checks.
 func sanitizeStructured(s Structured) Structured {
 	out := Structured{}
 	if g := strings.TrimSpace(s.Genre); g != "" {

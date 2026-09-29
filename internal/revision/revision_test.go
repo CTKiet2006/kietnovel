@@ -251,7 +251,7 @@ func TestMigrateLegacyBaselineAllowsCRLFDraft(t *testing.T) {
 
 func TestMigrateLegacyBaselineAcceptsChapterWithoutTitle(t *testing.T) {
 	st := newRevisionTestStore(t, 1)
-	// v0.7.4 之前的提交 schema 没有 title
+	// commit schemas before v0.7.4 have no title
 	facts := domain.ChapterFacts{Summary: "旧版摘要", Characters: []string{"林墨"}, KeyEvents: []string{"入城"}}
 	saveLegacyChapter(t, st, 1, "正文", "正文", facts)
 
@@ -274,7 +274,7 @@ func TestMigrateLegacyBaselineIgnoresOrphanedCommitState(t *testing.T) {
 		ForeshadowUpdates: []domain.ForeshadowUpdate{{ID: "密信", Action: "plant", Description: "未拆的密信"}},
 	}
 	saveLegacyChapter(t, st, 1, "正文", "正文", facts)
-	// 第 2 章提交写完世界状态后崩溃，从未标记完成
+	// the chapter 2 commit crashed after writing the world state and was never marked complete
 	if err := st.World.AppendTimelineEvents([]domain.TimelineEvent{{Chapter: 2, Time: "夜", Event: "拆信"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestMigrateLegacyBaselineToleratesEarlyLedger(t *testing.T) {
 	st := newRevisionTestStore(t, 1)
 	facts := domain.ChapterFacts{Title: "第一章", Summary: "摘要", KeyEvents: []string{"事件"}}
 	saveLegacyChapter(t, st, 1, "正文", "正文", facts)
-	// v0.0.x 的 plant 不校验 id 和 description，重复埋设会追加同 ID 条目
+	// v0.0.x plants do not validate id and description, so a duplicate plant appends a second entry with the same ID
 	if err := st.World.SaveForeshadowLedger([]domain.ForeshadowEntry{
 		{ID: "", Description: "无名", PlantedAt: 1, Status: "planted"},
 		{ID: "密信", PlantedAt: 1, Status: "planted"},
@@ -399,7 +399,7 @@ func TestMigrateLegacyBaselineDropsContradictoryForeshadow(t *testing.T) {
 	if err := st.ChapterRecords.Save(record2); err != nil {
 		t.Fatal(err)
 	}
-	// 账本说伏笔埋在第 2 章，但第 2 章的接纳记录里没有这次埋设
+	// the ledger says the foreshadow is planted in chapter 2, but chapter 2's acceptance record has no such plant
 	if err := st.World.SaveForeshadowLedger([]domain.ForeshadowEntry{{ID: "孤儿", Description: "无主伏笔", PlantedAt: 2, Status: "planted"}}); err != nil {
 		t.Fatal(err)
 	}

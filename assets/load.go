@@ -24,46 +24,46 @@ var stylesFS embed.FS
 //go:embed voice.md voice_en.md voice_zh.md
 var voiceFS embed.FS
 
-// Prompts 表示嵌入的提示词集合。
+// Prompts is the set of embedded prompts.
 type Prompts struct {
 	ArchitectShort   string
 	ArchitectLong    string
-	Writer           string // 协议模板,含 {{VOICE}} 占位符;终稿经 BuildWriterPrompt 组装
+	Writer           string // the protocol template, carries the {{VOICE}} placeholder; the final text is assembled by BuildWriterPrompt
 	Editor           string
-	ImportSegment    string // 语义切分：识别章节/卷/附属文本边界
-	ImportAnalyze    string // 连续批次逐章事实提取
-	ImportSynthesize string // 分层综合与卷弧划分（全书 BookSynthesis）
-	ImportRange      string // 长书 Map 阶段连续区间摘要（RangeDigest）
+	ImportSegment    string // semantic segmentation: detect chapter / volume / ancillary-text boundaries
+	ImportAnalyze    string // per-chapter fact extraction over consecutive batches
+	ImportSynthesize string // layered synthesis and volume-arc division (the whole-book BookSynthesis)
+	ImportRange      string // consecutive range summaries in the Map stage of a long book (RangeDigest)
 	SimulationSource string
 	SimulationMerge  string
 	RevisionAnalyze  string
 
-	// Arbiter 裁定提示词(LLM-as-function,无 simulation guidance 包装)。
+	// Arbiter adjudication prompts (LLM-as-function, without the simulation guidance wrapper).
 	ArbiterPlanStart    string
 	ArbiterIntervention string
 	ArbiterFailure      string
 }
 
-// Bundle 表示运行所需的静态资源集合。
+// Bundle is the set of static resources needed at runtime.
 type Bundle struct {
 	References tools.References
 	Prompts    Prompts
 	Styles     map[string]string
-	Voice      string // 写作标准(文风层),已按三层覆盖组装;见 docs/voice-layer.md
-	Language   string // 创作语言("vi"/"zh")，仅记录，协议本身不分叉
+	Voice      string // the writing standard (the voice layer), already assembled with the three-tier override; see docs/voice-layer.md
+	Language   string // the writing language ("vi"/"zh"), recorded only, the protocol itself does not fork
 }
 
-// LoadOptions 声明文风层的覆盖来源。空目录 = 跳过该层(eval 传零值以获得
-// 纯内置的确定性 baseline,不受使用者本机覆盖污染)。
+// LoadOptions declares the override sources for the voice layer. An empty dir = skip that tier
+// (eval passes the zero value to get a purely builtin, deterministic baseline, unpolluted by the
 //
-// 路径语义:BookStyleDir 绑定书目录(outputDir)而非 cwd——文风随书走,换目录
-// 恢复同一本书加载同一份文风。注意与 rules 层不同(rules 的项目级绑定 cwd)。
+// user's local overrides).
+// Path semantics: BookStyleDir binds to the book dir (outputDir) rather than cwd - the voice travels
 type LoadOptions struct {
 	BookStyleDir string // <outputDir>/style
 	HomeStyleDir string // ~/.ainovel/style
 }
 
-// DefaultLoadOptions 根据书目录构造生产环境的覆盖来源。
+// DefaultLoadOptions builds the production override sources from the book directory.
 func DefaultLoadOptions(outputDir string) LoadOptions {
 	var opts LoadOptions
 	if outputDir != "" {
@@ -75,18 +75,19 @@ func DefaultLoadOptions(outputDir string) LoadOptions {
 	return opts
 }
 
-// Load 返回指定风格对应的资源集合（默认 ngôn ngữ sáng tác: Tiếng Việt）。
-// 文风资产(voice / anti-ai-tone / styles / 题材 style-references)按 opts 做三层覆盖:
-// 内置 < 全局 < 本书。
+// Load returns the resource bundle for the given style (default writing language: Vietnamese).
+// Voice assets (voice / anti-ai-tone / styles / genre style-references) get a three-tier
+// override per opts: builtin < global < this book.
 func Load(style string, opts LoadOptions) Bundle {
 	return LoadWithLanguage("vi", style, opts)
 }
 
-// LoadWithLanguage 加载指定创作语言对应的资源集合。
-// 提示词本身只有一套（上游中文协议，已验证），语言只影响两处：
-//   - voice 层：vi→voice.md, en→voice_en.md, zh→voice_zh.md；
-//   - vi/en 时给 Architect/Writer/Editor 追加一条强制产出语言的指令（见 ApplyLanguage）。
-// 这样避免维护两整套易腐化的协议副本，同时保证产出语言正确。
+// LoadWithLanguage loads the resource bundle for the given writing language.
+// There is only one set of prompts (the upstream Chinese protocol, already validated); language only
+//   - affects the voice layer: vi→voice.md, en→voice_en.md, zh→voice_zh.md;
+//   - and, for vi/en, appends a mandatory output-language instruction to Architect/Writer/Editor (see ApplyLanguage).
+//
+// This avoids maintaining two full copies of a protocol that goes stale, while keeping the output language correct.
 func LoadWithLanguage(language, style string, opts LoadOptions) Bundle {
 	lang := strings.ToLower(strings.TrimSpace(language))
 	voiceFile := "voice.md"
@@ -105,13 +106,13 @@ func LoadWithLanguage(language, style string, opts LoadOptions) Bundle {
 	}
 }
 
-// voicePlaceholder 是 writer 协议模板中文风段的原位插入点。
+// voicePlaceholder is the in-place insertion point for the voice section of the writer protocol template.
 const voicePlaceholder = "{{VOICE}}"
 
-// BuildWriterPrompt 是 writer 系统提示词的唯一组装入口,生产 / eval / 测试共用,
-// 保证 A/B 两臂走同一路径(先例教训见 WithSimulationGuidance)。
-// writerPrompt 为含占位符的协议模板(可以已带 simulation guidance 后缀,占位符在
-// 前缀内,替换不受影响);style 为空时不追加。
+// BuildWriterPrompt is the single assembly entry point for the writer system prompt, shared by
+// production / eval / tests, so both A/B arms take the same path (precedent lesson: WithSimulationGuidance).
+// writerPrompt is the protocol template holding the placeholder (it may already carry a simulation
+// guidance suffix; the placeholder sits inside the prefix, so replacement is unaffected); style is not appended when empty.
 func BuildWriterPrompt(writerPrompt, voice, style string) string {
 	out := strings.Replace(writerPrompt, voicePlaceholder, strings.TrimSpace(voice), 1)
 	if style != "" {
@@ -120,8 +121,8 @@ func BuildWriterPrompt(writerPrompt, voice, style string) string {
 	return out
 }
 
-// 各语言的产出指令，附在 Architect/Writer/Editor 提示词末尾。
-// 协议文本本身保持上游中文（已验证），只在这里告知"产出必须用什么语言"。
+// Per-language output directives, appended to the end of the Architect/Writer/Editor prompts.
+// The protocol text itself stays upstream Chinese (validated); only here do we state "which language the output must be written in".
 var languageDirectives = map[string]string{
 	"vi": `## Ngôn ngữ sáng tác
 
@@ -132,18 +133,18 @@ Toàn bộ sản phẩm của vai trò này — tên truyện, tóm tắt, tiề
 Every product of this role — story title, summary, premise, outline, character profiles, world rules, foreshadowing ledger, draft, and finished chapter — MUST be written in fluent, idiomatic English, following the prose standards given in the voice section above. Do not mix in Vietnamese or Chinese except for proper nouns. Tool names, file names, and system checkpoint keys stay untranslated.`,
 }
 
-// ApplyLanguage 给 Architect/Writer/Editor 追加产出语言指令。
-// "vi"/"en"（含空串，兼容旧配置）生效；"zh" 返回时不做任何改动，协议本就是中文。
-// 只在启动时调用一次，见 cmd/ainovel-cli/main.go。
+// ApplyLanguage appends the output-language directive to Architect/Writer/Editor.
+// "vi"/"en" (including the empty string, for compatibility with old configs) take effect; "zh" makes no
+// change on return, since the protocol is already Chinese. Called once at startup, see cmd/ainovel-cli/main.go.
 func (b *Bundle) ApplyLanguage(lang string) {
 	key := strings.ToLower(strings.TrimSpace(lang))
 	if key == "zh" {
-		// 协议本身就是中文，无需再声明。
+		// The protocol itself is already Chinese, so there is nothing to declare.
 		return
 	}
 	directive, ok := languageDirectives[key]
 	if !ok {
-		directive = languageDirectives["vi"] // 未知/空 → vi（兼容旧配置）
+		directive = languageDirectives["vi"] // unknown/empty -> vi (compatible with old configs)
 	}
 	d := "\n\n" + directive
 	b.Prompts.ArchitectShort += d
@@ -152,15 +153,15 @@ func (b *Bundle) ApplyLanguage(lang string) {
 	b.Prompts.Editor += d
 }
 
-// OverrideVoice 用 raw 整体替换已组装的文风段(eval 做 voice A/B 用)。
-// variant 与 baseline 仍经 BuildWriterPrompt 同一路径组装。
+// OverrideVoice replaces the assembled voice section wholesale with raw (used by eval for voice A/B).
+// variant and baseline are still assembled through the same BuildWriterPrompt path.
 func (b *Bundle) OverrideVoice(raw string) {
 	b.Voice = raw
 }
 
-// resolveAppendable 追加语义的三层组装:内置保留,全局/本书作为标记段追加。
-// 无覆盖时返回内置原文(逐字节不变——文风层验收标准之一)。
-// "后者优先"是给 LLM 的优先级指示而非机械保证;需要机械保证的约束走 rules 层。
+// resolveAppendable performs the three-tier assembly with append semantics: the builtin is kept, and
+// global / this-book are appended as marked sections. With no override it returns the builtin verbatim
+// (byte-for-byte unchanged - one of the voice layer acceptance criteria). "Later wins" is a priority
 func resolveAppendable(builtin, name string, opts LoadOptions) string {
 	out := builtin
 	if s := readOverride(opts.HomeStyleDir, name); s != "" {
@@ -172,7 +173,7 @@ func resolveAppendable(builtin, name string, opts LoadOptions) string {
 	return out
 }
 
-// readOverride 读取覆盖目录下的单个文件;目录为空、文件不存在或为空白一律返回 ""。
+// readOverride reads a single file from the override dir; an empty dir, a missing file, or blank content always returns "".
 func readOverride(dir, name string) string {
 	if dir == "" {
 		return ""
@@ -184,7 +185,7 @@ func readOverride(dir, name string) string {
 	return strings.TrimSpace(string(data))
 }
 
-// styleNameRe 校验用户自定义 style 文件名(不含扩展名),拒绝路径字符。
+// styleNameRe validates user-supplied style file names (without extension), rejecting path characters.
 var styleNameRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 
 func loadReferences(style string, opts LoadOptions) tools.References {
@@ -213,8 +214,8 @@ func loadReferences(style string, opts LoadOptions) tools.References {
 		if data, err := referencesFS.ReadFile(genreDir + "arc-templates.md"); err == nil {
 			refs.ArcTemplates = string(data)
 		}
-		// 题材风格参考:同名整文件替换(本书 > 全局);自定义 style 无内置参考时
-		// 允许仅由覆盖提供,不回退 default(错误的参照比没有更糟)。
+		// Genre style references: whole-file replacement on the same name (this book > global); when a custom style
+		// has no builtin reference, only the override may supply it, with no fallback to default (a wrong reference is worse than none).
 		relPath := filepath.Join("genres", style, "style-references.md")
 		for _, dir := range []string{opts.HomeStyleDir, opts.BookStyleDir} {
 			if s := readOverride(dir, relPath); s != "" {
@@ -245,17 +246,17 @@ func loadPrompts() Prompts {
 	}
 }
 
-// WithSimulationGuidance 给核心 prompt 追加仿写画像指引。导出供 eval 等外部场景做
-// variant 覆盖时复用，保证覆盖后的 prompt 与 Load 产出的 baseline 等价（同一包装路径）。
+// WithSimulationGuidance appends the simulation-profile guidance to core prompts. Exported so eval and
+// other external callers can reuse it for variant overrides, keeping an overridden prompt equivalent to the baseline Load produces (same wrapping path).
 func WithSimulationGuidance(prompt, role string) string {
 	return prompt + "\n\n" + strings.ReplaceAll(simulationGuidance, "{{role}}", role)
 }
 
-// OverridePrompt 用 raw 覆盖 bundle 中指定 prompt 文件对应的角色提示词，并走与 Load
-// 完全相同的 WithSimulationGuidance 包装——eval 做 A/B 时只需调它，不必复制包装逻辑，
-// 否则 baseline 带仿写画像后缀、variant 不带，A/B 不等价。file 为 prompt 文件名。
-// 注意:覆盖 writer.md 时 raw 须自带 {{VOICE}} 占位符(协议模板语义);只想 A/B 文风
-// 用 OverrideVoice。
+// OverridePrompt replaces the role prompt for the given prompt file in the bundle with raw, running it
+// through exactly the same WithSimulationGuidance wrapping as Load - eval A/B only calls it, without copying
+// the wrapping logic, otherwise the baseline carries the simulation-profile suffix and the variant does not,
+// making the A/B unequal. file is the prompt file name. Note: when overriding writer.md, raw must carry
+// its own {{VOICE}} placeholder (protocol template semantics); to A/B only the voice, use OverrideVoice.
 func (b *Bundle) OverridePrompt(file, raw string) error {
 	role, ok := promptRole[file]
 	if !ok {
@@ -275,7 +276,7 @@ func (b *Bundle) OverridePrompt(file, raw string) error {
 	return nil
 }
 
-// promptRole 把核心 prompt 文件名映射到 simulation guidance 的角色占位符。
+// promptRole maps core prompt file names to the simulation guidance role placeholder.
 var promptRole = map[string]string{
 	"architect-short.md": "architect",
 	"architect-long.md":  "architect",
@@ -289,8 +290,8 @@ const simulationGuidance = `## 仿写画像
 
 使用原则：借鉴结构、节奏、钩子、信息释放和吸引读者的手法；不要复制原文句子、人物、地名、专有设定或固定桥段。若 simulation_profile 与用户显式要求冲突，优先服从用户要求。`
 
-// loadStyles 枚举内置风格预设,再按 全局 → 本书 顺序叠加覆盖目录下 styles/*.md
-// (同名整文件替换,新文件名即新增风格;风格是整体声音,不做合并)。
+// loadStyles enumerates the builtin style presets, then overlays styles/*.md from the override dir in
+// the order global → this book (whole-file replacement on the same name; a new file name is a new style; a style is a whole voice, not merged).
 func loadStyles(opts LoadOptions) map[string]string {
 	styles := make(map[string]string)
 	entries, err := stylesFS.ReadDir("styles")
@@ -314,7 +315,7 @@ func loadStyles(opts LoadOptions) map[string]string {
 	return styles
 }
 
-// overlayStyles 把 <dir>/styles/*.md 叠进 styles 集合;非法文件名跳过并告警。
+// overlayStyles overlays <dir>/styles/*.md into the styles set; illegal file names are skipped with a warning.
 func overlayStyles(styles map[string]string, dir string) {
 	if dir == "" {
 		return

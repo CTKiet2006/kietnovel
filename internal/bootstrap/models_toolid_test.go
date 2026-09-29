@@ -14,14 +14,14 @@ import (
 	"github.com/voocel/agentcore"
 )
 
-// rawToolUseID 取自真实故障日志：tool_use id 中带 '#'，而请求校验只接受 [A-Za-z0-9_-]。
+// rawToolUseID comes from a real failure log: the tool_use id contains '#', while request validation only accepts [A-Za-z0-9_-].
 const rawToolUseID = "call_3543acedc27c4404bfe7317c#235532d85de245bda8ff64f6a683623a"
 
 var validToolUseIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
-// TestCreateModelNormalizesInvalidToolUseIDs 锁定模型工厂的行为：含非法字符的 tool_use id
-// 必须在发出前归一化为合法形态，且 tool_use / tool_result 两侧成对改写，否则整轮会话会在
-// 本地校验阶段反复失败（messages[i]: tool use id "..." is invalid）。
+// TestCreateModelNormalizesInvalidToolUseIDs locks down the model factory's behaviour: a tool_use id containing
+// illegal characters must be normalized into a valid form before it is sent, and the tool_use / tool_result sides must be
+// rewritten as a pair, otherwise the whole turn keeps failing in local validation (messages[i]: tool use id "..." is invalid).
 func TestCreateModelNormalizesInvalidToolUseIDs(t *testing.T) {
 	var (
 		mu   sync.Mutex
