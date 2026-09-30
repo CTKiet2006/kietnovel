@@ -56,7 +56,7 @@ No Docker. Three steps:
 
 ```powershell
 # 1. Cài (một lệnh, không cần cài Go)
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.5.0/scripts/install-windows.ps1 | iex
+irm https://github.com/CTKiet2006/kietnovel/releases/latest/download/install-windows.ps1 | iex
 
 # 2. Mở terminal mới, rồi chạy
 kietnovel
@@ -86,11 +86,11 @@ powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1
 No Go? Download the script first, then run it:
 
 ```powershell
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.5.0/scripts/install-windows.ps1 -OutFile ki.ps1
+irm https://github.com/CTKiet2006/kietnovel/releases/latest/download/install-windows.ps1 -OutFile ki.ps1
 .\ki.ps1 -Version v1.4.0
 ```
 
-Available: v1.5.0, v1.4.0, v1.3.4, v1.3.3, v1.3.2, v1.2.5, v1.2.4, v1.2.3, v1.2.2, v1.2.1, v1.1.0.
+All releases: <https://github.com/CTKiet2006/kietnovel/releases>
 
 <details>
 <summary>Other options</summary>
@@ -239,6 +239,10 @@ Type `/` in the TUI to open the command picker:
 | `/importsim <file>` | Import a style-simulation profile from a json file |
 | `/sync` | Sync your manual edits on the chapter files back into the system |
 | `/export` | Export the work as one complete text file (.txt or .epub) |
+| `/read [n]` | Read the story inside the TUI — both committed chapters and drafts in progress |
+| `/books` | List the stories under `output/` and switch between them |
+| `/new [title]` | Create a new story and open it to write right away (accents and spaces are fine) |
+| `/delete [title]` | Delete a story — two steps, the second needs `y`, no undo |
 | `/language [vi\|en\|zh]` | View or change the interface language; the choice is saved to the config |
 
 ### Real-time Steering
