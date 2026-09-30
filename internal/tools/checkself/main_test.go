@@ -48,6 +48,25 @@ func TestKhongTuBaoMinh(t *testing.T) {
 	}
 }
 
+// TestKhongQuetFileSinhLucBuild bảo đảm bỏ qua file do workflow sinh ra.
+// release-notes.md chứa commit message nên vô tình có tên cũ; quét nó làm
+// release fail dù mã nguồn hoàn toàn sạch.
+func TestKhongQuetFileSinhLucBuild(t *testing.T) {
+	if !generated["release-notes.md"] {
+		t.Error("release-notes.md phải nằm trong danh sách file sinh lúc build")
+	}
+	root := repoRoot()
+	gen := filepath.Join(root, "release-notes.md")
+	if err := os.WriteFile(gen, []byte("## Notes\n- doi .ainovel sang .kietnovel\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(gen)
+
+	if bad := scan(root); len(bad) != 0 {
+		t.Errorf("checker phải bỏ qua file sinh lúc build, nhưng báo %d kết quả: %v", len(bad), bad)
+	}
+}
+
 // TestKhongQuetFileNhiPhanGiup file nhị phân hoặc thư mục sinh ra không được
 // quét, nếu không lần chạy sau sẽ báo nhầm.
 func TestKhongQuetFileNhiPhanGiup(t *testing.T) {

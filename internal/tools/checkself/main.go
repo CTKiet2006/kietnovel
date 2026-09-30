@@ -50,6 +50,14 @@ var exts = map[string]bool{
 	".txt": true, ".mod": true, ".toml": true,
 }
 
+// generated là file sinh ra lúc build, không nằm trong git và không thuộc mã
+// nguồn. release-notes.md do gen-changelog.sh tạo trong lúc workflow chạy, nội
+// dung là commit message nên vô tình chứa tên cũ — quét nó sẽ báo nhầm.
+var generated = map[string]bool{
+	"release-notes.md": true,
+	"changelog.md":     true,
+}
+
 var skipDir = map[string]bool{
 	".git": true, "node_modules": true, "output": true,
 	"novels": true, "simulate": true, "xuat_ban": true,
@@ -90,7 +98,7 @@ func scan(root string) []finding {
 		if !exts[strings.ToLower(filepath.Ext(d.Name()))] {
 			return nil
 		}
-		if allow.MatchString(d.Name()) {
+		if allow.MatchString(d.Name()) || generated[d.Name()] {
 			return nil
 		}
 		raw, err := os.ReadFile(path)
