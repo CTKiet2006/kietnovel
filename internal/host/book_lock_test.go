@@ -2,6 +2,7 @@ package host
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -19,6 +20,13 @@ func TestBookLeaseExclusiveAndReusable(t *testing.T) {
 	}
 	if !errors.Is(err, ErrBookInUse) {
 		t.Fatalf("second lease error = %v, want ErrBookInUse", err)
+	}
+	// Thông báo phải chỉ được CÁCH xử lý, không chỉ báo lỗi: người dùng mở hai
+	// cửa sổ cùng truyện sẽ không biết làm gì nếu chỉ thấy "đã bị chiếm".
+	for _, must := range []string{"hai cửa sổ", "NOVEL_DIR"} {
+		if !strings.Contains(err.Error(), must) {
+			t.Errorf("thông báo khoá thiếu %q: %q", must, err.Error())
+		}
 	}
 
 	if err := first.Close(); err != nil {

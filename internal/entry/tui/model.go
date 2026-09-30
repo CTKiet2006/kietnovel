@@ -70,6 +70,8 @@ type Model struct {
 	books              *booksState
 	booksErr           string
 	bookLang           *bookLanguageState // hỏi ngôn ngữ sáng tác lần viết đầu tiên với truyện chưa khoá
+	welcome            *welcomeState      // màn chào: hỏi viết tiếp / truyện khác / thoát, thay vì tự chạy engine
+	welcomeSeen        bool               // đã qua màn chào (hoặc không cần), tránh hiện lại mỗi snapshot
 	simulator          *simulationState
 	simSeq             int
 	compItems          []commandPaletteItem
@@ -178,7 +180,10 @@ func (m Model) Init() tea.Cmd {
 		listenDone(m.runtime),
 		listenStream(m.runtime),
 		tickSnapshot(m.runtime),
-		bootstrapRuntime(m.runtime),
+		// Không gọi bootstrapRuntime ở đây nữa: mở app là engine tự chạy tiếp,
+		// kể cả khi người dùng chỉ muốn xem. Lấy snapshot trước, rồi màn chào
+		// hỏi viết tiếp / truyện khác / thoát.
+		fetchSnapshot(m.runtime),
 		tickSpinner(),
 	}
 	// Kiểm tra bản mới lúc khởi động: một lần ở nền; lỗi chỉ ghi log, trúng bản mới mới nổi nhắc.
@@ -671,6 +676,10 @@ func (m Model) View() string {
 	// thì người dùng thấy bảng khác rồi bấm phím không được phản hồi.
 	if m.bookLang != nil {
 		return m.bookLang.view(m.width, m.height)
+	}
+	// Màn chào vẽ trên cùng: lúc nó hiện thì chưa có gì khác để xem.
+	if m.welcome != nil {
+		return m.welcome.view(m.width, m.height)
 	}
 	if m.report != nil {
 		return renderReportModal(m.width, m.height, m.report)

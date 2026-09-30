@@ -84,6 +84,10 @@ func (m Model) handleOverlayKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		// gõ yêu cầu xong bấm Enter lại thì yêu cầu đó mất.
 		out, cmd, _ := m.handleBookLanguageKey(msg)
 		return out, cmd, true
+	case m.welcome != nil:
+		// Màn chào chặn mọi phím khác: đang hỏi thì không cho gõ lệnh.
+		out, cmd, _ := m.handleWelcomeKey(msg)
+		return out, cmd, true
 	case m.modelSwitch != nil:
 		return m.handleBlockingModalKey(msg, m.handleModelSwitchKey)
 	case m.report != nil:
@@ -489,6 +493,17 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		if m.starting {
 			next.IsRunning = true
 			next.RuntimeState = "starting"
+		}
+		// Màn chào: snapshot đầu tiên đã biết có sách thì hỏi, không tự chạy.
+		// Chỉ khi mở app (welcomeSeen=false); chuyển truyện trong phiên thì
+		// switchBook đã đặt welcomeSeen=true để không hỏi lại.
+		if !m.welcomeSeen && m.welcome == nil && m.mode == modeNew &&
+			(next.Phase != "" || next.BookTitle != "") {
+			m.snapshot = next
+			m.welcome = newWelcomeState(next)
+			m.textarea.Blur()
+			m.refreshStateViewport()
+			return m, tickSnapshot(m.runtime), true
 		}
 		detailChanged := !sameDetailSnapshot(m.snapshot, next)
 		runningChanged := m.snapshot.IsRunning != next.IsRunning

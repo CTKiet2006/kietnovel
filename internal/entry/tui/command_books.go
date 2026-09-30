@@ -308,6 +308,13 @@ func renderBooksNotice(m Model, msg string) (tea.Model, tea.Cmd) {
 // openBooks mở khung quản lý truyện và nạp danh sách từ đĩa.
 func openBooks(m Model, mode booksMode) (tea.Model, tea.Cmd) {
 	s := newBooksState(m.width, m.height, mode)
+	// Phòng khi runtime chưa có (test, hoặc đường khởi động lạ): mở khung rỗng
+	// kèm thông báo thay vì panic nil pointer.
+	if m.runtime == nil {
+		m.books, m.booksErr = s, i18n.T("Chưa mở truyện nào để liệt kê.")
+		m.textarea.Blur()
+		return m, nil
+	}
 	if books, err := m.runtime.Books(); err == nil {
 		s.list = books
 		// Mặc định trỏ vào truyện đang mở để không lỡ bấm d là xoá nhầm.
