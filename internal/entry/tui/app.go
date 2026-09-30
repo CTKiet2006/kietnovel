@@ -19,11 +19,14 @@ import (
 // 2. Phiên viết chính thức vào host.Host;
 // 3. Sau này thêm chế độ dùng chung như "viết tiếp truyện có sẵn" thì gom về internal/entry/startup.
 func Run(cfg bootstrap.Config, bundle assets.Bundle, build buildversion.Info) error {
-	rt, err := host.New(cfg, bundle, host.WithFileLog("tui.log", false,
+	// Giữ lại đúng bộ tuỳ chọn này: khi /books chuyển truyện, Host mới phải được
+	// dựng y hệt, nếu không file log sẽ mất thông tin version/commit/built.
+	hostOpts := []host.NewOption{host.WithFileLog("tui.log", false,
 		slog.String("version", build.Version),
 		slog.String("commit", build.Commit),
 		slog.String("built", build.Date),
-	))
+	)}
+	rt, err := host.New(cfg, bundle, hostOpts...)
 	if err != nil {
 		return err
 	}
@@ -31,6 +34,8 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, build buildversion.Info) er
 
 	m := NewModel(rt, build.Version)
 	m.cfg = cfg
+	m.bundle = bundle
+	m.hostOpts = hostOpts
 	m.disableUpdateCheck = cfg.DisableUpdateCheck
 	if logErr := rt.FileLogError(); logErr != nil {
 		logWarning := fmt.Errorf(i18n.T("File log không dùng được, đã chuyển sang log terminal: %w"), logErr)
