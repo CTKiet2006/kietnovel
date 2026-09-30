@@ -269,8 +269,21 @@ type Config struct {
 	// Trường runtime (không serialize ra JSON)
 	OutputDir string `json:"-"` // Thư mục gốc đầu ra
 
-	// Ngôn ngữ sáng tác: "vi" (mặc định) hoặc "zh". Trống = "vi" (tương thích cấu hình cũ).
+	// Language là NGÔN NGỮ SÁNG TÁC: lớp văn phong + chỉ dẫn ngôn ngữ đầu ra cho
+	// Architect/Writer/Editor. "vi" (mặc định), "en" hoặc "zh". Trống = "vi".
+	//
+	// Trước đây trường này kiêm luôn giao diện TUI, nên README ghi chung một lựa
+	// chọn "ngôn ngữ" cho cả hai. Tách rồi vì chúng là hai lựa chọn khác nhau:
+	// đọc một truyện tiếng Trung mà cả TUI đổi theo thì khó chịu, và ngược lại
+	// muốn viết tiếng Việt thì không cần đổi giao diện.
 	Language string `json:"language,omitempty"`
+
+	// UILanguage là ngôn ngữ GIAO DIỆN của TUI, độc lập với ngôn ngữ sáng tác.
+	// Trống = lấy từ Language, để cấu hình cũ không đổi hành vi.
+	//
+	// Ngôn ngữ sáng tác còn sắp khoá theo từng truyện (đọc trong meta/book.json
+	// khi mở); trường này luôn là cài đặt toàn cục.
+	UILanguage string `json:"ui_language,omitempty"`
 
 	// Cấu hình LLM mặc định
 	Provider  string `json:"provider"` // Provider mặc định (key trong map Providers)
@@ -341,10 +354,14 @@ func (c *Config) ValidateBase() error {
 		return fmt.Errorf("thiếu model (bắt buộc): %w", errs.ErrConfig)
 	}
 
-	// Ngôn ngữ sáng tác chỉ chấp nhận "vi" hoặc "zh" (trống = "vi").
+	// Ngôn ngữ sáng tác và ngôn ngữ giao diện đều chỉ chấp nhận vi/en/zh (trống = "vi").
 	if c.Language != "" && ValidLanguage(c.Language) == "" {
 		return fmt.Errorf("language phải là %q, %q hoặc %q (nhận được %q): %w",
 			LangVietnamese, LangEnglish, LangChinese, c.Language, errs.ErrConfig)
+	}
+	if c.UILanguage != "" && ValidLanguage(c.UILanguage) == "" {
+		return fmt.Errorf("ui_language phải là %q, %q hoặc %q (nhận được %q): %w",
+			LangVietnamese, LangEnglish, LangChinese, c.UILanguage, errs.ErrConfig)
 	}
 
 	// Provider mặc định phải có credentials

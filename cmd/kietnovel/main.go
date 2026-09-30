@@ -27,6 +27,17 @@ var (
 // headlessMode ghi lại lần này có khởi động headless không, để die quyết định có tạm dừng khi lỗi thoát không.
 var headlessMode bool
 
+// firstNonEmpty trả giá trị đầu tiên khác rỗng. Dùng để fallback: ui_language
+// trống thì lấy language, thay vì rẽ nhánh ở nhiều chỗ.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func main() {
 	// Subcommand chặn trước khi parse flag thường: eval là harness chấm offline, hệ tham số độc lập.
 	if len(os.Args) > 1 && os.Args[1] == "eval" {
@@ -111,7 +122,9 @@ func runWithConfig(cfg bootstrap.Config, opts cliOptions, args []string) {
 	cfg.FillDefaults()
 	// Ngôn ngữ giao diện TUI. Phải đặt trước mọi thứ gọi i18n.T, và trước khi dựng
 	// TUI, vì bảng dịch được tra khi render chứ không lúc khởi tạo struct.
-	i18n.SetLanguage(cfg.Language)
+	// Giao diện và ngôn ngữ sáng tác là hai lựa chọn riêng. ui_language trống thì
+	// lấy language, để cấu hình cũ giữ nguyên hành vi.
+	i18n.SetLanguage(firstNonEmpty(cfg.UILanguage, cfg.Language))
 	// Ngôn ngữ sáng tác (vi/en/zh): chọn lớp voice + chỉ dẫn buộc đúng ngôn ngữ đầu ra.
 	// Giao thức prompt giữ nguyên bản gốc (đã kiểm chứng), không dịch.
 	bundle := assets.LoadWithLanguage(cfg.Language, cfg.Style, assets.DefaultLoadOptions(cfg.OutputDir))

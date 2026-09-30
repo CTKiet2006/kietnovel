@@ -415,8 +415,8 @@ func commandRegistryInstance() commandRegistry {
 			Name:        "language",
 			Aliases:     []string{"lang", "ngonngu"},
 			Group:       "system",
-			Usage:       "/language [vi|en|zh]",
-			Description: i18n.T("Đổi ngôn ngữ giao diện và ngôn ngữ sáng tác"),
+			Usage:       "/language [ui|write] [vi|en|zh]",
+			Description: i18n.T("Ngôn ngữ giao diện (ui) và ngôn ngữ sáng tác (write) — tách riêng"),
 			AutoExecute: true,
 			Run:         runLanguageCommand,
 		},
@@ -425,49 +425,141 @@ func commandRegistryInstance() commandRegistry {
 
 // runLanguageCommand đổi ngôn ngữ giao diện ngay và ghi xuống cấu hình.
 //
-// Ranh giới quan trọng: ngôn ngữ sáng tác (lớp voice) được host nạp một lần lúc
-// khởi động, nên đổi giữa phiên chỉ có tác dụng từ lần mở sau. Không nói quá tay,
-// và nói rõ trong thông báo để không gây hiểu nhầm.
+// runLanguageCommand xử lý cả hai ngôn ngữ, vì /language là lối vào duy nhất.
+//
+// Hai ngôn ngữ này là hai lựa chọn KHÁC NHAU, dù chung một tên khoá:
+//   - "ui"   → ngôn ngữ giao diện TUI. Đổi ngay trong phiên.
+//   - "write" → ngôn ngữ sáng tác (lớp văn phong + chỉ dẫn đầu ra cho model).
+//     Host nạp bộ prompt một lần lúc khởi động, nên đổi chỉ có tác dụng từ
+//     lần mở truyện sau.
+//
+// Gộp chung một tên khoá là cố ý: người quen /language vi không phải học thêm
+// lệnh, và không thêm hàng mới vào bảng lệnh.
 func runLanguageCommand(m Model, args []string) (tea.Model, tea.Cmd) {
-	lang := strings.ToLower(strings.TrimSpace(strings.Join(args, " ")))
-	if lang == "" {
-		m.applyEvent(host.Event{
-			Time: time.Now(), Category: "SYSTEM", Level: "info",
-			Summary: i18n.T("Ngôn ngữ hiện tại: ") + languageLabel(i18n.Language()) +
-				i18n.T(" — dùng /language vi|en|zh để đổi"),
-		})
-		return m, nil
+	parts := args
+	target := ""
+	if len(parts) >= 2 {
+		target, parts = strings.ToLower(strings.TrimSpace(parts[0])), parts[1:]
+	}
+	lang := strings.ToLower(strings.TrimSpace(strings.Join(parts, " ")))
+
+	// Gõ /language hoặc /language <vi|en|zh> không kèm từ khoá: xem cả hai.
+	if target == "" && (lang == "" || isLangCode(lang)) {
+		if lang == "" {
+			return m.languageSummary()
+		}
+		// /language vi — hiểu là đổi giao diện, vì đó là cái đổi được ngay.
+		// Ngôn ngữ sáng tác phải nói rõ tên mới khỏi khoá nhầm truyện đang viết.
+		target = "ui"
+	}
+	if target == "" {
+		return m.languageUsage()
 	}
 
-	switch lang {
-	case i18n.LangVietnamese, i18n.LangEnglish, i18n.LangChinese:
+	switch target {
+	case "ui", "giao-dien", "interface":
+		return m.setUILanguage(lang)
+	case "write", "viet", "sang-tac", "writing":
+		return m.setWriteLanguage(lang)
 	default:
 		m.applyEvent(host.Event{
 			Time: time.Now(), Category: "ERROR", Level: "warn",
-			Summary: i18n.T("Không hỗ trợ ngôn ngữ này, chọn: vi, en, zh"),
+			Summary: i18n.Tf("Không hiểu %q. Dùng: /language ui vi|en|zh hoặc /language write vi|en|zh", target),
 		})
+		m.refreshEventViewport()
 		return m, nil
 	}
+}
 
-	// Đổi giao diện trước để các thông báo phía dưới sinh ra bằng ngôn ngữ mới.
+func isLangCode(s string) bool {
+	switch s {
+	case i18n.LangVietnamese, i18n.LangEnglish, i18n.LangChinese:
+		return true
+	}
+	return false
+}
+
+// languageSummary hiện trạng hai ngôn ngữ, vì gõ /language không tham số là
+// hỏi "đang ở đâu" chứ không phải hỏi "muốn đổi gì".
+func (m Model) languageSummary() (tea.Model, tea.Cmd) {
+	m.applyEvent(host.Event{
+		Time: time.Now(), Category: "SYSTEM", Level: "info",
+		Summary: i18n.T("Giao diện: ") + languageLabel(i18n.Language()) +
+			i18n.T(" · Ngôn ngữ sáng tác: ") + languageLabel(writeLangOf(m.cfg)) +
+			i18n.T(" — đổi bằng /language ui <vi|en|zh> hoặc /language write <vi|en|zh>"),
+	})
+	m.refreshEventViewport()
+	return m, nil
+}
+
+func (m Model) languageUsage() (tea.Model, tea.Cmd) {
+	m.applyEvent(host.Event{
+		Time: time.Now(), Category: "ERROR", Level: "warn",
+		Summary: i18n.T("Dùng: /language ui vi|en|zh (giao diện) hoặc /language write vi|en|zh (ngôn ngữ sáng tác). Gõ /language để xem trạng thái."),
+	})
+	m.refreshEventViewport()
+	return m, nil
+}
+
+// writeLangOf trả ngôn ngữ sáng tác đang áp dụng. Trống = "vi".
+func writeLangOf(cfg bootstrap.Config) string {
+	if l := bootstrap.NormalizeLanguage(cfg.Language); l != "" {
+		return l
+	}
+	return i18n.LangVietnamese
+}
+
+// setUILanguage đổi giao diện ngay trong phiên và lưu vào ui_language.
+// Không đụng Language, nên ngôn ngữ sáng tác giữ nguyên.
+func (m Model) setUILanguage(lang string) (tea.Model, tea.Cmd) {
+	if !isLangCode(lang) {
+		m.applyEvent(host.Event{
+			Time: time.Now(), Category: "ERROR", Level: "warn",
+			Summary: i18n.T("Ngôn ngữ giao diện phải là vi, en hoặc zh."),
+		})
+		m.refreshEventViewport()
+		return m, nil
+	}
+	// Đổi trước để thông báo phía dưới sinh ra bằng ngôn ngữ mới.
 	i18n.SetLanguage(lang)
 	m.retranslate()
+	cfg := bootstrap.CloneConfig(m.cfg)
+	cfg.UILanguage = lang
+	return m.saveLanguageSetting(cfg, lang, "")
+}
 
-	// Ghi cấu hình. Lỗi ghi không chặn việc đổi ngôn ngữ của phiên đang chạy.
-	path := bootstrap.EffectiveConfigPath()
+// setWriteLanguage đổi ngôn ngữ sáng tác cho truyện mới. Chỉ có tác dụng từ lần
+// mở truyện sau, vì bộ prompt đã nạp lúc khởi động — nói rõ điều này thay vì
+// để người dùng tưởng đã đổi xong.
+func (m Model) setWriteLanguage(lang string) (tea.Model, tea.Cmd) {
+	if !isLangCode(lang) {
+		m.applyEvent(host.Event{
+			Time: time.Now(), Category: "ERROR", Level: "warn",
+			Summary: i18n.T("Ngôn ngữ sáng tác phải là vi, en hoặc zh."),
+		})
+		m.refreshEventViewport()
+		return m, nil
+	}
 	cfg := bootstrap.CloneConfig(m.cfg)
 	cfg.Language = lang
+	// Ghi kèm cảnh báo truyện đang mở giữ ngôn ngữ cũ: truyện này đã khoá
+	// ngôn ngữ theo chương, đổi mặc định không kéo truyện đang viết theo.
+	return m.saveLanguageSetting(cfg, lang,
+		i18n.T(" — truyện đang mở giữ ngôn ngữ của nó; mặc định này dùng cho truyện tạo sau"))
+}
+
+func (m Model) saveLanguageSetting(cfg bootstrap.Config, lang, tail string) (tea.Model, tea.Cmd) {
 	summary := i18n.T("Đã đổi sang: ") + languageLabel(lang)
 	level := "info"
-	if err := bootstrap.SaveConfig(path, cfg); err != nil {
+	// Lỗi ghi không chặn việc đổi ngôn ngữ của phiên đang chạy.
+	if err := bootstrap.SaveConfig(bootstrap.EffectiveConfigPath(), cfg); err != nil {
 		level = "warn"
 		summary += i18n.T(" — lưu cấu hình thất bại, lần sau có thể mất lựa chọn: ") + err.Error()
 	} else {
-		summary += i18n.T(" — ngôn ngữ sáng tác sẽ đổi từ lần khởi động sau")
+		summary += tail
 	}
-	m.applyEvent(host.Event{
-		Time: time.Now(), Category: "SYSTEM", Level: level, Summary: summary,
-	})
+	m.cfg = cfg
+	m.applyEvent(host.Event{Time: time.Now(), Category: "SYSTEM", Level: level, Summary: summary})
 	m.refreshEventViewport()
 	return m, nil
 }
