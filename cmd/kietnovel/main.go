@@ -150,6 +150,19 @@ func runWithConfig(cfg bootstrap.Config, opts cliOptions, args []string) {
 	i18n.SetLanguage(firstNonEmpty(cfg.UILanguage, cfg.Language))
 	// Ngôn ngữ sáng tác (vi/en/zh): chọn lớp voice + chỉ dẫn buộc đúng ngôn ngữ đầu ra.
 	// Giao thức prompt giữ nguyên bản gốc (đã kiểm chứng), không dịch.
+	//
+	// Ngôn ngữ sáng tác được KHOÁ theo từng truyện khi truyện chưa có
+	// meta/language.json. Không tự ghi mặc định vào: nếu người dùng đã đổi ngôn
+	// ngữ giữa chừng thì ghi bừa sẽ khoá nhầm, và sai này không sửa được sau.
+	// Headless không có ai để hỏi nên phải báo lỗi thay vì đoán.
+	if locked, _ := bootstrap.BookLanguageOf(cfg.OutputDir); locked != "" {
+		cfg.Language = locked
+	} else if opts.Headless {
+		die("%v", bootstrap.NeedBookLanguageMessage(cfg.OutputDir))
+	} else {
+		// TUI sẽ hỏi ở lần viết đầu tiên rồi khoá lại.
+		cfg.Language = bootstrap.NormalizeLanguage(cfg.Language)
+	}
 	bundle := assets.LoadWithLanguage(cfg.Language, cfg.Style, assets.DefaultLoadOptions(cfg.OutputDir))
 	bundle.ApplyLanguage(cfg.Language)
 	if opts.Headless {

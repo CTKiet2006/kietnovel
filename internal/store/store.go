@@ -16,8 +16,12 @@ import (
 type Store struct {
 	dir string
 
-	Progress       *ProgressStore
-	Book           *BookStore
+	Progress *ProgressStore
+	Book     *BookStore
+	// BookLanguage khoá ngôn ngữ sáng tác của riêng truyện này. Tách khỏi
+	// Book vì book.json là struct domain nghiêm ngặt (Validate bắt buộc title +
+	// synopsis), thêm trường vào đó sẽ làm truyện cũ hỏng khi nạp lại.
+	BookLanguage   *BookLanguageStore
 	Outline        *OutlineStore
 	Drafts         *DraftStore
 	Summaries      *SummaryStore
@@ -57,6 +61,7 @@ func NewStore(dir string) *Store {
 		dir:            dir,
 		Progress:       NewProgressStore(newIO(dir)),
 		Book:           NewBookStore(newIO(dir)),
+		BookLanguage:   NewBookLanguageStore(newIO(dir)),
 		Outline:        outline,
 		Drafts:         NewDraftStore(newIO(dir)),
 		Summaries:      NewSummaryStore(newIO(dir), outline),

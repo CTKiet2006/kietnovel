@@ -99,14 +99,32 @@ func (m Model) askSwitch(dir, name string) (Model, tea.Cmd) {
 		return out.(Model), nil
 	}
 	if busy, why := m.hasUncommittedWork(); busy {
-		s := m.books
-		s.mode = booksSwitchConfirm
-		s.target = dir
-		s.targetName = name
-		s.switchWhy = why
-		return m, nil
+		return m.enterSwitchConfirm(dir, name, why), nil
 	}
 	return m.doSwitch(dir)
+}
+
+// enterSwitchConfirm đặt khung xác nhận chuyển truyện.
+//
+// Tách riêng vì: createBookConfirmed đóng modal (m.books = nil) rồi mới gọi hỏi,
+// nên hàm này KHÔNG được giả định state còn sống. Panic nil pointer ở
+// switch_confirm.go:103 chính là s.mode khi s == nil. Dựng lại và nạp danh sách,
+// để bấm Esc còn có khung để quay về.
+func (m Model) enterSwitchConfirm(dir, name, why string) Model {
+	if m.books == nil {
+		m.books = newBooksState(m.width, m.height, booksList)
+		if m.runtime != nil {
+			if books, err := m.runtime.Books(); err == nil {
+				m.books.list = books
+			}
+		}
+	}
+	s := m.books
+	s.mode = booksSwitchConfirm
+	s.target = dir
+	s.targetName = name
+	s.switchWhy = why
+	return m
 }
 
 // doSwitch thực hiện chuyển và báo kết quả.

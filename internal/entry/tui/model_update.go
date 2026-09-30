@@ -79,6 +79,11 @@ func (m Model) handleOverlayKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m.handleBlockingModalKey(msg, m.handleReaderKey)
 	case m.books != nil:
 		return m.handleBlockingModalKey(msg, m.handleBooksKey)
+	case m.bookLang != nil:
+		// Hỏi ngôn ngữ phải chặn mọi phím khác: nếu lọt một phím gửi, người dùng
+		// gõ yêu cầu xong bấm Enter lại thì yêu cầu đó mất.
+		out, cmd, _ := m.handleBookLanguageKey(msg)
+		return out, cmd, true
 	case m.modelSwitch != nil:
 		return m.handleBlockingModalKey(msg, m.handleModelSwitchKey)
 	case m.report != nil:
@@ -767,6 +772,22 @@ func sameDetailSnapshot(a, b host.UISnapshot) bool {
 
 func (m Model) handleStartResultMsg(msg startResultMsg) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
+		// Truyện chưa khoá ngôn ngữ sáng tác: hỏi, không báo lỗi. Hỏi ở LẦN VIẾT
+		// đầu tiên — /read là thao tác chỉ đọc, không đi qua đây nên không bị hỏi.
+		if errors.Is(msg.err, host.ErrNeedBookLanguage) {
+			prompt := m.textarea.Value()
+			if m.cocreate != nil {
+				// Cocreate giữ ý nháp riêng, không nằm trong textarea.
+				prompt = m.cocreate.draftPrompt()
+			}
+			m.starting = false
+			m.mode = modeRunning
+			m.snapshot.IsRunning = false
+			m.bookLang = newBookLanguageState(prompt, m.runtime.Dir())
+			m.cocreate = nil
+			m.textarea.Blur()
+			return m, nil
+		}
 		m.err = msg.err
 		wasStarting := m.starting
 		m.starting = false

@@ -3,6 +3,8 @@ package tui
 import (
 	"path/filepath"
 
+	"github.com/CTKiet2006/kietnovel/assets"
+	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
 	"github.com/CTKiet2006/kietnovel/internal/host"
 	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,12 +29,27 @@ func (m Model) switchBook(dir string) (Model, tea.Cmd, error) {
 	}
 	cfg := m.cfg
 	cfg.OutputDir = dir
-	newRT, err := host.New(cfg, m.bundle, m.hostOpts...)
+
+	// Ngôn ngữ sáng tác lấy theo truyện ĐANG CHUYỂN TỚI, không phải truyện cũ và
+	// không phải mặc định toàn cục. Bỏ bước này thì Bundle cũ vẫn sống: truyện
+	// tiếng Trung sẽ được viết bằng giọng của truyện Việt vừa rời.
+	writeLang := m.bundle.Language
+	if locked, err := bootstrap.BookLanguageOf(dir); err == nil && locked != "" {
+		writeLang = locked
+	}
+
+	// Dựng Host mới TRƯỚC, đóng Host cũ SAU. Nếu host.New lỗi (thường là truyện đang
+	// bị tiến trình khác giữ khoá), truyện cũ vẫn nguyên và người dùng không mất
+	// gì cả.
+	newRT, err := host.New(cfg, assets.LoadWithLanguage(writeLang, cfg.Style,
+		assets.DefaultLoadOptions(dir)), m.hostOpts...)
 	if err != nil {
 		return m, nil, err
 	}
 	old := m.runtime
 	m.runtime = newRT
+	m.bundle = assets.LoadWithLanguage(writeLang, cfg.Style, assets.DefaultLoadOptions(dir))
+	m.bundle.ApplyLanguage(writeLang)
 	old.Close()
 
 	// Dựng Model mới quanh Host mới, rồi mang sang những thứ thuộc về người dùng
