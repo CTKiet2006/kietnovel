@@ -28,6 +28,9 @@ type fakeAdvisorModel struct {
 	sawTools bool
 	// blockUntil cho phép giữ Generate để test cancel.
 	blockUntil chan struct{}
+	// wrapCancelErr: khi ctx hủy giữa lúc chờ, trả lỗi provider bọc ngoài thay
+	// vì ctx.Err() nguyên bản — mô phỏng model thật.
+	wrapCancelErr bool
 }
 
 func (m *fakeAdvisorModel) Generate(ctx context.Context, msgs []agentcore.Message, tools []agentcore.ToolSpec, _ ...agentcore.CallOption) (*agentcore.LLMResponse, error) {
@@ -39,6 +42,9 @@ func (m *fakeAdvisorModel) Generate(ctx context.Context, msgs []agentcore.Messag
 		select {
 		case <-m.blockUntil:
 		case <-ctx.Done():
+			if m.wrapCancelErr {
+				return nil, errors.New("provider client: " + ctx.Err().Error())
+			}
 			return nil, ctx.Err()
 		}
 	}
@@ -341,7 +347,38 @@ func hashDir(t *testing.T, dir string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// 10. cancel giữa chừng trả context.Canceled, không treo.
+// Generate trả lỗi provider bọc ngoài trong lúc ctx bị hủy giữa flight → phải
+// về context.Canceled, vì caller dựa vào errors.Is để phân biệt cancel với lỗi
+// thật. Model thật khi ctx hủy giữa flight không đảm bảo trả đúng ctx.Err().
+func TestServiceLoiBocVanVeCanceled(t *testing.T) {
+	st := newTestStore(t)
+	fake := &fakeAdvisorModel{
+		answer:        "x",
+		blockUntil:    make(chan struct{}),
+		wrapCancelErr: true,
+	}
+	svc := NewService(Deps{Store: st, Model: fake, AuditDir: t.TempDir()})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := svc.Ask(ctx, Request{Mode: ModeAsk, Question: "Hỏi?"})
+		done <- err
+	}()
+	// Đợi fake vào tới Generate rồi hủy giữa flight.
+	deadline := time.Now().Add(10 * time.Second)
+	for fake.calls == 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("phải context.Canceled, được %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Ask treo sau cancel")
+	}
+}
 func TestServiceCancelTraVe(t *testing.T) {
 	st := newTestStore(t)
 	fake := &fakeAdvisorModel{answer: "x", blockUntil: make(chan struct{})}

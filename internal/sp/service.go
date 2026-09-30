@@ -70,6 +70,12 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 	// Không tools: advisor chỉ đọc snapshot đã render, không gọi gì thêm.
 	resp, err := s.deps.Model.Generate(ctx, msgs, nil)
 	if err != nil {
+		// Cancel phải về context.Canceled thay vì lỗi provider chung chung:
+		// model thật khi ctx hủy giữa flight có thể trả lỗi bọc ngoài, và
+		// caller (single-flight, UI) dựa vào errors.Is(err, context.Canceled).
+		if ctx.Err() != nil {
+			return Result{}, ctx.Err()
+		}
 		return Result{}, err
 	}
 	if err := ctx.Err(); err != nil {
