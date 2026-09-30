@@ -50,7 +50,7 @@ type checkCache struct {
 }
 
 // CheckUpdate queries the latest upstream release and decides whether to nudge an upgrade. It is read-only and never writes any
-// binary; whether and when to upgrade is entirely up to the user via `ainovel-cli update`.
+// binary; whether and when to upgrade is entirely up to the user via `kietnovel update`.
 // Cache or network failures surface through error; when the cache write fails the already-obtained result is still returned.
 func CheckUpdate(ctx context.Context, opts CheckOptions) (*CheckResult, error) {
 	current := Normalize(opts.CurrentVersion)

@@ -1,17 +1,17 @@
 #!/bin/sh
-# ainovel-cli 一键安装脚本
+# kietnovel one-liner installer for macOS and Linux
 #
-#   curl -fsSL https://raw.githubusercontent.com/voocel/ainovel-cli/main/scripts/install.sh | sh
-#   curl -fsSL https://raw.githubusercontent.com/voocel/ainovel-cli/v1.2.3/scripts/install.sh | sh -s -- v1.2.3
+#   curl -fsSL https://raw.githubusercontent.com/CTKiet2006/kietnovel/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.2.3/scripts/install.sh | sh -s -- v1.2.3
 #
-# 自定义安装目录： AINOVEL_INSTALL_DIR=~/.local/bin curl -fsSL ... | sh
-# 指定版本：AINOVEL_VERSION=v1.2.3 curl -fsSL ... | sh
+# Custom install dir: KIETNOVEL_INSTALL_DIR=~/.local/bin curl -fsSL ... | sh
+# Pin a version:       KIETNOVEL_VERSION=v1.2.3 curl -fsSL ... | sh
 set -e
 
-REPO="voocel/ainovel-cli"
-BIN="ainovel-cli"
-DEST="${AINOVEL_INSTALL_DIR:-/usr/local/bin}"
-VERSION="${AINOVEL_VERSION:-${1:-latest}}"
+REPO="CTKiet2006/kietnovel"
+BIN="kietnovel"
+DEST="${KIETNOVEL_INSTALL_DIR:-/usr/local/bin}"
+VERSION="${KIETNOVEL_VERSION:-${1:-latest}}"
 
 for cmd in curl tar; do
 	command -v "$cmd" >/dev/null 2>&1 || { echo "需要 $cmd，请先安装后重试"; exit 1; }

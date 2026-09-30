@@ -13,7 +13,7 @@ import (
 	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
 )
 
-// Command is the entry point of the `ainovel-cli eval` subcommand and returns the process exit code:
+// Command is the entry point of the `kietnovel eval` subcommand and returns the process exit code:
 // 0=PASS/WARN, 1=some case FAILed, 2=usage/config error.
 //
 // Clear flow: load config → load cases → schedule runs as single/A-B → collect → grade → aggregate → report.

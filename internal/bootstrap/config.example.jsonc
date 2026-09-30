@@ -150,6 +150,6 @@
 
   // 可选。置 true 关闭启动时的新版本检查提醒（默认开）。检查只读 GitHub Releases
   // 公开接口，结果本地缓存 24h；发现新版本时在欢迎页/事件流提示版本号与更新摘要，
-  // 是否升级始终由你运行 ainovel-cli update 决定。
+  // 是否升级始终由你运行 kietnovel update 决定。
   // "disable_update_check": false
 }

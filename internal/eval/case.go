@@ -1,4 +1,4 @@
-// Package eval is ainovel-cli's offline evaluation harness.
+// Package eval is kietnovel's offline evaluation harness.
 //
 // The design starting point: the evaluators (the deterministic diagnostics diag, the whole-book stylestat, the seven-dimension
 // rubric) already exist in the project, so eval is only a thin layer — it drives cases in batches, collects the output, and maps
