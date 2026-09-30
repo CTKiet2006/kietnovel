@@ -88,10 +88,13 @@ func (h *Host) startStoryPartnerCall(ctx context.Context) (int, context.Context,
 	return h.spGen, spCtx, cancel
 }
 
-// finishStoryPartnerCall dọn cancel của chính lượt mình. So bằng generation vì
+// finishStoryPartnerCall dọn lượt mình: gọi cancel để giải phóng timer của
+// WithTimeout, rồi xóa spCancel nếu vẫn là lượt mình. So bằng generation vì
 // func không so sánh được: lượt mới đã thay spCancel thì không được xóa của nó.
+// Gọi cancel ở đây an toàn vì nó chỉ ảnh hưởng ctx của chính lượt này
+// (idempotent, ctx đã xong thì không tác dụng gì thêm).
 func (h *Host) finishStoryPartnerCall(gen int, cancel context.CancelFunc) {
-	_ = cancel
+	cancel()
 	h.spMu.Lock()
 	defer h.spMu.Unlock()
 	if h.spGen == gen {
