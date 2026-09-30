@@ -71,6 +71,21 @@ user PATH.
 **Cập nhật:** chạy lại lệnh trên. Thoát `kietnovel` trước — Windows không cho ghi đè
 file đang chạy.
 
+**Hạ về bản cũ:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1.3.2
+```
+
+Nếu không có Go, tải script rồi chạy:
+
+```powershell
+irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.3.3/scripts/install-windows.ps1 -OutFile ki.ps1
+.\ki.ps1 -Version v1.3.2
+```
+
+Bản hiện có: v1.3.4, v1.3.3, v1.3.2, v1.2.5, v1.2.4, v1.2.3, v1.2.2, v1.2.1, v1.1.0.
+
 <details>
 <summary>Cách khác</summary>
 
