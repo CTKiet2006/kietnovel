@@ -69,6 +69,7 @@ type Model struct {
 	reader             *readerState
 	books              *booksState
 	booksErr           string
+	bookLang           *bookLanguageState // hỏi ngôn ngữ sáng tác lần viết đầu tiên với truyện chưa khoá
 	simulator          *simulationState
 	simSeq             int
 	compItems          []commandPaletteItem
@@ -665,6 +666,11 @@ func (m Model) View() string {
 	}
 	if m.books != nil {
 		return renderBooksModal(m.width, m.height, m.books, m.booksErr)
+	}
+	// Hỏi ngôn ngữ phải vẽ TRƯỚC khung đọc/sách: nó chặn mọi phím, nếu vẽ sau
+	// thì người dùng thấy bảng khác rồi bấm phím không được phản hồi.
+	if m.bookLang != nil {
+		return m.bookLang.view(m.width, m.height)
 	}
 	if m.report != nil {
 		return renderReportModal(m.width, m.height, m.report)

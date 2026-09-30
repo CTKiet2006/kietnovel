@@ -405,6 +405,13 @@ func (h *Host) StartPrepared(rawRequirement string) error {
 	if err := h.budget.Refuse(); err != nil {
 		return err
 	}
+	// Lần VIẾT đầu tiên với truyện chưa khoá ngôn ngữ thì phải hỏi. Chỉ ở đây:
+	// /read là thao tác chỉ đọc, không hỏi cũng không ghi. Không tự ghi mặc định —
+	// nếu người dùng đã đổi ngôn ngữ giữa chừng thì ghi bừa khoá nhầm, mà sai
+	// này không sửa được sau.
+	if locked, err := h.BookLanguage(); err == nil && locked == "" {
+		return ErrNeedBookLanguage
+	}
 	if err := h.store.Checkpoints.Reset(); err != nil {
 		return fmt.Errorf("reset checkpoints: %w", err)
 	}

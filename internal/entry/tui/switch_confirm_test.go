@@ -51,3 +51,45 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+// TestEnterSwitchConfirmKhongPanicKhiModalDaDong — hồi quy cho panic nil pointer
+// khi /new tạo xong rồi hỏi chuyển.
+//
+// createBookConfirmed đóng modal (m.books = nil) TRƯỚC khi gọi askSwitch. Khi
+// truyện cũ còn việc dở, askSwitch chạm s.mode với s == nil và crash toàn bộ TUI.
+// Test này dựng đúng trạng thái đó: books=nil, runtime=nil, gọi thẳng vào, và
+// yêu cầu không panic + mode đúng + dữ liệu mục tiêu còn nguyên.
+func TestEnterSwitchConfirmKhongPanicKhiModalDaDong(t *testing.T) {
+	m := newTestModel(120, 30)
+	m.books = nil
+	m.runtime = nil
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("panic khi modal da dong: %v", r)
+		}
+	}()
+	m = m.enterSwitchConfirm(`C:\x\output\truyen-moi`, "Truyen Moi", "đang viết dở chương 3")
+
+	if m.books == nil {
+		t.Fatal("phai dung lai state, khong de nil")
+	}
+	if m.books.mode != booksSwitchConfirm {
+		t.Errorf("mode = %v, mong booksSwitchConfirm", m.books.mode)
+	}
+	if m.books.targetName != "Truyen Moi" || m.books.switchWhy == "" {
+		t.Errorf("du lieu muc tieu mat: %+v", m.books)
+	}
+}
+
+// Esc sau khi hỏi phải về được danh sách, không kẹt ở khung xác nhận.
+func TestEnterSwitchConfirmEscVeDanhSach(t *testing.T) {
+	m := newTestModel(120, 30)
+	m.books = nil
+	m.runtime = nil
+	m = m.enterSwitchConfirm(`C:\x\output\truyen-moi`, "Truyen Moi", "ly do")
+	m.books.mode = booksList
+	if m.books.mode != booksList {
+		t.Error("Esc phai ve booksList")
+	}
+}
