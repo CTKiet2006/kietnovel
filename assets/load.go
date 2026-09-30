@@ -60,7 +60,7 @@ type Bundle struct {
 // Path semantics: BookStyleDir binds to the book dir (outputDir) rather than cwd - the voice travels
 type LoadOptions struct {
 	BookStyleDir string // <outputDir>/style
-	HomeStyleDir string // ~/.ainovel/style
+	HomeStyleDir string // ~/.kietnovel/style
 }
 
 // DefaultLoadOptions builds the production override sources from the book directory.
@@ -70,7 +70,7 @@ func DefaultLoadOptions(outputDir string) LoadOptions {
 		opts.BookStyleDir = filepath.Join(outputDir, "style")
 	}
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		opts.HomeStyleDir = filepath.Join(home, ".ainovel", "style")
+		opts.HomeStyleDir = filepath.Join(home, ".kietnovel", "style")
 	}
 	return opts
 }

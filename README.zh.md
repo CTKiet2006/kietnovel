@@ -94,16 +94,16 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 
 | 类型 | 路径 |
 |---|---|
-| 配置 | `~/.ainovel/config.json`（由 Wizard 自动创建） |
-| 仅当前目录生效的配置 | `./.ainovel/config.json`（优先级更高） |
-| 个人写作规则 | `~/.ainovel/rules/*.md` 或 `./.ainovel/rules/*.md` |
+| 配置 | `~/.kietnovel/config.json`（由 Wizard 自动创建） |
+| 仅当前目录生效的配置 | `./.kietnovel/config.json`（优先级更高） |
+| 个人写作规则 | `~/.kietnovel/rules/*.md` 或 `./.kietnovel/rules/*.md` |
 | 正在写的书 | `./output/novel/` —— 或设置 `NOVEL_DIR`（见第 6 节） |
 
 直接运行 binary 时**没有** `config/` 目录。如果 `--headless` 提示 *"headless không hỗ trợ thiết lập lần đầu"*（不支持首次设置），先打开一次 TUI 完成配置。
 
 ## 3. 语言选项 (vi / en / zh)
 
-在配置文件 `~/.ainovel/config.json` 里指定 `"language"` 字段即可。这一个选择同时决定
+在配置文件 `~/.kietnovel/config.json` 里指定 `"language"` 字段即可。这一个选择同时决定
 **两件事**：TUI 界面语言和创作语言。
 
 - `"language": "vi"`（默认）：界面全越南语，包括术语、文风规范、世界观提示。
@@ -132,7 +132,7 @@ prompt 集合保持作者的原版，用中文写成 —— 其质量已经过�
 
 ## 4. AI Provider 配置 (LLM)
 
-配置文件：`~/.ainovel/config.json`（Setup Wizard 会替你建好）。在 wizard 里选好 provider
+配置文件：`~/.kietnovel/config.json`（Setup Wizard 会替你建好）。在 wizard 里选好 provider
 就够了 —— 本节只在你想定动手改时用得上。
 
 | Provider | 建议的 `model` | 备注 |
@@ -389,7 +389,7 @@ output/novel/
 
 **添加你自己的规则（不需要改代码）**
 
-在 `~/.ainovel/rules/` 或 `./.ainovel/rules/` 目录下新建任意 `.md` 文件，用自然语言
+在 `~/.kietnovel/rules/` 或 `./.kietnovel/rules/` 目录下新建任意 `.md` 文件，用自然语言
 写就行：
 
 ```text

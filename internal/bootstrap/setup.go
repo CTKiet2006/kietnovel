@@ -13,7 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// exampleConfig là template có comment sẽ ghi vào ~/.ainovel/config.example.jsonc sau khi dẫn.
+// exampleConfig là template có comment sẽ ghi vào ~/.kietnovel/config.example.jsonc sau khi dẫn.
 // File nhúng phải khớp với config.example.jsonc ở gốc repo, test sẽ chống trôi.
 //
 //go:embed config.example.jsonc

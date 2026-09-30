@@ -350,7 +350,7 @@ func (c *Config) ValidateBase() error {
 	// Provider mặc định phải có credentials
 	pc, ok := c.Providers[c.Provider]
 	if !ok {
-		return fmt.Errorf("provider %q chưa cấu hình credentials trong providers; nếu đã override provider trong ./.ainovel/config.json thì phải khai báo đồng thời providers.%s (gồm api_key/base_url), không được chỉ đổi provider top-level: %w", c.Provider, c.Provider, errs.ErrConfig)
+		return fmt.Errorf("provider %q chưa cấu hình credentials trong providers; nếu đã override provider trong ./.kietnovel/config.json thì phải khai báo đồng thời providers.%s (gồm api_key/base_url), không được chỉ đổi provider top-level: %w", c.Provider, c.Provider, errs.ErrConfig)
 	}
 	if pc.RequiresAPIKey(c.Provider) && pc.APIKey == "" {
 		return fmt.Errorf("provider %q chưa cấu hình api_key: %w", c.Provider, errs.ErrConfig)

@@ -73,7 +73,7 @@ func main() {
 	runWithConfig(cfg, opts, args)
 }
 
-// die xử lý thoát lỗi chí mạng thống nhất: in ra stderr, ghi đĩa vào ~/.ainovel/last-error.log,
+// die xử lý thoát lỗi chí mạng thống nhất: in ra stderr, ghi đĩa vào ~/.kietnovel/last-error.log,
 // và tạm dừng đợi Enter ở terminal tương tác (không headless) — khi double-click khởi động, console đóng ngay
 // theo tiến trình thoát, không dừng thì lỗi thoáng qua rồi mất, đúng căn nguyên khiến người dùng ở issue #37 không đường dò.
 func die(format string, args ...any) {

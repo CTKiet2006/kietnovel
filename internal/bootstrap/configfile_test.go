@@ -21,9 +21,9 @@ func writeGlobal(t *testing.T, content string) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	// os.UserHomeDir của Windows đọc USERPROFILE; không đặt nó sẽ đọc nhầm ~/.ainovel thật của máy.
+	// os.UserHomeDir của Windows đọc USERPROFILE; không đặt nó sẽ đọc nhầm ~/.kietnovel thật của máy.
 	t.Setenv("USERPROFILE", home)
-	dir := filepath.Join(home, ".ainovel")
+	dir := filepath.Join(home, ".kietnovel")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("tạo thư mục: %v", err)
 	}
@@ -35,19 +35,19 @@ func writeGlobal(t *testing.T, content string) string {
 	return home
 }
 
-// writeProjectConfig ghi cấu hình cấp project dưới ./.ainovel/ của thư mục làm việc hiện tại.
+// writeProjectConfig ghi cấu hình cấp project dưới ./.kietnovel/ của thư mục làm việc hiện tại.
 // Gọi trước cần t.Chdir tới thư mục đích.
 func writeProjectConfig(t *testing.T, content string) {
 	t.Helper()
-	if err := os.MkdirAll(".ainovel", 0o755); err != nil {
-		t.Fatalf("tạo thư mục .ainovel: %v", err)
+	if err := os.MkdirAll(".kietnovel", 0o755); err != nil {
+		t.Fatalf("tạo thư mục .kietnovel: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(".ainovel", "config.json"), []byte(content), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(".kietnovel", "config.json"), []byte(content), 0o644); err != nil {
 		t.Fatalf("ghi project: %v", err)
 	}
 }
 
-// Căn nguyên 3: project ./.ainovel/config.json có nhưng là JSON hỏng, bắt buộc phải báo lỗi, không được nuốt lặng rồi rơi về global.
+// Căn nguyên 3: project ./.kietnovel/config.json có nhưng là JSON hỏng, bắt buộc phải báo lỗi, không được nuốt lặng rồi rơi về global.
 func TestLoadConfig_CorruptProjectFailsLoud(t *testing.T) {
 	writeGlobal(t, validGlobal)
 	proj := t.TempDir()
@@ -77,7 +77,7 @@ func TestLoadConfig_CorruptGlobalDoesNotBlockProjectOverride(t *testing.T) {
 	}
 }
 
-// Sửa tại chỗ: thư mục project có ./.ainovel/config.json thì EffectiveConfigPath trỏ nó (đường dẫn tuyệt đối),
+// Sửa tại chỗ: thư mục project có ./.kietnovel/config.json thì EffectiveConfigPath trỏ nó (đường dẫn tuyệt đối),
 // nếu không thì rơi về global — /config và /model đều căn cứ đó để quyết định chỗ ghi đĩa.
 func TestEffectiveConfigPathPrefersProject(t *testing.T) {
 	writeGlobal(t, validGlobal)
@@ -90,7 +90,7 @@ func TestEffectiveConfigPathPrefersProject(t *testing.T) {
 	proj := t.TempDir()
 	t.Chdir(proj)
 	writeProjectConfig(t, validGlobal)
-	wantAbs, err := filepath.Abs(filepath.Join(".ainovel", "config.json"))
+	wantAbs, err := filepath.Abs(filepath.Join(".kietnovel", "config.json"))
 	if err != nil {
 		t.Fatalf("lấy abs: %v", err)
 	}
@@ -102,9 +102,9 @@ func TestEffectiveConfigPathPrefersProject(t *testing.T) {
 // File không tồn tại là chuyện thường (bản portable/lần đầu), không được báo lỗi.
 func TestLoadConfig_MissingFilesNoError(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home) // ~/.ainovel/config.json không tồn tại
+	t.Setenv("HOME", home) // ~/.kietnovel/config.json không tồn tại
 	t.Setenv("USERPROFILE", home)
-	t.Chdir(t.TempDir()) // Cũng không có ./.ainovel/config.json
+	t.Chdir(t.TempDir()) // Cũng không có ./.kietnovel/config.json
 
 	if _, err := LoadConfig(); err != nil {
 		t.Fatalf("thiếu file cấu hình không được báo lỗi, nhận được: %v", err)

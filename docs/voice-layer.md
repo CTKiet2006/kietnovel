@@ -77,17 +77,17 @@ func BuildWriterPrompt(protocolTemplate, voice, simulationGuidance, style string
 ### 3.4 路径语义:本书级绑定 outputDir,不绑 cwd
 
 ```
-本书级   <outputDir>/style/     >   全局   ~/.ainovel/style/   >   内置默认(embed 兜底)
+本书级   <outputDir>/style/     >   全局   ~/.kietnovel/style/   >   内置默认(embed 兜底)
 ```
 
 - 绑定 outputDir 使 Voice **随书走**:换目录恢复同一本书加载同一份文风;Docker/headless/TUI 路径解析一致;多书共享 cwd 时互不串扰
 - `assets.Load` 签名显式接收解析根(outputDir),**内部不读 cwd**
-- 注意与 rules 层的差异:rules 的 `./.ainovel/rules` 绑定 cwd(internal/rules/loader.go 既有约定,本设计不动它);用户文档明确两者语义不同——rules 是"项目级",voice 是"本书级"
+- 注意与 rules 层的差异:rules 的 `./.kietnovel/rules` 绑定 cwd(internal/rules/loader.go 既有约定,本设计不动它);用户文档明确两者语义不同——rules 是"项目级",voice 是"本书级"
 
 用户目录完整结构:
 
 ```
-<outputDir>/style/            (~/.ainovel/style/ 同构)
+<outputDir>/style/            (~/.kietnovel/style/ 同构)
   voice.md                    追加段
   anti-ai-tone.md             追加段
   styles/

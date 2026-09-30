@@ -44,10 +44,10 @@ func TestEnsureRulesDirAt(t *testing.T) {
 	}
 }
 
-// TestDefaultProjectRulesDir pins the project-level rules directory as the mirror of the global one: ./.ainovel/rules/.
+// TestDefaultProjectRulesDir pins the project-level rules directory as the mirror of the global one: ./.kietnovel/rules/.
 func TestDefaultProjectRulesDir(t *testing.T) {
 	proj := filepath.Join("/tmp", "demo-book")
-	want := filepath.Join(proj, ".ainovel", "rules")
+	want := filepath.Join(proj, ".kietnovel", "rules")
 	if got := DefaultProjectRulesDir(proj); got != want {
 		t.Errorf("DefaultProjectRulesDir=%q, want %q", got, want)
 	}
@@ -57,11 +57,11 @@ func TestDefaultProjectRulesDir(t *testing.T) {
 }
 
 // TestDefaultOptions_ScansProjectRulesFromDotAinovel verifies end to end:
-// DefaultOptions plugs the ./.ainovel/rules/ under cwd into the SourceProject source.
+// DefaultOptions plugs the ./.kietnovel/rules/ under cwd into the SourceProject source.
 func TestDefaultOptions_ScansProjectRulesFromDotAinovel(t *testing.T) {
 	proj := t.TempDir()
 	t.Chdir(proj)
-	rulesDir := filepath.Join(proj, ".ainovel", "rules")
+	rulesDir := filepath.Join(proj, ".kietnovel", "rules")
 	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestDefaultOptions_ScansProjectRulesFromDotAinovel(t *testing.T) {
 		}
 	}
 	if got == nil {
-		t.Fatalf("应从 ./.ainovel/rules/ 扫到项目规则来源，得到 %+v", srcs)
+		t.Fatalf("应从 ./.kietnovel/rules/ 扫到项目规则来源，得到 %+v", srcs)
 	}
 	if !strings.Contains(got.Text, "本书偏好") {
 		t.Errorf("项目规则原文应被原样返回，得到 %q", got.Text)
