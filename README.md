@@ -55,18 +55,22 @@ Không cần Docker. Có hai cách, **không cần cài Go** nếu bạn dùng c
 ### Cách 1 — một lệnh, không cần Go (khuyên dùng)
 
 ```powershell
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/main/scripts/install-windows.ps1 | iex
+irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.2.1/scripts/install-windows.ps1 | iex
 ```
 
-Lệnh trên tải bản dựng sẵn đúng cho Windows của bạn (x86_64 hoặc arm64), giải nén vào
-`%LOCALAPPDATA%\kietnovel\bin`, rồi tự thêm thư mục đó vào user PATH. Mở terminal mới
-rồi gõ:
+Lệnh trên tải bản dựng sẵn đúng cho Windows của bạn (x86_64 hoặc arm64), kiểm tra
+SHA-256, giải nén vào `%LOCALAPPDATA%\kietnovel\bin`, rồi tự thêm thư mục đó vào
+user PATH. Mở terminal mới rồi gõ:
 
 ```powershell
 kietnovel
 ```
 
 Khoảng 5.7 MB, xong trong vài giây.
+
+> Ghim theo tag (`v1.2.1`) chứ không theo `main` — CDN của GitHub cache khá lâu, dùng
+> `main` có thể bạn nhận script cũ trong vài phút sau khi vừa sửa. Script có kiểm tra
+> checksum nên không bao giờ cài nhầm file hỏng.
 
 ### Cách 2 — nếu bạn đã có Go ≥ 1.25
 
