@@ -57,7 +57,10 @@ type activeCall struct {
 	id      string
 	start   time.Time
 	summary string
-	depth   int
+	// summaryMsg giữ dạng chưa dịch của summary khi đó là nhãn hiển thị có tham số;
+	// rỗng khi summary là dữ liệu thô (tên tool, tên agent) — thì không cần dịch.
+	summaryMsg Msg
+	depth      int
 }
 
 // observer projects Engine dispatches and Worker progress onto the Host's output channel.

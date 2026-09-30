@@ -11,17 +11,20 @@ import (
 	"log/slog"
 )
 
-func retryPrefix(attempt, maxRetries int, delay time.Duration) string {
+// retryPrefix trả về Msg chứ không trả string, để TUI dịch được: điền số sẵn ở
+// đây thì "Thử lại (lần 2)" và "Thử lại (lần 3)" là hai chuỗi khác nhau, bảng dịch
+// không thể liệt kê hết.
+func retryPrefix(attempt, maxRetries int, delay time.Duration) Msg {
 	if maxRetries <= 0 {
 		if text := formatRetryDelay(delay); text != "" {
-			return fmt.Sprintf("Thử lại (lần %d, %s nữa): ", attempt, text)
+			return Msg{Key: "Thử lại (lần %d, %s nữa): ", Args: []any{attempt, text}}
 		}
-		return fmt.Sprintf("Thử lại (lần %d): ", attempt)
+		return Msg{Key: "Thử lại (lần %d): ", Args: []any{attempt}}
 	}
 	if text := formatRetryDelay(delay); text != "" {
-		return fmt.Sprintf("Thử lại (%d/%d, %s nữa): ", attempt, maxRetries, text)
+		return Msg{Key: "Thử lại (%d/%d, %s nữa): ", Args: []any{attempt, maxRetries, text}}
 	}
-	return fmt.Sprintf("Thử lại (%d/%d): ", attempt, maxRetries)
+	return Msg{Key: "Thử lại (%d/%d): ", Args: []any{attempt, maxRetries}}
 }
 
 func formatRetryDelay(delay time.Duration) string {
@@ -44,7 +47,7 @@ func (o *observer) handleThinkingProgress(ev agentcore.Event) {
 	if agent == "" || thinking == "" {
 		return
 	}
-	o.updateModelState(agent, "Đang suy nghĩ")
+	o.updateModelState(agent, Msg{Key: "Đang suy nghĩ"})
 
 	prev := o.lastThinkingByAgent[agent]
 	delta := thinking

@@ -33,7 +33,29 @@ func runningSpinner(frame int) string {
 	return eventRunningFrames[frame%len(eventRunningFrames)]
 }
 
+// eventSummary trả về phần Summary đã dịch theo ngôn ngữ đang chọn.
+//
+// Host gửi hai thứ cùng lúc: Summary là bản tiếng Việt đã điền sẵn (cho log và
+// cho code đọc thẳng), còn SummaryMsg là bản CHƯA dịch gồm format string + tham số.
+// Dịch SummaryMsg thay vì dùng Summary là chỗ duy nhất TUI có thể can thiệp.
+//
+// Với sự kiện ghép (ví dụ "Thử lại (lần 2): " + thông điệp provider), SummaryMsg
+// chỉ phần tiền tố, phần đuôi là dữ liệu thô của provider nên giữ nguyên — tháo ra
+// bằng cách cắt tiền tố tiếng Việt đã biết. Nếu không có SummaryMsg thì Summary là
+// dữ liệu thô (tên tool, tên agent) và không được "dịch", nếu không sẽ hỏng.
+func eventSummary(ev host.Event) string {
+	if ev.SummaryMsg == nil || ev.SummaryMsg.Empty() {
+		return ev.Summary
+	}
+	translated := i18n.Tf(ev.SummaryMsg.Key, ev.SummaryMsg.Args...)
+	if rest := strings.TrimPrefix(ev.Summary, ev.SummaryMsg.String()); rest != "" {
+		return translated + rest
+	}
+	return translated
+}
+
 func renderEventLine(ev host.Event, width, spinnerFrame int) string {
+	summary := eventSummary(ev)
 	tsStr := lipgloss.NewStyle().Foreground(colorDim).Render(ev.Time.Format("15:04:05"))
 	indent := ""
 	if ev.Depth > 0 {
@@ -56,7 +78,7 @@ func renderEventLine(ev host.Event, width, spinnerFrame int) string {
 			icon = lipgloss.NewStyle().Foreground(colorSuccess).Render("✓")
 		}
 		name := lipgloss.NewStyle().Foreground(colorContext).Bold(true).Render("ARBITER")
-		label := lipgloss.NewStyle().Foreground(colorMuted).Render("(" + truncate(ev.Summary, maxSumW-9) + ")")
+		label := lipgloss.NewStyle().Foreground(colorMuted).Render("(" + truncate(summary, maxSumW-9) + ")")
 		line := tsStr + " " + icon + " " + name + label
 		if !running {
 			line += durStr
@@ -74,7 +96,7 @@ func renderEventLine(ev host.Event, width, spinnerFrame int) string {
 		default:
 			icon = lipgloss.NewStyle().Foreground(colorSuccess).Render("✓")
 		}
-		sum := renderDispatchSummary(ev.Summary, maxSumW)
+		sum := renderDispatchSummary(summary, maxSumW)
 		if running {
 			// Đang tiến hành giữ nguyên nhưng in đậm
 			sum = lipgloss.NewStyle().Bold(true).Render(sum)
@@ -91,13 +113,13 @@ func renderEventLine(ev host.Event, width, spinnerFrame int) string {
 		switch {
 		case running:
 			icon = lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render(runningSpinner(spinnerFrame))
-			sum = lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render(truncate(ev.Summary, maxSumW))
+			sum = lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Render(truncate(summary, maxSumW))
 		case ev.Failed:
 			icon = lipgloss.NewStyle().Foreground(colorError).Bold(true).Render("✕")
-			sum = lipgloss.NewStyle().Foreground(colorError).Render(truncate(ev.Summary, maxSumW))
+			sum = lipgloss.NewStyle().Foreground(colorError).Render(truncate(summary, maxSumW))
 		default:
 			icon = lipgloss.NewStyle().Foreground(colorDim).Render("├")
-			sum = lipgloss.NewStyle().Foreground(colorMuted).Render(truncate(ev.Summary, maxSumW))
+			sum = lipgloss.NewStyle().Foreground(colorMuted).Render(truncate(summary, maxSumW))
 		}
 		line := tsStr + " " + indent + icon + " " + sum
 		if !running {
@@ -109,21 +131,21 @@ func renderEventLine(ev host.Event, width, spinnerFrame int) string {
 		var icon, sum string
 		if running {
 			icon = lipgloss.NewStyle().Foreground(colorContext).Bold(true).Render(runningSpinner(spinnerFrame))
-			sum = lipgloss.NewStyle().Foreground(colorContext).Bold(true).Render(truncate(ev.Summary, maxSumW))
+			sum = lipgloss.NewStyle().Foreground(colorContext).Bold(true).Render(truncate(summary, maxSumW))
 			durStr = renderEventDuration(time.Since(ev.Time))
 		} else if ev.Failed {
 			icon = lipgloss.NewStyle().Foreground(colorError).Render("✕")
-			sum = lipgloss.NewStyle().Foreground(colorError).Render(truncate(ev.Summary, maxSumW))
+			sum = lipgloss.NewStyle().Foreground(colorError).Render(truncate(summary, maxSumW))
 		} else {
 			icon = lipgloss.NewStyle().Foreground(colorDim).Render("├")
-			sum = lipgloss.NewStyle().Foreground(colorContext).Render(truncate(ev.Summary, maxSumW))
+			sum = lipgloss.NewStyle().Foreground(colorContext).Render(truncate(summary, maxSumW))
 		}
 		return tsStr + " " + indent + icon + " " + sum + durStr
 
 	case ev.Category == "ERROR":
 		icon := lipgloss.NewStyle().Foreground(colorError).Bold(true).Render("✕")
 		errStyle := lipgloss.NewStyle().Foreground(colorError)
-		line := tsStr + " " + indent + icon + " " + errStyle.Render(truncate(ev.Summary, maxSumW))
+		line := tsStr + " " + indent + icon + " " + errStyle.Render(truncate(summary, maxSumW))
 		if durStr != "" {
 			line += durStr
 		}
@@ -135,10 +157,10 @@ func renderEventLine(ev host.Event, width, spinnerFrame int) string {
 		if ev.Level == "warn" {
 			sumColor = colorAccent
 		}
-		text := truncate(ev.Summary, maxSumW)
+		text := truncate(summary, maxSumW)
 		if cd := retryCountdown(ev.RetryAt, time.Now()); cd != "" {
 			cd = " · " + cd
-			text = truncate(ev.Summary, max(20, maxSumW-lipgloss.Width(cd))) + cd
+			text = truncate(summary, max(20, maxSumW-lipgloss.Width(cd))) + cd
 		}
 		sum := lipgloss.NewStyle().Foreground(sumColor).Render(text)
 		return tsStr + " " + indent + icon + " " + sum
@@ -148,7 +170,7 @@ func renderEventLine(ev host.Event, width, spinnerFrame int) string {
 		// dùng ✎ để gợi ý "nhập liệu".
 		// Màu dùng colorAccent2 (xanh ngọc) tách khỏi màu vàng của SYSTEM, tránh đọc nhầm thành tin hệ thống.
 		icon := lipgloss.NewStyle().Foreground(colorAccent2).Bold(true).Render("✎")
-		sum := lipgloss.NewStyle().Foreground(colorAccent2).Render(truncate(ev.Summary, maxSumW))
+		sum := lipgloss.NewStyle().Foreground(colorAccent2).Render(truncate(summary, maxSumW))
 		return tsStr + " " + indent + icon + " " + sum
 
 	case ev.Category == "CONTEXT" || ev.Category == "COMPACT":
@@ -157,7 +179,7 @@ func renderEventLine(ev host.Event, width, spinnerFrame int) string {
 		if ev.Level == "debug" {
 			sumColor = colorMuted
 		}
-		sum := lipgloss.NewStyle().Foreground(sumColor).Render(truncate(ev.Summary, maxSumW))
+		sum := lipgloss.NewStyle().Foreground(sumColor).Render(truncate(summary, maxSumW))
 		return tsStr + " " + indent + icon + " " + sum
 
 	default:
@@ -165,11 +187,11 @@ func renderEventLine(ev host.Event, width, spinnerFrame int) string {
 		// tránh nhét cứng colorText.
 		if color, ok := categoryColors[ev.Category]; ok {
 			icon := lipgloss.NewStyle().Foreground(color).Render("·")
-			sum := lipgloss.NewStyle().Foreground(color).Render(truncate(ev.Summary, maxSumW))
+			sum := lipgloss.NewStyle().Foreground(color).Render(truncate(summary, maxSumW))
 			return tsStr + " " + indent + icon + " " + sum
 		}
 		icon := lipgloss.NewStyle().Foreground(colorDim).Render("·")
-		return tsStr + " " + indent + icon + " " + truncate(ev.Summary, maxSumW)
+		return tsStr + " " + indent + icon + " " + truncate(summary, maxSumW)
 	}
 }
 

@@ -20,6 +20,11 @@ type Event struct {
 	Category   string    // DISPATCH / MODEL / TOOL / DECISION / SYSTEM / REVIEW / CHECK / ERROR / CONTEXT
 	Agent      string    // the agent that produced the event
 	Summary    string
+	// SummaryMsg là bản CHƯA dịch của Summary, dùng khi Summary là thông điệp hiển thị
+	// có tham số: TUI dịch Key rồi mới điền Args, nên hiện đúng ở cả vi/en/zh.
+	// Summary vẫn được giữ (đã điền sẵn) cho log và cho code đọc trực tiếp.
+	// Nil nghĩa là Summary là dữ liệu thô, không dịch — ví dụ tên tool, thông điệp provider.
+	SummaryMsg *Msg
 	Detail     string        // full text, written to the log untruncated for troubleshooting; falls back to Summary when empty. The UI only reads Summary
 	Kind       string        // error classification (e.g. stream_idle), emitted with the log for filtering/alerting; not emitted when empty
 	Level      string        // info / warn / error / success
@@ -70,7 +75,7 @@ type UISnapshot struct {
 	AdvancePermitChapter int
 	HasAdvanceHold       bool
 	AdvanceHoldReason    string
-	RecoveryLabel        string
+	RecoveryLabel        Msg // chưa dịch; TUI gọi i18n.Tf(RecoveryLabel.Key, RecoveryLabel.Args...)
 	IsRunning            bool
 	Agents               []AgentSnapshot
 

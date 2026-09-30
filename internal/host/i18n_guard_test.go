@@ -9,6 +9,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 )
 
 // cjk bắt ký tự Hán. Dùng để phát hiện chuỗi hiển thị còn sót tiếng Trung.
@@ -30,6 +33,63 @@ var displayFuncs = map[string]bool{
 	"handleThinkingProgress": true,
 	"handleSubagentDelta":    true,
 	"handleContextProgress":  true,
+	"startModelResponse":     true,
+	"finishModelResponse":    true,
+	"updateModelState":       true,
+}
+
+// TestKhoaNhanHienThiDaDichHet kiểm nghịch: một nhãn hiển thị mà không có bản
+// dịch ở en và zh thì TUI sẽ in ra tiếng Việt. Đó chính là lớp lỗi mà Msg +
+// i18n.Tf sinh ra để chặn, nên ở đây phải bắt trước khi nó chạy.
+//
+// Nhãn lấy từ hằng số/hàm thật nên không thể trôi khỏi bảng dịch một cách âm
+// thầm như khi ai đó tự gõ chuỗi mới.
+func TestKhoaNhanHienThiDaDichHet(t *testing.T) {
+	defer i18n.SetLanguage(i18n.LangVietnamese)
+
+	// Key của các nhãn host gửi ra. Lấy từ chính hàm dựng nhãn để không lệch.
+	progress := &domain.Progress{Phase: domain.PhaseWriting, InProgressChapter: 3}
+	msgs := []Msg{
+		{Key: "Khôi phục: giai đoạn kế hoạch (%s)", Args: []any{progress.Phase}},
+		{Key: "Khôi phục: chương %d bị gián đoạn lúc ghi", Args: []any{3}},
+		{Key: "%s khôi phục: %d chương chờ xử lý", Args: []any{"Viết lại", 2}},
+		{Key: "Khôi phục: gián đoạn lúc duyệt"},
+		{Key: "Khôi phục: chương %d đang viết dở", Args: []any{3}},
+		{Key: "Khôi phục: tiếp tục từ chương %d", Args: []any{4}},
+		{Key: "Khôi phục"},
+		{Key: "Khôi phục: chờ duyệt cuối cung (V%d A%d)", Args: []any{1, 2}},
+		{Key: "Khôi phục: chờ tạo tóm tắt cung (V%d A%d)", Args: []any{1, 2}},
+		{Key: "Khôi phục: chờ tạo tóm tắt tập (V%d)", Args: []any{1}},
+		{Key: "Khôi phục: chờ bung cung kế (V%d A%d)", Args: []any{2, 1}},
+		{Key: "Khôi phục: chờ quyết định tập kế (V%d cuối)", Args: []any{1}},
+		{Key: "Khôi phục việc viết: %s", Args: []any{"Khôi phục"}},
+		modelStateWaiting, {Key: "Đang suy nghĩ"}, modelStateReply,
+		{Key: "Sinh %s", Args: []any{"read_chapter"}}, modelStateDone,
+		{Key: "Thử lại (lần %d): ", Args: []any{2}},
+		{Key: "Thử lại (lần %d, %s nữa): ", Args: []any{2, "2s"}},
+		{Key: "Thử lại (%d/%d): ", Args: []any{2, 7}},
+		{Key: "Thử lại (%d/%d, %s nữa): ", Args: []any{2, 7, "2s"}},
+		{Key: "%s ngữ cảnh %.0f%% (%d/%d) chiến lược: %s",
+			Args: []any{"writer", 42.0, 1000, 24000, "gần"}},
+	}
+
+	for _, m := range msgs {
+		vi := m.String()
+		i18n.SetLanguage(i18n.LangEnglish)
+		en := i18n.Tf(m.Key, m.Args...)
+		i18n.SetLanguage(i18n.LangChinese)
+		zh := i18n.Tf(m.Key, m.Args...)
+
+		if en == vi {
+			t.Errorf("thiếu bản dịch en: %q → vẫn ra %q", m.Key, en)
+		}
+		if zh == vi {
+			t.Errorf("thiếu bản dịch zh: %q → vẫn ra %q", m.Key, zh)
+		}
+		if en == zh {
+			t.Errorf("en và zh giống nhau: %q → %q", m.Key, en)
+		}
+	}
 }
 
 // TestChuoiHienThiKhongConHanTu chặn tái phát lỗi "sót chữ Trung trong UI tiếng Việt".

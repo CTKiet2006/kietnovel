@@ -143,98 +143,98 @@ func legacyPremiseSection(premise, heading string) string {
 // resumeLabel builds the UI label for Resume out of facts.
 // An empty label means there is no resumable state (a fresh start should be used instead). Resuming itself
 // needs no prompt at all - the Engine only restores facts: it recomputes the route from the store and continues (docs/engine-rfc.md §6).
-func resumeLabel(store *storepkg.Store) (string, error) {
+func resumeLabel(store *storepkg.Store) (Msg, error) {
 	progress, err := store.Progress.Load()
 	if err != nil && !os.IsNotExist(err) {
-		return "", err
+		return Msg{}, err
 	}
 	if progress == nil || progress.Phase == domain.PhaseComplete {
-		return "", nil
+		return Msg{}, nil
 	}
 	return describeResume(store, progress)
 }
 
 // describeResume builds a human-readable resume label; it does not affect Engine routing.
 // Every execution route is derived by the Flow Router from facts; this is only the UI-facing "Resume: xxx".
-func describeResume(store *storepkg.Store, progress *domain.Progress) (string, error) {
+func describeResume(store *storepkg.Store, progress *domain.Progress) (Msg, error) {
 	switch progress.Phase {
 	case domain.PhasePremise, domain.PhaseOutline:
-		return fmt.Sprintf("Khôi phục: giai đoạn kế hoạch (%s)", progress.Phase), nil
+		return Msg{Key: "Khôi phục: giai đoạn kế hoạch (%s)", Args: []any{progress.Phase}}, nil
 	case domain.PhaseWriting:
 		// Priority aligns with the Router's decision priority so the label matches the command about to be dispatched.
 		pending, err := store.Signals.LoadPendingCommit()
 		if err != nil {
-			return "", fmt.Errorf("đọc commit chờ khôi phục: %w", err)
+			return Msg{}, fmt.Errorf("đọc commit chờ khôi phục: %w", err)
 		}
 		if pending != nil {
-			return fmt.Sprintf("Khôi phục: chương %d bị gián đoạn lúc ghi", pending.Chapter), nil
+			return Msg{Key: "Khôi phục: chương %d bị gián đoạn lúc ghi", Args: []any{pending.Chapter}}, nil
 		}
 		if len(progress.PendingRewrites) > 0 {
 			verb := "Viết lại"
 			if progress.Flow == domain.FlowPolishing {
 				verb = "Trau chuốt"
 			}
-			return fmt.Sprintf("%s khôi phục: %d chương chờ xử lý", verb, len(progress.PendingRewrites)), nil
+			return Msg{Key: "%s khôi phục: %d chương chờ xử lý", Args: []any{verb, len(progress.PendingRewrites)}}, nil
 		}
 		if progress.Flow == domain.FlowReviewing {
-			return "Khôi phục: gián đoạn lúc duyệt", nil
+			return Msg{Key: "Khôi phục: gián đoạn lúc duyệt"}, nil
 		}
 		if progress.InProgressChapter > 0 {
-			return fmt.Sprintf("Khôi phục: chương %d đang viết dở", progress.InProgressChapter), nil
+			return Msg{Key: "Khôi phục: chương %d đang viết dở", Args: []any{progress.InProgressChapter}}, nil
 		}
 		label, err := describeArcEndLabel(store, progress)
 		if err != nil {
-			return "", err
+			return Msg{}, err
 		}
-		if label != "" {
+		if !label.Empty() {
 			return label, nil
 		}
-		return fmt.Sprintf("Khôi phục: tiếp tục từ chương %d", progress.NextChapter()), nil
+		return Msg{Key: "Khôi phục: tiếp tục từ chương %d", Args: []any{progress.NextChapter()}}, nil
 	}
-	return "Khôi phục", nil
+	return Msg{Key: "Khôi phục"}, nil
 }
 
 // describeArcEndLabel builds UI-friendly labels for the various intermediate states at the end of an arc / volume.
 // It keeps the same ordering as the arc-end branch of flow.Route so the label matches the Router's first command.
-func describeArcEndLabel(store *storepkg.Store, progress *domain.Progress) (string, error) {
+func describeArcEndLabel(store *storepkg.Store, progress *domain.Progress) (Msg, error) {
 	if !progress.Layered || len(progress.CompletedChapters) == 0 {
-		return "", nil
+		return Msg{}, nil
 	}
 	lastCh := progress.CompletedChapters[len(progress.CompletedChapters)-1]
 	boundary, err := store.Outline.CheckArcBoundary(lastCh)
 	if err != nil {
-		return "", fmt.Errorf("kiểm tra biên cung: %w", err)
+		return Msg{}, fmt.Errorf("kiểm tra biên cung: %w", err)
 	}
 	if boundary == nil || !boundary.IsArcEnd {
-		return "", nil
+		return Msg{}, nil
 	}
 	vol, arc := boundary.Volume, boundary.Arc
 	hasArcReview, err := store.World.HasArcReview(lastCh)
 	if err != nil {
-		return "", fmt.Errorf("đọc duyệt cung: %w", err)
+		return Msg{}, fmt.Errorf("đọc duyệt cung: %w", err)
 	}
 	hasArcSummary, err := store.Summaries.HasArcSummary(vol, arc)
 	if err != nil {
-		return "", fmt.Errorf("đọc tóm tắt cung: %w", err)
+		return Msg{}, fmt.Errorf("đọc tóm tắt cung: %w", err)
 	}
 	hasVolumeSummary := false
 	if boundary.IsVolumeEnd {
 		hasVolumeSummary, err = store.Summaries.HasVolumeSummary(vol)
 		if err != nil {
-			return "", fmt.Errorf("đọc tóm tắt tập: %w", err)
+			return Msg{}, fmt.Errorf("đọc tóm tắt tập: %w", err)
 		}
 	}
 	switch {
 	case !hasArcReview:
-		return fmt.Sprintf("Khôi phục: chờ duyệt cuối cung (V%d A%d)", vol, arc), nil
+		return Msg{Key: "Khôi phục: chờ duyệt cuối cung (V%d A%d)", Args: []any{vol, arc}}, nil
 	case !hasArcSummary:
-		return fmt.Sprintf("Khôi phục: chờ tạo tóm tắt cung (V%d A%d)", vol, arc), nil
+		return Msg{Key: "Khôi phục: chờ tạo tóm tắt cung (V%d A%d)", Args: []any{vol, arc}}, nil
 	case boundary.IsVolumeEnd && !hasVolumeSummary:
-		return fmt.Sprintf("Khôi phục: chờ tạo tóm tắt tập (V%d)", vol), nil
+		return Msg{Key: "Khôi phục: chờ tạo tóm tắt tập (V%d)", Args: []any{vol}}, nil
 	case boundary.NeedsExpansion && boundary.NextArc > 0:
-		return fmt.Sprintf("Khôi phục: chờ bung cung kế (V%d A%d)", boundary.NextVolume, boundary.NextArc), nil
+		return Msg{Key: "Khôi phục: chờ bung cung kế (V%d A%d)", Args: []any{boundary.NextVolume, boundary.NextArc}}, nil
 	case boundary.NeedsNewVolume:
-		return fmt.Sprintf("Khôi phục: chờ quyết định tập kế (V%d cuối)", vol), nil
+		return Msg{Key: "Khôi phục: chờ quyết định tập kế (V%d cuối)", Args: []any{vol}}, nil
 	}
-	return "", nil
+	return Msg{}, nil
 }

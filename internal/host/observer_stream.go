@@ -10,14 +10,14 @@ import (
 // - DeltaToolCall only has fields extracted and emitted for known long-content tools (e.g. draft_chapter.content); the argument JSON of every other tool is dropped entirely
 func (o *observer) handleSubagentDelta(p *agentcore.ProgressPayload) {
 	if p.DeltaKind != agentcore.DeltaToolCall {
-		o.updateModelState(p.Agent, "Sinh phản hồi")
+		o.updateModelState(p.Agent, modelStateReply)
 		o.emitStreamDelta(p.Delta, false)
 		return
 	}
 	if p.Tool == "" {
 		return // tool name not ready yet, retry on the next delta
 	}
-	o.updateModelState(p.Agent, "Sinh "+p.Tool)
+	o.updateModelState(p.Agent, Msg{Key: "Sinh %s", Args: []any{p.Tool}})
 
 	cur, ok := o.streamExtractors[p.Agent]
 	// Even after the args of the same tool call have closed (the top-level } was hit), trailing deltas can still arrive:

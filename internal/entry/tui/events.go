@@ -167,7 +167,7 @@ func bootstrapRuntime(rt *host.Host) tea.Cmd {
 			msg.err = err
 			return msg
 		}
-		if label == "" {
+		if label.Empty() {
 			if msg.existing {
 				return msg
 			}
@@ -189,7 +189,7 @@ func resumeBook(rt *host.Host) tea.Cmd {
 		label, err := rt.Resume()
 		return bootstrapMsg{
 			existing: snapshot.Phase != "" || snapshot.BookTitle != "", completed: snapshot.Phase == "complete",
-			resumed: label != "", err: err,
+			resumed: !label.Empty(), err: err,
 		}
 	}
 }
