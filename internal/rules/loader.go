@@ -9,37 +9,37 @@ import (
 //
 // A missing directory is not an error; the scan skips it silently.
 type LoadOptions struct {
-	// HomeRulesDir is the ~/.ainovel/rules/ directory; every top-level .md under it is scanned (merged in filename lexicographic order). Empty means skip.
+	// HomeRulesDir is the ~/.kietnovel/rules/ directory; every top-level .md under it is scanned (merged in filename lexicographic order). Empty means skip.
 	HomeRulesDir string
 
-	// ProjectRulesDir is the ./.ainovel/rules/ directory (mirroring the global one, again scanning every top-level .md under it). Empty means skip.
+	// ProjectRulesDir is the ./.kietnovel/rules/ directory (mirroring the global one, again scanning every top-level .md under it). Empty means skip.
 	ProjectRulesDir string
 }
 
-// ainovelDirName is the dotdir name that ainovel shares at the user / project levels.
-// That makes the global ~/.ainovel/rules/ and the project ./.ainovel/rules/ symmetric.
-const ainovelDirName = ".ainovel"
+// kietnovelDirName is the dotdir name that kietnovel shares at the user / project levels.
+// That makes the global ~/.kietnovel/rules/ and the project ./.kietnovel/rules/ symmetric.
+const kietnovelDirName = ".kietnovel"
 
-// DefaultProjectRulesDir builds the absolute path of ./.ainovel/rules/ (from the given project directory).
+// DefaultProjectRulesDir builds the absolute path of ./.kietnovel/rules/ (from the given project directory).
 // The caller passes the project root, so the loader never depends on cwd internally; it mirrors DefaultHomeRulesDir.
 func DefaultProjectRulesDir(projectDir string) string {
 	if projectDir == "" {
 		return ""
 	}
-	return filepath.Join(projectDir, ainovelDirName, "rules")
+	return filepath.Join(projectDir, kietnovelDirName, "rules")
 }
 
-// DefaultHomeRulesDir builds the absolute path of the ~/.ainovel/rules/ directory.
+// DefaultHomeRulesDir builds the absolute path of the ~/.kietnovel/rules/ directory.
 // It returns an empty string when home cannot be resolved (the caller skips that source).
 func DefaultHomeRulesDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return ""
 	}
-	return filepath.Join(home, ainovelDirName, "rules")
+	return filepath.Join(home, kietnovelDirName, "rules")
 }
 
-// homeRulesReadme is the guidance written to ~/.ainovel/rules/README.txt on first-run bootstrap.
+// homeRulesReadme is the guidance written to ~/.kietnovel/rules/README.txt on first-run bootstrap.
 // The .txt suffix is deliberate rather than .md -- the scan only recognises .md, so this guidance is never normalized as a rule.
 const homeRulesReadme = `这里放全局写作偏好，跨所有书生效。
 
@@ -61,10 +61,10 @@ const homeRulesReadme = `这里放全局写作偏好，跨所有书生效。
 
 常见 AI 套句、疲劳词的机械基线已内置，开箱即用，不写也没关系。
 
-加载优先级（高 → 低）：./.ainovel/rules/*.md（本书） > ~/.ainovel/rules/*.md（这里） > 内置默认
+加载优先级（高 → 低）：./.kietnovel/rules/*.md（本书） > ~/.kietnovel/rules/*.md（这里） > 内置默认
 `
 
-// EnsureHomeRulesDir makes a best effort to create the ~/.ainovel/rules/ directory and write the README.txt guidance,
+// EnsureHomeRulesDir makes a best effort to create the ~/.kietnovel/rules/ directory and write the README.txt guidance,
 // so users discover this global preference extension point and learn how to write for it.
 // It is a nice-to-have on a non-critical path: a failed home lookup or write error is swallowed silently and never blocks startup.
 func EnsureHomeRulesDir() {
@@ -89,8 +89,8 @@ func ensureRulesDirAt(dir string) error {
 // If cwd cannot be resolved, ProjectRulesDir stays empty (the scan skips that source).
 //
 // Path semantics: ProjectRulesDir is bound to the **current working directory (cwd)**, not to outputDir.
-// A user who cds elsewhere to start writing a different book naturally gets ./.ainovel/rules/ following cwd; to share across books,
-// put them in the global ~/.ainovel/rules/ directory instead (every .md under it is loaded).
+// A user who cds elsewhere to start writing a different book naturally gets ./.kietnovel/rules/ following cwd; to share across books,
+// put them in the global ~/.kietnovel/rules/ directory instead (every .md under it is loaded).
 func DefaultOptions() LoadOptions {
 	cwd, _ := os.Getwd()
 	return LoadOptions{

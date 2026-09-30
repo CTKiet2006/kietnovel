@@ -26,8 +26,8 @@ var allow = regexp.MustCompile(`^(README(\.\w+)?\.md|LICENSE|NOTICE)$`)
 // selfDir là thư mục chứa checker, được bỏ qua khi quét.
 var selfDir = "internal" + string(filepath.Separator) + "tools" + string(filepath.Separator) + "checkself"
 
-// stale là các mẫu chắc chắn là sót. Thư mục dữ liệu ".ainovel" cố ý giữ nguyên
-// để không phá dữ liệu người dùng cũ, nên không nằm trong đây.
+// stale là các mẫu chắc chắn là sót. Thư mục dữ liệu ".kietnovel" là tên
+// mới; ".ainovel" là tên cũ trước khi tách khỏi fork, không còn dùng nữa.
 //
 // Lưu ý: Go dùng RE2, không hỗ trợ lookbehind, nên mẫu chỉ ghép thẳng
 // "ainovel-cli". Nhờ vậy nó cũng bắt được dạng "voocel/ainovel-cli" trong link,
@@ -40,6 +40,7 @@ var stale = []struct {
 	{regexp.MustCompile(`\bAINOVEL_[A-Z_]+`), "biến môi trường đã đổi thành KIETNOVEL_*"},
 	{regexp.MustCompile(`ainovel-cli`), "tên binary cũ, phải là kietnovel"},
 	{regexp.MustCompile(`voocel/ainovel`), "repo cũ, phải là CTKiet2006/kietnovel"},
+	{regexp.MustCompile(`\.ainovel`), "thư mục dữ liệu cũ, đã đổi thành .kietnovel"},
 }
 
 // exts giới hạn vào file có thể chứa đường dẫn/URL, bỏ file nhị phân.

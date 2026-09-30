@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-const configDirName = ".ainovel"
+const configDirName = ".kietnovel"
 
-// DefaultConfigPath trả về đường dẫn file cấu hình toàn cục ~/.ainovel/config.json.
+// DefaultConfigPath trả về đường dẫn file cấu hình toàn cục ~/.kietnovel/config.json.
 func DefaultConfigPath() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -21,7 +21,7 @@ func DefaultConfigPath() string {
 	return filepath.Join(home, configDirName, "config.json")
 }
 
-// DefaultConfigDir trả về đường dẫn thư mục ~/.ainovel; khi không lấy được home thì trả chuỗi trống.
+// DefaultConfigDir trả về đường dẫn thư mục ~/.kietnovel; khi không lấy được home thì trả chuỗi trống.
 // Chỉ dùng để đọc/ghi file không bắt buộc tồn tại (như cache model), không tự tạo thư mục.
 func DefaultConfigDir() string {
 	home, err := os.UserHomeDir()
@@ -31,7 +31,7 @@ func DefaultConfigDir() string {
 	return filepath.Join(home, configDirName)
 }
 
-// configDir trả về đường dẫn thư mục ~/.ainovel, chưa có thì tạo.
+// configDir trả về đường dẫn thư mục ~/.kietnovel, chưa có thì tạo.
 func configDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -44,15 +44,15 @@ func configDir() (string, error) {
 	return dir, nil
 }
 
-// projectConfigPath trả về đường dẫn tương đối của file cấu hình cấp project ./.ainovel/config.json.
-// Dotdir cấp project mirror toàn cục ~/.ainovel/, dùng chung configDirName; giải theo cwd.
+// projectConfigPath trả về đường dẫn tương đối của file cấu hình cấp project ./.kietnovel/config.json.
+// Dotdir cấp project mirror toàn cục ~/.kietnovel/, dùng chung configDirName; giải theo cwd.
 func projectConfigPath() string {
 	return filepath.Join(configDirName, "config.json")
 }
 
 // EffectiveConfigPath trả về file cấu hình mà thao tác TUI (/config, /model) nên ghi về:
-// thư mục project có ./.ainovel/config.json thì ghi nó — cùng hướng project đè global lúc đọc,
-// đảm bảo "sửa đúng bản đang hiệu lực", sửa xong hiệu lực ngay; nếu không thì ghi toàn cục ~/.ainovel/config.json.
+// thư mục project có ./.kietnovel/config.json thì ghi nó — cùng hướng project đè global lúc đọc,
+// đảm bảo "sửa đúng bản đang hiệu lực", sửa xong hiệu lực ngay; nếu không thì ghi toàn cục ~/.kietnovel/config.json.
 // Chỉ sửa cấu hình project đã tồn tại, không tự tạo từ hư không (tạo project overlay là hành động chủ động đặt file của người dùng).
 func EffectiveConfigPath() string {
 	rel := projectConfigPath()
@@ -66,8 +66,8 @@ func EffectiveConfigPath() string {
 }
 
 // LoadConfig tải và merge cấu hình theo thứ tự ưu tiên:
-//  1. ~/.ainovel/config.json (toàn cục)
-//  2. ./.ainovel/config.json (project override)
+//  1. ~/.kietnovel/config.json (toàn cục)
+//  2. ./.kietnovel/config.json (project override)
 func LoadConfig() (Config, error) {
 	var cfg Config
 
@@ -94,7 +94,7 @@ func LoadConfig() (Config, error) {
 	//    nuốt lặng sẽ khiến "cấu hình mà không hiệu lực" không còn đường dò (issue #37).
 	project, found, err := loadOptionalJSON(projectConfigPath())
 	if err != nil {
-		return cfg, fmt.Errorf("giải parse cấu hình project ./.ainovel/config.json thất bại (hãy kiểm tra cú pháp JSON): %w", err)
+		return cfg, fmt.Errorf("giải parse cấu hình project ./.kietnovel/config.json thất bại (hãy kiểm tra cú pháp JSON): %w", err)
 	}
 	if found {
 		cfg = mergeConfig(cfg, project)
@@ -103,7 +103,7 @@ func LoadConfig() (Config, error) {
 	// Không có project override thì cấu hình toàn cục là nguồn duy nhất: hỏng ở đây
 	// phải nói thẳng ra thay vì để người dùng đi tìm lỗi ở tầng dưới.
 	if globalErr != nil && !found {
-		return cfg, fmt.Errorf("giải parse cấu hình toàn cục %s thất bại và không có ./.ainovel/config.json để ghi đè (hãy kiểm tra cú pháp JSON): %w", globalPath, globalErr)
+		return cfg, fmt.Errorf("giải parse cấu hình toàn cục %s thất bại và không có ./.kietnovel/config.json để ghi đè (hãy kiểm tra cú pháp JSON): %w", globalPath, globalErr)
 	}
 
 	return cfg, nil
@@ -335,7 +335,7 @@ func stripJSONComments(data []byte) []byte {
 	return out
 }
 
-// WriteStartupError append lỗi chí mạng lúc khởi động vào ~/.ainovel/last-error.log, và trả về
+// WriteStartupError append lỗi chí mạng lúc khởi động vào ~/.kietnovel/last-error.log, và trả về
 // đường dẫn file đó (best-effort, thất bại thì trả chuỗi trống). Khi double-click khởi động, cửa sổ console
 // đóng ngay theo tiến trình thoát, lỗi thoáng qua rồi mất — ghi đĩa là đường truy vết duy nhất của nhóm người dùng này.
 func WriteStartupError(msg string) string {

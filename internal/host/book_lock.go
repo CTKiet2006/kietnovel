@@ -10,7 +10,7 @@ import (
 	"github.com/gofrs/flock"
 )
 
-const bookLockFile = ".ainovel.lock"
+const bookLockFile = ".kietnovel.lock"
 
 // ErrBookInUse nghĩa là cùng thư mục truyện đã bị một tiến trình khác chiếm.
 // Nêu đúng tên chương trình từ AppName, vì đây là thông báo người dùng đọc được

@@ -97,9 +97,9 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 
 | Kind | Path |
 |---|---|
-| Config | `~/.ainovel/config.json` (created by the Wizard) |
-| Config scoped to the current directory | `./.ainovel/config.json` (higher priority) |
-| Personal writing rules | `~/.ainovel/rules/*.md` or `./.ainovel/rules/*.md` |
+| Config | `~/.kietnovel/config.json` (created by the Wizard) |
+| Config scoped to the current directory | `./.kietnovel/config.json` (higher priority) |
+| Personal writing rules | `~/.kietnovel/rules/*.md` or `./.kietnovel/rules/*.md` |
 | Novel being written | `./output/novel/` — or set `NOVEL_DIR` (section 6) |
 
 Running the binary directly means there is **no** `config/` directory. If `--headless` reports
@@ -108,7 +108,7 @@ complete the configuration.
 
 ## 3. Language Option (vi / en / zh)
 
-In the config file `~/.ainovel/config.json`, you can set the `"language"` field. A single choice
+In the config file `~/.kietnovel/config.json`, you can set the `"language"` field. A single choice
 governs **both** the TUI interface language and the writing language.
 
 - `"language": "vi"` (Default): entirely Vietnamese — terminology, style guide, world indicators.
@@ -140,7 +140,7 @@ takes full effect from the next launch — the app reminds you of this right aft
 
 ## 4. AI Provider Configuration (LLM)
 
-Config file: `~/.ainovel/config.json` (the Setup Wizard creates it for you). Picking a provider in
+Config file: `~/.kietnovel/config.json` (the Setup Wizard creates it for you). Picking a provider in
 the wizard is all it takes — this section is only for when you want to edit it by hand.
 
 | Provider | Suggested `model` | Notes |
@@ -406,7 +406,7 @@ output/novel/
 
 **Add your own rules (no code changes needed)**
 
-Create any `.md` file in the `~/.ainovel/rules/` or `./.ainovel/rules/` directory and write in
+Create any `.md` file in the `~/.kietnovel/rules/` or `./.kietnovel/rules/` directory and write in
 plain language:
 
 ```text

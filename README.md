@@ -97,9 +97,9 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 
 | Loại | Đường dẫn |
 |---|---|
-| Cấu hình | `~/.ainovel/config.json` (Wizard tự tạo) |
-| Cấu hình riêng cho thư mục hiện tại | `./.ainovel/config.json` (ưu tiên cao hơn) |
-| Quy tắc viết cá nhân | `~/.ainovel/rules/*.md` hoặc `./.ainovel/rules/*.md` |
+| Cấu hình | `~/.kietnovel/config.json` (Wizard tự tạo) |
+| Cấu hình riêng cho thư mục hiện tại | `./.kietnovel/config.json` (ưu tiên cao hơn) |
+| Quy tắc viết cá nhân | `~/.kietnovel/rules/*.md` hoặc `./.kietnovel/rules/*.md` |
 | Truyện đang viết | `./output/novel/` — hoặc đặt `NOVEL_DIR` (mục 6) |
 
 Chạy binary trực tiếp thì **không** có thư mục `config/`. Nếu `--headless` báo *"headless
@@ -108,7 +108,7 @@ không hỗ trợ thiết lập lần đầu"*, hãy mở TUI một lần để 
 
 ## 3. Tùy Chọn Ngôn Ngữ (vi / en / zh)
 
-Trong file cấu hình `~/.ainovel/config.json`, bạn có thể chỉ định trường `"language"`.
+Trong file cấu hình `~/.kietnovel/config.json`, bạn có thể chỉ định trường `"language"`.
 Một lựa chọn này chi phối **cả hai**: ngôn ngữ giao diện TUI lẫn ngôn ngữ sáng tác.
 
 - `"language": "vi"` (Mặc định): Toàn bộ tiếng Việt, thuật ngữ, quy chuẩn văn phong, chỉ báo thế giới.
@@ -140,7 +140,7 @@ có hiệu lực đầy đủ từ lần mở kế tiếp - ứng dụng sẽ nh
 
 ## 4. Cấu Hình Nhà Cung Cấp AI (LLM)
 
-File cấu hình: `~/.ainovel/config.json` (Setup Wizard tạo sẵn). Chọn Provider trong
+File cấu hình: `~/.kietnovel/config.json` (Setup Wizard tạo sẵn). Chọn Provider trong
 wizard là xong — mục này chỉ dành khi muốn tự sửa tay.
 
 | Provider | `model` gợi ý | Ghi chú |
@@ -398,7 +398,7 @@ output/novel/
 
 **Thêm quy tắc riêng (Không cần sửa code)**
 
-Tạo file `.md` bất kỳ trong thư mục `~/.ainovel/rules/` hoặc `./.ainovel/rules/` và viết bằng ngôn ngữ tự nhiên:
+Tạo file `.md` bất kỳ trong thư mục `~/.kietnovel/rules/` hoặc `./.kietnovel/rules/` và viết bằng ngôn ngữ tự nhiên:
 
 ```text
 "Nhân vật chính quyết đoán, không thánh mẫu"

@@ -15,9 +15,9 @@ package rules
 type SourceKind int
 
 const (
-	// SourceGlobal -- the user's global preferences (every .md under ~/.ainovel/rules/, merged in filename lexicographic order), reused across books.
+	// SourceGlobal -- the user's global preferences (every .md under ~/.kietnovel/rules/, merged in filename lexicographic order), reused across books.
 	SourceGlobal SourceKind = iota
-	// SourceProject -- this book's rules (every .md under ./.ainovel/rules/, merged in filename lexicographic order), the highest priority.
+	// SourceProject -- this book's rules (every .md under ./.kietnovel/rules/, merged in filename lexicographic order), the highest priority.
 	SourceProject
 )
 

@@ -4,7 +4,7 @@ services:
     build:
       context: .
     volumes:
-      - ./config:/root/.ainovel
+      - ./config:/root/.kietnovel
       - ./workspace:/workspace
       # Mỗi thư mục con trong ./novels là một bộ truyện độc lập.
       # Đặt NOVEL_DIR trỏ tới bộ muốn viết, ví dụ:

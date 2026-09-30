@@ -148,7 +148,7 @@ func TestResolveContextWindowIsProviderAware(t *testing.T) {
 }
 
 func TestSaveProviderConfigPreservesSelectionAndUsesPrivateMode(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".ainovel", "config.json")
+	path := filepath.Join(t.TempDir(), ".kietnovel", "config.json")
 	original := Config{
 		Provider: "old", ModelName: "old-model", Style: "fantasy",
 		Providers: map[string]ProviderConfig{"old": {Type: "openai", Models: []ModelConfig{{Name: "old-model"}}}},

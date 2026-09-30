@@ -378,7 +378,7 @@ func TestProviderHubShowsConfigPathAndConnectionAction(t *testing.T) {
 	state := &modelConfigState{
 		step: configStepHub, provider: "proxy", apiKeyOptional: true, currentModel: "m2",
 		models:   []bootstrap.ModelConfig{{Name: "m1"}, {Name: "m2"}},
-		snapshot: host.ModelConfigurationSnapshot{ConfigPath: `C:\work\.ainovel\config.json`},
+		snapshot: host.ModelConfigurationSnapshot{ConfigPath: `C:\work\.kietnovel\config.json`},
 	}
 	fields := state.hubFields()
 	idx := hubFieldIndex(fields, "test")
@@ -392,7 +392,7 @@ func TestProviderHubShowsConfigPathAndConnectionAction(t *testing.T) {
 		}
 	}
 	compact := strings.NewReplacer("\r", "", "\n", "", " ", "", "│", "").Replace(view)
-	if !strings.Contains(compact, `C:\work\.ainovel\config.json`) {
+	if !strings.Contains(compact, `C:\work\.kietnovel\config.json`) {
 		t.Fatalf("Hub cấu hình chưa hiện đủ đường dẫn config:\n%s", view)
 	}
 }
