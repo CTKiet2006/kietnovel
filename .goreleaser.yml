@@ -30,12 +30,26 @@ archives:
   - id: kietnovel-archive
     ids:
       - kietnovel
+    # GoReleaser v2 bo format_overrides; muon dinh dang theo OS thi tach archive
+    # rieng cho windows, giu tar.gz cho cac OS con lai.
     formats:
       - tar.gz
-    format_overrides:
-      - goos: windows
-        formats:
-          - zip
+    files:
+      - README.md
+      - LICENSE
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+
+  - id: kietnovel-windows
+    ids:
+      - kietnovel
+    formats:
+      - zip
+    goos:
+      - windows
     files:
       - README.md
       - LICENSE
@@ -72,5 +86,5 @@ changelog:
 
 release:
   github:
-    owner: voocel
+    owner: CTKiet2006
     name: kietnovel
