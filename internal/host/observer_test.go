@@ -51,10 +51,10 @@ func TestObserverSubagentRetryEventsUpdateSameLinePerAgent(t *testing.T) {
 		t.Fatalf("writer retry events should share ID: %+v", events)
 	}
 	// Summary does not embed a static delay (the UI counts down from RetryAt); the delay is carried as a deadline, and the static snapshot stays in Detail for logging.
-	if events[1].Agent != "writer" || !strings.Contains(events[1].Summary, "重试 (2/7)") {
+	if events[1].Agent != "writer" || !strings.Contains(events[1].Summary, "Thử lại (2/7)") {
 		t.Fatalf("event = %+v, want writer retry 2/7 without inline delay", events[1])
 	}
-	if events[1].RetryAt.IsZero() || !strings.Contains(events[1].Detail, "重试 (2/7，2s后)") {
+	if events[1].RetryAt.IsZero() || !strings.Contains(events[1].Detail, "Thử lại (2/7, 2s nữa)") {
 		t.Fatalf("event = %+v, want RetryAt deadline + static delay in Detail", events[1])
 	}
 	if events[1].Kind != "network" {
@@ -133,10 +133,10 @@ func TestObserverSeparatesModelResponseFromToolExecution(t *testing.T) {
 	if events[0].Category != "MODEL" || events[0].Summary != "Đang chờ model" || !events[0].Running() {
 		t.Fatalf("model start = %+v", events[0])
 	}
-	if events[1].ID != events[0].ID || events[1].Summary != "思考中" {
+	if events[1].ID != events[0].ID || events[1].Summary != "Đang suy nghĩ" {
 		t.Fatalf("thinking update = %+v", events[1])
 	}
-	if events[2].ID != events[0].ID || events[2].Summary != "生成 draft_chapter" {
+	if events[2].ID != events[0].ID || events[2].Summary != "Sinh draft_chapter" {
 		t.Fatalf("generation update = %+v", events[2])
 	}
 	if len(o.toolStarts) != 0 {

@@ -14,14 +14,14 @@ import (
 func retryPrefix(attempt, maxRetries int, delay time.Duration) string {
 	if maxRetries <= 0 {
 		if text := formatRetryDelay(delay); text != "" {
-			return fmt.Sprintf("重试 (第%d次，%s后): ", attempt, text)
+			return fmt.Sprintf("Thử lại (lần %d, %s nữa): ", attempt, text)
 		}
-		return fmt.Sprintf("重试 (第%d次): ", attempt)
+		return fmt.Sprintf("Thử lại (lần %d): ", attempt)
 	}
 	if text := formatRetryDelay(delay); text != "" {
-		return fmt.Sprintf("重试 (%d/%d，%s后): ", attempt, maxRetries, text)
+		return fmt.Sprintf("Thử lại (%d/%d, %s nữa): ", attempt, maxRetries, text)
 	}
-	return fmt.Sprintf("重试 (%d/%d): ", attempt, maxRetries)
+	return fmt.Sprintf("Thử lại (%d/%d): ", attempt, maxRetries)
 }
 
 func formatRetryDelay(delay time.Duration) string {
@@ -44,7 +44,7 @@ func (o *observer) handleThinkingProgress(ev agentcore.Event) {
 	if agent == "" || thinking == "" {
 		return
 	}
-	o.updateModelState(agent, "思考中")
+	o.updateModelState(agent, "Đang suy nghĩ")
 
 	prev := o.lastThinkingByAgent[agent]
 	delta := thinking
@@ -93,7 +93,7 @@ func (o *observer) handleContextProgress(ev agentcore.Event) {
 	if payload.Percent > 85 {
 		level = "warn"
 	}
-	summary := fmt.Sprintf("%s 上下文 %.0f%% (%d/%d) 策略: %s", agent, payload.Percent, payload.Tokens, payload.ContextWindow, payload.Strategy)
+	summary := fmt.Sprintf("%s ngữ cảnh %.0f%% (%d/%d) chiến lược: %s", agent, payload.Percent, payload.Tokens, payload.ContextWindow, payload.Strategy)
 
 	if payload.Strategy != "" {
 		// compaction was triggered -> event stream + log
