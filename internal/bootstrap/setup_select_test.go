@@ -1,7 +1,11 @@
 package bootstrap
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -272,5 +276,59 @@ func TestQuayLaiKhongLamMatConTro(t *testing.T) {
 	after, _ := m.Update(key("esc"))
 	if got := after.(setupSelectModel).cursor; got != 5 {
 		t.Fatalf("cursor đổi khi quay lại: %d", got)
+	}
+}
+
+// TestDebugKeyLogGhiPhimThat: công cụ chẩn đoán vụ mũi tên "không nhận được".
+// Log phải chứa đủ để phân biệt hai nguyên nhân: bấm quá sớm (log rỗng) với
+// terminal cắt chuỗi escape thành "esc" rồi "[A" (hai dòng cách nhau vài chục ms).
+func TestDebugKeyLogGhiPhimThat(t *testing.T) {
+	logPath := filepath.Join(os.TempDir(), "kietnovel-keys.log")
+	_ = os.Remove(logPath)
+
+	// Mặc định tắt: không được ghi gì.
+	debugKeyLog(tea.KeyMsg{Type: tea.KeyDown, Runes: []rune{'j'}})
+	if _, err := os.Stat(logPath); err == nil {
+		t.Fatal("khong bat KIETNOVEL_DEBUG_KEYS thi khong duoc tao file log")
+	}
+
+	t.Setenv("KIETNOVEL_DEBUG_KEYS", "1")
+	defer os.Remove(logPath)
+
+	// Mô phỏng terminal cắt chuỗi escape: esc rồi [A riêng lẻ.
+	debugKeyLog(tea.KeyMsg{Type: tea.KeyEsc})
+	time.Sleep(30 * time.Millisecond)
+	debugKeyLog(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'[', 'A'}})
+
+	b, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("doc log: %v", err)
+	}
+	out := string(b)
+	if !strings.Contains(out, `key="esc"`) {
+		t.Fatalf("thieu dong esc trong log:\n%s", out)
+	}
+	if !strings.Contains(out, `runes="[A"`) {
+		t.Fatalf("thieu runes cho chuoi [A trong log:\n%s", out)
+	}
+	// Mốc thời gian phải khác nhau, đó mới là thứ đọc ra độ trễ giữa hai lần đọc.
+	if strings.Count(out, ":") < 2 {
+		t.Fatalf("log thieu moc thoi gian:\n%s", out)
+	}
+}
+
+// TestDebugKeyLogKhongLamHongPhimXong: bật log phải không đổi hành vi xử lý phím.
+func TestDebugKeyLogKhongLamHongPhimXong(t *testing.T) {
+	t.Setenv("KIETNOVEL_DEBUG_KEYS", "1")
+	defer os.Remove(filepath.Join(os.TempDir(), "kietnovel-keys.log"))
+
+	m := setupSelectModel{title: "t", items: setupProviders}
+	next, cmd := m.Update(key("down"))
+	r := next.(setupSelectModel)
+	if cmd != nil {
+		t.Fatal("ghi log khong duoc lam thay doi ket qua cua phim")
+	}
+	if r.cursor != 1 {
+		t.Fatalf("cursor = %d, mong 1", r.cursor)
 	}
 }

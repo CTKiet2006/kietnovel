@@ -56,13 +56,17 @@
 
 ```powershell
 # 1. Cài (một lệnh, không cần cài Go)
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.3.3/scripts/install-windows.ps1 | iex
+irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.5.0/scripts/install-windows.ps1 | iex
 
 # 2. Mở terminal mới, rồi chạy
 kietnovel
 
 # 3. Lần đầu: Setup Wizard hỏi Provider, API key, Model và ngôn ngữ (vi / en / zh)
 ```
+
+**Setup 向导中的按键：** `↑`/`↓`（或 `k`/`j`）选择，`Enter` 确认，`Esc` **返回上一步** ——
+在第 1 步选错 Provider 时可以返回修改，不必取消后从头再来。在第 1 步，`Esc` 需按两次才取消。
+`Ctrl+C` 随时立即取消。返回时会保留已输入的内容和光标位置。
 
 安装包约 5.7 MB。脚本会自动下载与你的机器架构（x86_64 / arm64）匹配的预编译版本，
 校验 SHA-256，解压到 `%LOCALAPPDATA%\kietnovel\bin`，并把该目录加入用户 PATH。
@@ -72,17 +76,17 @@ kietnovel
 **降级到旧版本：**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1.3.2
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1.4.0
 ```
 
 没装 Go？先下载脚本再运行：
 
 ```powershell
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.3.3/scripts/install-windows.ps1 -OutFile ki.ps1
-.\ki.ps1 -Version v1.3.2
+irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.5.0/scripts/install-windows.ps1 -OutFile ki.ps1
+.\ki.ps1 -Version v1.4.0
 ```
 
-可用版本：v1.3.4、v1.3.3、v1.3.2、v1.2.5、v1.2.4、v1.2.3、v1.2.2、v1.2.1、v1.1.0。
+可用版本：v1.5.0、v1.4.0、v1.3.4、v1.3.3、v1.3.2、v1.2.5、v1.2.4、v1.2.3、v1.2.2、v1.2.1、v1.1.0。
 
 <details>
 <summary>其他方式</summary>

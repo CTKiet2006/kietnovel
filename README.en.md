@@ -56,13 +56,19 @@ No Docker. Three steps:
 
 ```powershell
 # 1. Cài (một lệnh, không cần cài Go)
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.3.3/scripts/install-windows.ps1 | iex
+irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.5.0/scripts/install-windows.ps1 | iex
 
 # 2. Mở terminal mới, rồi chạy
 kietnovel
 
 # 3. Lần đầu: Setup Wizard hỏi Provider, API key, Model và ngôn ngữ (vi / en / zh)
 ```
+
+**Keys in the Setup Wizard:** `↑`/`↓` (or `k`/`j`) to move, `Enter` to confirm, `Esc` to
+**go back to the previous step** — if you pick the wrong Provider at step 1 you can go back
+and fix it instead of cancelling and starting over. At step 1 itself, `Esc` needs two presses
+to cancel. `Ctrl+C` cancels immediately at any point. Going back preserves what you already
+typed and the cursor position.
 
 The install is about 5.7 MB. The script downloads the prebuilt binary matching your architecture (x86_64 / arm64),
 verifies SHA-256, extracts it into `%LOCALAPPDATA%\kietnovel\bin` and adds that directory to the
@@ -74,17 +80,17 @@ running file.
 **Downgrading to an older version:**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1.3.2
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1.4.0
 ```
 
 No Go? Download the script first, then run it:
 
 ```powershell
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.3.3/scripts/install-windows.ps1 -OutFile ki.ps1
-.\ki.ps1 -Version v1.3.2
+irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.5.0/scripts/install-windows.ps1 -OutFile ki.ps1
+.\ki.ps1 -Version v1.4.0
 ```
 
-Available: v1.3.4, v1.3.3, v1.3.2, v1.2.5, v1.2.4, v1.2.3, v1.2.2, v1.2.1, v1.1.0.
+Available: v1.5.0, v1.4.0, v1.3.4, v1.3.3, v1.3.2, v1.2.5, v1.2.4, v1.2.3, v1.2.2, v1.2.1, v1.1.0.
 
 <details>
 <summary>Other options</summary>
