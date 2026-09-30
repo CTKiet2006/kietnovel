@@ -50,29 +50,43 @@ Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định 
 
 ## 2. Cài Đặt & Khởi Chạy Nhanh
 
-Yêu cầu duy nhất: **Go ≥ 1.25**. Không cần Docker.
+Không cần Docker. Có hai cách, **không cần cài Go** nếu bạn dùng cách 1.
 
-### Một lệnh
+### Cách 1 — một lệnh, không cần Go (khuyên dùng)
 
 ```powershell
-go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@latest
+irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/main/scripts/install-windows.ps1 | iex
 ```
 
-Lệnh trên tải về, build và đặt binary vào `C:\Users\<bạn>\go\bin` (thư mục này đã nằm trong PATH nếu bạn cài Go bằng installer mặc định). Mở terminal mới rồi gõ:
+Lệnh trên tải bản dựng sẵn đúng cho Windows của bạn (x86_64 hoặc arm64), giải nén vào
+`%LOCALAPPDATA%\kietnovel\bin`, rồi tự thêm thư mục đó vào user PATH. Mở terminal mới
+rồi gõ:
 
 ```powershell
 kietnovel
 ```
 
-Muốn ghim đúng một phiên bản thay vì bản mới nhất:
+Khoảng 5.7 MB, xong trong vài giây.
+
+### Cách 2 — nếu bạn đã có Go ≥ 1.25
 
 ```powershell
-go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@v1.1.0
+go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@latest
 ```
 
-> **Lưu ý:** ngay sau khi phát hành phiên bản mới, `proxy.golang.org` có thể mất vài phút mới thấy tag. Trong lúc đó `@latest` trỏ nhầm tag cũ — hãy dùng `@v1.1.0` để cài chắc chắn.
+Cách này tải source về build (~26 MB dependency rồi compile), chậm hơn cách 1 trên máy
+yếu nhưng không cần tải binary. Binary đặt ở `C:\Users\<bạn>\go\bin` (thư mục này đã
+nằm trong PATH nếu bạn cài Go bằng installer mặc định).
 
-### Cài vào thư mục riêng (nếu `go\bin` chưa có trong PATH)
+### Ghim đúng một phiên bản
+
+```powershell
+go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@v1.2.1
+```
+
+> **Lưu ý:** ngay sau khi phát hành phiên bản mới, `proxy.golang.org` có thể mất vài phút mới thấy tag. Trong lúc đó `@latest` trỏ nhầm tag cũ — hãy dùng `@v1.2.1` để cài chắc chắn.
+
+### Cài từ source (muốn tự build hoặc sửa code)
 
 ```powershell
 git clone https://github.com/CTKiet2006/kietnovel.git
