@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/CTKiet2006/kietnovel/internal/rules"
 	"github.com/CTKiet2006/kietnovel/internal/utils"
@@ -386,8 +387,32 @@ type setupSelectModel struct {
 
 func (m setupSelectModel) Init() tea.Cmd { return nil }
 
+// debugKeysOn báo đang bật ghi log phím hay không. Đặt KIETNOVEL_DEBUG_KEYS=1 để bật.
+// Đọc env mỗi lần thay vì lúc khởi tạo package, để test bật/tắt được.
+func debugKeysOn() bool { return os.Getenv("KIETNOVEL_DEBUG_KEYS") != "" }
+
+// debugKeyLog ghi lại từng phím thật mà chương trình nhận được, kèm mốc thời gian.
+// Mốc thời gian là thứ phân biệt được hai nguyên nhân rất dễ nhầm:
+//   - bấm phím trước khi TUI sẵn sàng: log trống hoặc chỉ có phím Enter;
+//   - terminal cắt chuỗi escape thành hai lần đọc: thấy "esc" rồi tới "[A" sau
+//     vài chục mili giây, thay vì một "up".
+func debugKeyLog(msg tea.KeyMsg) {
+	if !debugKeysOn() {
+		return
+	}
+	f, err := os.OpenFile(filepath.Join(os.TempDir(), "kietnovel-keys.log"),
+		os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s  key=%-8q type=%-4d runes=%q alt=%v paste=%v\n",
+		time.Now().Format("15:04:05.000"), msg.String(), msg.Type, string(msg.Runes), msg.Alt, msg.Paste)
+}
+
 func (m setupSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
+		debugKeyLog(msg)
 		switch msg.String() {
 		case "up", "k":
 			m.escArmed = false
@@ -473,6 +498,7 @@ func (m setupInputModel) Init() tea.Cmd { return nil }
 
 func (m setupInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
+		debugKeyLog(msg)
 		switch msg.String() {
 		case "enter":
 			m.escArmed = false
