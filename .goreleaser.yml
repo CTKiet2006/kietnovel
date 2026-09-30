@@ -21,6 +21,23 @@ builds:
     goos:
       - linux
       - darwin
+    goarch:
+      - amd64
+      - arm64
+
+  # Windows tach rieng: GoReleaser v2 khong cho loc goos o cap archive, nen
+  # tach build va archive rieng de ra duoc file .zip dung cach Windows dung.
+  - id: kietnovel-windows
+    main: ./cmd/kietnovel
+    binary: kietnovel
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.CommitDate}}
+    goos:
       - windows
     goarch:
       - amd64
@@ -30,8 +47,6 @@ archives:
   - id: kietnovel-archive
     ids:
       - kietnovel
-    # GoReleaser v2 bo format_overrides; muon dinh dang theo OS thi tach archive
-    # rieng cho windows, giu tar.gz cho cac OS con lai.
     formats:
       - tar.gz
     files:
@@ -45,11 +60,9 @@ archives:
 
   - id: kietnovel-windows
     ids:
-      - kietnovel
+      - kietnovel-windows
     formats:
       - zip
-    goos:
-      - windows
     files:
       - README.md
       - LICENSE
