@@ -135,7 +135,7 @@ Every product of this role — story title, summary, premise, outline, character
 
 // ApplyLanguage appends the output-language directive to Architect/Writer/Editor.
 // "vi"/"en" (including the empty string, for compatibility with old configs) take effect; "zh" makes no
-// change on return, since the protocol is already Chinese. Called once at startup, see cmd/ainovel-cli/main.go.
+// change on return, since the protocol is already Chinese. Called once at startup, see cmd/kietnovel/main.go.
 func (b *Bundle) ApplyLanguage(lang string) {
 	key := strings.ToLower(strings.TrimSpace(lang))
 	if key == "zh" {
