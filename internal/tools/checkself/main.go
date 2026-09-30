@@ -50,9 +50,9 @@ var exts = map[string]bool{
 	".txt": true, ".mod": true, ".toml": true,
 }
 
-// generated là file sinh ra lúc build, không nằm trong git và không thuộc mã
-// nguồn. release-notes.md do gen-changelog.sh tạo trong lúc workflow chạy, nội
-// dung là commit message nên vô tình chứa tên cũ — quét nó sẽ báo nhầm.
+// generated là file có thể xuất hiện trong repo khi chạy local, không phải mã
+// nguồn. Workflow release giờ ghi changelog ra runner.temp nên không sinh file
+// trong repo nữa, nhưng vẫn giữ danh sách này phòng khi ai chạy tay.
 var generated = map[string]bool{
 	"release-notes.md": true,
 	"changelog.md":     true,
