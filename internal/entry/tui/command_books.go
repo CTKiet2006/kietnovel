@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -28,6 +30,12 @@ type booksState struct {
 	// Tạo mới
 	draft string
 
+	// Xác nhận chuyển truyện. Chỉ hiện khi truyện đang mở còn việc dở: nếu không
+	// có gì dở thì chuyển thẳng, hỏi thêm chỉ làm chậm.
+	target     string
+	targetName string
+	switchWhy  string
+
 	listVP   viewport.Model
 	contentW int
 	boxH     int
@@ -39,6 +47,7 @@ const (
 	booksList booksMode = iota
 	booksDeleteConfirm
 	booksNewDraft
+	booksSwitchConfirm
 )
 
 func newBooksState(w, h int, mode booksMode) *booksState {
@@ -76,8 +85,12 @@ func renderBooksModal(w, h int, s *booksState, errMsg string) string {
 		body = s.renderDeleteConfirm()
 	case booksNewDraft:
 		title = i18n.T("Tạo truyện mới")
-		hint = i18n.T("  Enter Tạo · Esc Huỷ")
+		hint = i18n.T("  Enter Tạo và mở · Esc Huỷ")
 		body = s.renderNewDraft()
+	case booksSwitchConfirm:
+		title = i18n.T("Chuyển truyện — xác nhận")
+		hint = i18n.T("  y Chuyển · Esc Ở lại")
+		body = s.renderSwitchConfirm()
 	default:
 		body = s.renderList()
 	}
@@ -157,13 +170,24 @@ func (s *booksState) renderDeleteConfirm() string {
 	return b.String()
 }
 
+// renderNewDraft cho phép gõ tên có dấu và có khoảng trắng. Tên thư mục thật sẽ
+// được sanitize khi bấm Enter, còn tên hiển thị giữ nguyên như gõ.
 func (s *booksState) renderNewDraft() string {
 	dim := lipgloss.NewStyle().Foreground(colorDim)
+	ok := lipgloss.NewStyle().Foreground(colorSuccess)
 	var b strings.Builder
-	b.WriteString(i18n.T("Tên thư mục truyện (chữ thường, không dấu, gạch ngang):"))
+	b.WriteString(i18n.T("Tên truyện mới:"))
 	b.WriteString("\n\n❯ " + s.draft)
 	b.WriteString("\n\n")
-	b.WriteString(dim.Render(i18n.T("Thư mục sẽ tạo ở <output>/<tên>. Gõ như sau là được: truyen-linh-di")))
+	if slug := sanitizeBookName(s.draft); slug != "" {
+		b.WriteString(dim.Render(i18n.Tf("Sẽ tạo thư mục: %s", slug)))
+		if s.draft != slug {
+			b.WriteString("\n")
+			b.WriteString(ok.Render(i18n.T("Tên hiển thị giữ nguyên như bạn gõ, có dấu cũng được.")))
+		}
+	} else {
+		b.WriteString(dim.Render(i18n.T("Gõ ít nhất một chữ cái hoặc số.")))
+	}
 	return b.String()
 }
 
@@ -199,9 +223,27 @@ func (m Model) handleBooksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				s.draft = string(r[:len(r)-1])
 			}
 		case tea.KeySpace:
-			s.draft += "-"
+			// Giữ khoảng trắng: tên hiển thị lấy nguyên văn. Sanitize lo ở
+			// bước tạo thư mục, không sửa ở đây — nếu ép dấu gạch ngay khi
+			// gõ thì tên hiển thị mất dấu, mất đúng thứ người dùng muốn.
+			s.draft += " "
 		case tea.KeyRunes:
 			s.draft += string(msg.Runes)
+		}
+		return m, nil
+
+	case booksSwitchConfirm:
+		switch msg.Type {
+		case tea.KeyEsc:
+			s.mode = booksList
+			s.target, s.targetName, s.switchWhy = "", "", ""
+		case tea.KeyRunes:
+			if string(msg.Runes) == "y" {
+				dir := s.target
+				s.mode, s.target, s.targetName, s.switchWhy = booksList, "", "", ""
+				m.books = nil
+				return m.doSwitch(dir)
+			}
 		}
 		return m, nil
 	}
@@ -220,19 +262,13 @@ func (m Model) handleBooksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			s.cursor++
 		}
 	case tea.KeyEnter:
-		// Chuyển truyện sống chưa làm: đổi thư mục giữa chừng phải dựng lại
-		// Host (Engine, goroutine, kênh sự kiện) — làm nửa vời thì dễ treo.
-		// Thay bằng chỉ dẫn chắc chắn dùng được.
-		//
-		// NOVEL_DIR là thư mục GỐC, không phải thư mục truyện: ResolveOutputDir
-		// tự thêm "output/novel" vào. Mà bk.Dir vốn đã là <gốc>/output/<tên>,
-		// nên phải lùi 2 cấp. Trỏ thẳng bk.Dir sẽ ra <gốc>/output/novel/output/novel
-		// và người dùng làm theo hướng dẫn vẫn không mở được truyện.
+		// Enter trên truyện đang mở: báo ra chứ không im lặng, vì người dùng
+		// có thể tưởng nó hỏng.
 		if bk := s.selected(); bk != nil {
-			base := filepath.Dir(filepath.Dir(bk.Dir))
-			return renderBooksError(m, i18n.Tf(
-				"Để mở truyện %q: thoát kietnovel, đặt NOVEL_DIR=%s rồi chạy lại.",
-				bk.Name, base))
+			if sameDir(bk.Dir, m.runtime.Dir()) {
+				return renderBooksNotice(m, i18n.Tf("Truyện %q đang mở rồi.", bk.Name))
+			}
+			return m.askSwitch(bk.Dir, bk.Name)
 		}
 	case tea.KeyRunes:
 		switch string(msg.Runes) {
@@ -257,6 +293,14 @@ func (m Model) handleBooksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func renderBooksError(m Model, msg string) (tea.Model, tea.Cmd) {
 	m.applyEvent(host.Event{Time: timeNow(), Category: "ERROR", Summary: msg, Level: "error"})
+	m.refreshEventViewport()
+	return m, nil
+}
+
+// renderBooksNotice báo tin thường, không phải lỗi — dùng cho "đã chuyển sang",
+// "đang mở rồi". Cùng hàm renderBooksError sẽ tô đỏ và làm người dùng tưởng hỏng.
+func renderBooksNotice(m Model, msg string) (tea.Model, tea.Cmd) {
+	m.applyEvent(host.Event{Time: timeNow(), Category: "SYSTEM", Summary: msg, Level: "info"})
 	m.refreshEventViewport()
 	return m, nil
 }
@@ -312,24 +356,58 @@ func (m Model) deleteConfirmedBook() (tea.Model, tea.Cmd) {
 	return renderBooksError(m, i18n.Tf("Đã xoá truyện %q (%d chương).", p.Name, p.Chapters))
 }
 
+// createBookConfirmed tạo truyện rồi MỞ LUÔN, không chỉ tạo thư mục rồi đứng ngoài.
+// Người dùng gõ /new là muốn bắt đầu viết, không phải muốn tạo rồi ngồi nhìn.
 func (m Model) createBookConfirmed() (tea.Model, tea.Cmd) {
 	if m.books == nil {
 		return m, nil
 	}
-	name := strings.TrimSpace(m.books.draft)
-	if name == "" {
+	raw := strings.TrimSpace(m.books.draft)
+	if raw == "" {
 		return renderBooksError(m, i18n.T("Cần nhập tên truyện."))
 	}
-	dir, err := m.runtime.NewBookDir(name)
+	slug := sanitizeBookName(raw)
+	if slug == "" {
+		return renderBooksError(m, i18n.T("Tên truyện phải có ít nhất một chữ cái hoặc số."))
+	}
+	dir, err := m.runtime.NewBookDir(slug)
 	if err != nil {
 		return renderBooksError(m, err.Error())
 	}
-	m.books.mode = booksList
-	m.books.draft = ""
-	m.books.pending = nil
-	m.books.cursor = 0
-	if books, err := m.runtime.Books(); err == nil {
-		m.books.list = books
+	// Ghi tên hiển thị (có dấu) vào book.json ngay, vì tên thư mục đã bị flatten.
+	if err := writeBookTitle(dir, raw); err != nil {
+		return renderBooksError(m, i18n.Tf("Tạo được thư mục nhưng ghi tên hỏng: %v", err))
 	}
-	return renderBooksError(m, i18n.Tf("Đã tạo thư mục truyện: %s", filepath.Base(dir)))
+	// Trước khi chuyển, đóng modal để không giữ trạng thái của khung cũ.
+	m.books = nil
+	m.textarea.Blur()
+	return m.askSwitch(dir, raw)
+}
+
+// writeBookTitle ghi tên hiển thị vào meta/book.json, giữ nguyên dấu tiếng Việt.
+// Tên thư mục phải phẳng để dễ dùng, nhưng tên hiển thị thì không nên mất dấu —
+// đó là cái người dùng gõ và cũng là cái họ muốn đọc lại sau này.
+func writeBookTitle(dir, title string) error {
+	path := filepath.Join(dir, "meta", "book.json")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	// Không ghi đè file đã có: book.json có thể đang chứa nhiều trường khác.
+	if data, err := os.ReadFile(path); err == nil {
+		var m map[string]any
+		if err := json.Unmarshal(data, &m); err != nil {
+			return err
+		}
+		m["title"] = title
+		out, err := json.MarshalIndent(m, "", "  ")
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(path, out, 0o644)
+	}
+	out, err := json.MarshalIndent(map[string]any{"title": title}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, out, 0o644)
 }

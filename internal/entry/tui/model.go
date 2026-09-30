@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CTKiet2006/kietnovel/assets"
 	"github.com/CTKiet2006/kietnovel/internal/host"
 	"github.com/CTKiet2006/kietnovel/internal/utils"
 	"github.com/charmbracelet/bubbles/textarea"
@@ -55,6 +56,8 @@ var eventSpinnerFrames = []string{"⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯
 type Model struct {
 	runtime            *host.Host
 	cfg                bootstrap.Config // cấu hình đang chạy, để /language ghi lại lựa chọn
+	bundle             assets.Bundle    // giữ lại để dựng Host mới khi chuyển truyện
+	hostOpts           []host.NewOption // tuỳ chọn dựng Host (file log), dựng lại y hệt khi chuyển truyện
 	cocreate           *cocreateState
 	help               *helpState
 	modelSwitch        *modelSwitchState
