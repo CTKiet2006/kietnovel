@@ -96,6 +96,7 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 		Mode:           string(req.Mode),
 		Question:       req.Question,
 		SnapshotDigest: snap.ProgressDigest,
+		Chapter:        snap.Chapter,
 		Provider:       res.Provider,
 		Model:          res.Model,
 		Answer:         res.Answer,

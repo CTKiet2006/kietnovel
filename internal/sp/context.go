@@ -178,6 +178,10 @@ func buildOnce(st *storepkg.Store) (snap StorySnapshot, anchorA, anchorB string,
 
 	snap = StorySnapshot{CapturedAt: time.Now(), Blocks: blocks}
 	snap.ProgressDigest = digestSnapshot(blocks, anchorA)
+	snap.Chapter = progA.CurrentChapter
+	if snap.Chapter <= 0 {
+		snap.Chapter = progA.LatestCompleted() + 1
+	}
 	return snap, anchorA, anchorB, false, nil
 }
 
