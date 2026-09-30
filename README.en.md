@@ -74,7 +74,16 @@ running file.
 <details>
 <summary>Other options</summary>
 
-**Already have Go ≥ 1.25** — no binary needed, build from source:
+**No Go yet** — install it first, then use option 2 below:
+
+```powershell
+winget install GoLang.Go
+```
+
+Or grab the installer directly: <https://go.dev/dl/> → pick the Windows `.msi`. After
+installing, open a new terminal so `go` is on your PATH.
+
+**Option 2 — have Go ≥ 1.25**, build from source:
 
 ```powershell
 go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@latest

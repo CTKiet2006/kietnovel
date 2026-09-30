@@ -1,5 +1,5 @@
 services:
-  ainovel:
+  kietnovel:
     image: ghcr.io/ctkiet2006/kietnovel:latest
     build:
       context: .
