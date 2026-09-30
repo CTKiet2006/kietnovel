@@ -1167,9 +1167,17 @@ func TestEngine_ExitRaceRestoresPendingDispatch(t *testing.T) {
 		t.Fatalf("phase: %v", err)
 	}
 
-	// the worker hangs until ctx is cancelled: this creates the "engine aborted after enqueue" window.
+	// The worker blocks until we release it, which keeps the engine inside a run
+	// so the abort lands on the "dispatch enqueued but not yet applied" window.
+	// Signal through a channel instead of a fixed sleep: on a loaded CI runner a
+	// 50ms sleep is not long enough for the engine goroutine to even start, and
+	// the test failed intermittently with an empty PendingSteer.
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var enteredOnce sync.Once
 	blocked := &scriptedChatModel{fn: func([]agentcore.Message) agentcore.Message {
-		time.Sleep(50 * time.Millisecond)
+		enteredOnce.Do(func() { close(entered) })
+		<-release
 		return testTextMsg("...")
 	}}
 	writer := subagent.Config{Name: "writer", Description: "slow", Model: blocked, SystemPrompt: "t", MaxTurns: 100}
@@ -1182,6 +1190,14 @@ func TestEngine_ExitRaceRestoresPendingDispatch(t *testing.T) {
 	if !e.start(nil) {
 		t.Fatal("engine start")
 	}
+	// Wait until the worker is really running, so the abort below cannot race
+	// ahead of the engine goroutine.
+	select {
+	case <-entered:
+	case <-time.After(30 * time.Second):
+		t.Fatal("worker never started")
+	}
+
 	// while the worker runs, enqueue pause+dispatch and then immediately abort (the action never reaches the next boundary).
 	e.enqueue(controlOp{
 		hold:     &arbiter.AdvanceHoldOp{After: domain.AdvanceHoldAfterRewritesDrained, Reason: "验收"},
@@ -1190,6 +1206,7 @@ func TestEngine_ExitRaceRestoresPendingDispatch(t *testing.T) {
 		facts:    mustInterventionFacts(t, st),
 	})
 	e.abort()
+	close(release)
 	waitEngineDone(t, done)
 
 	meta, err := st.RunMeta.Load()
