@@ -60,10 +60,10 @@ func TestRenderRunningModelShowsStateAndElapsed(t *testing.T) {
 		ID:       "model-1",
 		Time:     time.Now().Add(-65 * time.Second),
 		Category: "MODEL",
-		Summary:  "思考中",
+		Summary:  "Đang suy nghĩ",
 		Depth:    1,
 	}, 60, 0))
-	if !strings.Contains(out, "思考中") || !strings.Contains(out, "(1m5s)") {
+	if !strings.Contains(out, "Đang suy nghĩ") || !strings.Contains(out, "(1m5s)") {
 		t.Fatalf("Model đang chạy phải hiện trạng thái và thời gian đã trôi, được %q", out)
 	}
 }
