@@ -538,4 +538,8 @@ var enCatalog = map[string]string{
 	" — lưu cấu hình thất bại, lần sau có thể mất lựa chọn: ": " — failed to save config, the choice may be lost next start: ",
 
 	" — ngôn ngữ sáng tác sẽ đổi từ lần khởi động sau": " — the writing language changes from the next start",
+
+	"Nhưng phần đang chạy dở sẽ bị dừng. Enter hoặc gõ y để chuyển, Esc để ở lại.": "But the running part will be stopped. Press Enter or y to switch, Esc to stay.",
+	"  Enter/y Chuyển · Esc Ở lại": "  Enter/y Switch · Esc Stay",
+	"  y Chuyển · Esc Ở lại":       "  y Switch · Esc Stay",
 }

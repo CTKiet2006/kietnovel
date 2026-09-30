@@ -171,6 +171,6 @@ func (s *booksState) renderSwitchConfirm() string {
 	b.WriteString("\n")
 	b.WriteString(good.Render(i18n.T("Truyện này vẫn nằm nguyên trên đĩa, không mất.")))
 	b.WriteString("\n")
-	b.WriteString(warn.Render(i18n.T("Nhưng phần đang chạy dở sẽ bị dừng. Gõ y để chuyển.")))
+	b.WriteString(warn.Render(i18n.T("Nhưng phần đang chạy dở sẽ bị dừng. Enter hoặc gõ y để chuyển, Esc để ở lại.")))
 	return b.String()
 }

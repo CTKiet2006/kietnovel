@@ -537,4 +537,8 @@ var zhCatalog = map[string]string{
 	" — lưu cấu hình thất bại, lần sau có thể mất lựa chọn: ": " — 保存配置失败，下次启动可能丢失该选择：",
 
 	" — ngôn ngữ sáng tác sẽ đổi từ lần khởi động sau": " — 写作语言将在下次启动后生效",
+
+	"Nhưng phần đang chạy dở sẽ bị dừng. Enter hoặc gõ y để chuyển, Esc để ở lại.": "但正在运行的部分将被停止。按 Enter 或 y 切换，按 Esc 留下。",
+	"  Enter/y Chuyển · Esc Ở lại": "  Enter/y 切换 · Esc 留下",
+	"  y Chuyển · Esc Ở lại":       "  y 切换 · Esc 留下",
 }
