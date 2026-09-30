@@ -1,4 +1,4 @@
-// Package errs provides application-level error sentinels for ainovel-cli.
+// Package errs provides application-level error sentinels for kietnovel.
 // Callers wrap errors with fmt.Errorf("...: %w", errs.ErrXxx) and use
 // errors.Is to detect categories.
 //

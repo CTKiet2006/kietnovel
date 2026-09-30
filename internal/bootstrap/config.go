@@ -207,7 +207,7 @@ var knownRoles = map[string]bool{
 // NovelDirEnv là biến môi trường chọn bộ truyện đang viết.
 // Mỗi thư mục là một bộ truyện độc lập, ví dụ:
 //
-//	NOVEL_DIR=./novels/tien-hiep-ky ainovel-cli
+//	NOVEL_DIR=./novels/tien-hiep-ky kietnovel
 //
 // Khi đặt, thư mục đầu ra của truyện là <NOVEL_DIR>/output/novel
 // (văn phong <outputDir>/style/ và checkpoint đi theo từng truyện).

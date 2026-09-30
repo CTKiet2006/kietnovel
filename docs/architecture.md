@@ -1,4 +1,4 @@
-# ainovel-cli 运行时架构
+# kietnovel 运行时架构
 
 > 事实层确定，语义层自主：一个串行确定性 Engine、三个自主 Worker、少数几个按需 Arbiter 函数、一个文件系统事实层。
 >

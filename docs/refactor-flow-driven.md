@@ -25,7 +25,7 @@
 ```
 agentcore       — 通用 agent 框架
 litellm         — 通用 LLM 网关
-ainovel-cli     — 小说创作垂直 agent（本项目）
+kietnovel     — 小说创作垂直 agent（本项目）
 ```
 
 垂类 agent 的决策空间是**封闭的**：流程图固定，分支有限，事实驱动。通用 agent 的设计哲学（"押注模型能力"）套到垂类场景有过度纯粹的嫌疑。

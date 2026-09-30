@@ -5,7 +5,7 @@
 >
 > - **litellm** —— LLM 网关：协议翻译与能力声明
 > - **agentcore** —— Agent 框架：缓存放置与缓存身份
-> - **ainovel-cli** —— 应用层：一行配置接入（codebot 同理）
+> - **kietnovel** —— 应用层：一行配置接入（codebot 同理）
 
 ---
 
@@ -68,7 +68,7 @@ usage 序列（input vs cache_read）后定位出三个根因：
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│ 应用层（ainovel-cli / codebot）                          │
+│ 应用层（kietnovel / codebot）                          │
 │   决定"缓存身份"取什么值：一书一基、一角色一名             │
 │   接入成本 = 每个 agent 两行配置                          │
 ├────────────────────────────────────────────────────────┤
@@ -409,7 +409,7 @@ broke := prevPrefix > 0 && prefix >= prevPrefix &&
 
 ## 11. 接入指南速查
 
-**ainovel-cli**（已内置）：每个 agent 配 `CacheLastMessage: "ephemeral"` +
+**kietnovel**（已内置）：每个 agent 配 `CacheLastMessage: "ephemeral"` +
 `PromptCacheKey: promptCacheBase(bookDir) + "-<role>"`，其余全自动。
 
 **codebot**（已内置）：key = SessionID；`Reset`/`SwitchSession` 时

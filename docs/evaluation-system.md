@@ -1,4 +1,4 @@
-# ainovel-cli 评测体系
+# kietnovel 评测体系
 
 > 评测不是新造一套检查脚本，而是把项目**已有的事实诊断器（`diag`）、全书文体统计器（`stylestat`）、七维原生评审（`ReviewEntry`）当作评测器**，套一层离线批量 harness。一份事实定义，两处不再漂移。
 
@@ -363,7 +363,7 @@ internal/eval/
   grade.go       Finding→门禁映射 + baseline/variant delta + stylestat gate 决策
   report.go      report.json + report.md
 
-cmd/ainovel-cli  eval 子命令入口
+cmd/kietnovel  eval 子命令入口
 
 evals/
   cases/         smoke/ workflow/ quality/ longform/ recovery/ steering/
@@ -376,7 +376,7 @@ evals/
 
 ```bash
 # 多 case 批量（CI 默认只跑 smoke、不开 judge）
-ainovel-cli eval --cases evals/cases/smoke \
+kietnovel eval --cases evals/cases/smoke \
   --variant evals/variants/writer-anti-ai-tone \
   --out workspace/evals/writer-anti-ai-tone --ci
 ```
@@ -387,7 +387,7 @@ ainovel-cli eval --cases evals/cases/smoke \
 
 ```bash
 # 重大 prompt 改动：A/B + repeat 降随机性
-ainovel-cli eval --cases evals/cases/quality \
+kietnovel eval --cases evals/cases/quality \
   --variant evals/variants/writer-anti-ai-tone \
   --repeat 3 --ci
 ```

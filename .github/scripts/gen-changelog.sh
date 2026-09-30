@@ -28,7 +28,7 @@ TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 cat > "$TMPDIR/prompt.txt" <<PROMPT_EOF
-你是 Go 命令行工具 ainovel-cli（一款 AI 小说写作引擎）的发布说明撰写者。
+你是 Go 命令行工具 kietnovel（一款 AI 小说写作引擎）的发布说明撰写者。
 请根据下面的 Git 提交记录，生成简洁、清晰、面向用户的中文 Markdown 发布说明。
 
 规则：
