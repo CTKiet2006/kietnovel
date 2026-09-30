@@ -27,8 +27,10 @@ go.work.sum
 # env file
 .env
 
-# 项目级配置 dotdir（镜像 ~/.ainovel/）：config.json 含密钥，rules/ 为本地写作偏好
-.ainovel/
+# kietnovel dotdir (vd ~/.kietnovel/): config.json chua API key, rules/ cho nguoi dung
+.kietnovel/
+# kietnovel dotdir (vd ~/.kietnovel/): config.json chua API key, rules/ cho nguoi dung
+.kietnovel/
 
 # Editor/IDE
 .idea/
@@ -38,14 +40,13 @@ go.work.sum
 
 # GoReleaser artifacts
 dist/
-release-notes.md
-/ainovel-cli
+/kietnovel
 
 tasks
 refer/
 output*
 workspace/
-ainovel.db
+kietnovel.db
 
 # kietnovel: thư mục runtime chứa bí mật và truyện — KHÔNG BAO GIỜ commit.
 # config/config.json giữ API key thật, novels/*/workspace giữ bản thảo.

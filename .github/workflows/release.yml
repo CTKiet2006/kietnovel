@@ -23,7 +23,12 @@ jobs:
           go-version: stable
 
       - name: Generate release notes
-        run: .github/scripts/gen-changelog.sh > release-notes.md
+        # Ghi ra ngoai thu muc repo. Truoc day ghi vao release-notes.md o goc,
+        # nhung file do nam trong .gitignore nen `goreleaser --clean` xoa mat
+        # no truoc khi doc -> release fail voi loi "open release-notes.md: no
+        # such file or directory". $RUNNER_TEMP khong nam trong repo nen
+        # --clean khong cham vao.
+        run: .github/scripts/gen-changelog.sh > "${{ runner.temp }}/release-notes.md"
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -36,6 +41,6 @@ jobs:
           version: "~> v2"
           args: >-
             release --clean
-            --release-notes=release-notes.md
+            --release-notes=${{ runner.temp }}/release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
