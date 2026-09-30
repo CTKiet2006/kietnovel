@@ -78,7 +78,10 @@ func main() {
 	// Tải cấu hình
 	cfg, err := bootstrap.LoadConfig()
 	if err != nil {
-		die("config: %v", err)
+		// Config tồn tại nhưng không dùng được (thiếu provider, JSON hỏng, ...).
+		// Không chết ở đây với một dòng lỗi trừng trọng: nói rõ nguyên nhân và
+		// đường thoát, vì người dùng không thể tự biết sửa ở đâu.
+		die("%v\n\n%s", err, repairHint())
 	}
 
 	runWithConfig(cfg, opts, args)
@@ -98,6 +101,26 @@ func die(format string, args ...any) {
 		fmt.Fscanln(os.Stdin)
 	}
 	os.Exit(1)
+}
+
+// repairHint chỉ người dùng cách thoát khi cấu hình không dùng được.
+//
+// Cần vì lỗi cấu hình trả về dạng "thiếu provider (bắt buộc)" — người không rà
+// code không biết sửa ở đâu, và xoá thẳng cả thư mục là mất truyện đang viết.
+// Nêu đúng đường dẫn, và nhắc chỉ xoá CONFIG, không đụng output/.
+func repairHint() string {
+	p := bootstrap.DefaultConfigPath()
+	if p == "" {
+		p = "~/.kietnovel/config.json"
+	}
+	return strings.Join([]string{
+		"Cách sửa: mở file cấu hình và điền provider + model + api_key, hoặc xoá nó để chạy lại Setup Wizard:",
+		"",
+		"    notepad \"" + p + "\"        # sửa tay",
+		"    del \"" + p + "\"              # xoá để dẫn lại từ đầu",
+		"",
+		"Chỉ xoá file cấu hình. Thư mục output/ giữ toàn bộ truyện của bạn, đừng xoá.",
+	}, "\n")
 }
 
 // stdinIsTerminal xét stdin có nối vào terminal (thiết bị ký tự) không. Double-click khởi động / terminal tương tác

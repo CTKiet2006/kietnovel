@@ -22,16 +22,49 @@ import (
 var exampleConfig string
 
 // NeedsSetup kiểm tra có cần dẫn lần đầu không (kích hoạt khi cả cấu hình toàn cục lẫn project đều chưa có).
+// NeedsSetup kiem tra co can dan nguoi dung khong.
+//
+// PHAI kiem tra cau hinh co DUNG DUOC, khong chi co ton tai. Truoc day chi
+// os.Stat: mot config.json rong hoac hong van qua, roi chet o "thieu provider
+// (bat buoc)" ma khong co duong nao de sua. Nguoi dung cai lan dau, va bat ky ai
+// bi hong cau hinh giua chung, deu dinh — va khong ai chi duoc phai lam gi.
+//
+// LoadConfig chi loi khi cau hinh KHONG DU dung; loi doc file thi bo qua de thu
+// duong khac, nen tra false o day la de khong chan Setup Wizard vi mot loi doc tam
+// thoi.
 func NeedsSetup() bool {
-	if p := DefaultConfigPath(); p != "" {
-		if _, err := os.Stat(p); err == nil {
-			return false
+	return !configUsable()
+}
+
+// configUsable: co cau hinh nao load duoc va du provider + model khong.
+func configUsable() bool {
+	for _, p := range configCandidatePaths() {
+		if p == "" {
+			continue
+		}
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		cfg, err := LoadConfig()
+		if err != nil {
+			continue
+		}
+		cfg.FillDefaults()
+		if cfg.Provider != "" && cfg.ModelName != "" {
+			return true
 		}
 	}
-	if _, err := os.Stat(projectConfigPath()); err == nil {
-		return false
+	return false
+}
+
+// configCandidatePaths liet ke duong dan cau hinh co the dung, theo thu tu uu tien
+// cua LoadConfig.
+func configCandidatePaths() []string {
+	var out []string
+	if p := DefaultConfigPath(); p != "" {
+		out = append(out, p)
 	}
-	return true
+	return append(out, projectConfigPath())
 }
 
 type setupProvider struct {
