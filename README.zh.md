@@ -56,7 +56,7 @@
 
 ```powershell
 # 1. Cài (một lệnh, không cần cài Go)
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.2.3/scripts/install-windows.ps1 | iex
+irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.2.4/scripts/install-windows.ps1 | iex
 
 # 2. Mở terminal mới, rồi chạy
 kietnovel
