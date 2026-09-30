@@ -87,6 +87,14 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 		u := resp.Message.Usage
 		res.InputTokens, res.OutputTokens = u.Input, u.Output
 		res.CacheRead, res.CacheWrite = u.CacheRead, u.CacheWrite
+		// Identity: ưu tiên provider/model thật do usage báo (sau failover có
+		// thể khác model đã resolve). Không có thì giữ resolve ban đầu.
+		if strings.TrimSpace(u.Provider) != "" {
+			res.Provider = u.Provider
+		}
+		if strings.TrimSpace(u.Model) != "" {
+			res.Model = u.Model
+		}
 		if s.deps.RecordUsage != nil {
 			s.deps.RecordUsage(*u)
 		}

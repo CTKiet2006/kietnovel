@@ -78,6 +78,17 @@ type Host struct {
 
 	interMu sync.Mutex // Định đoạn can thiệp tuần tự FIFO (mỗi thời điểm tối đa một lần tư vấn đang chờ)
 
+	// spMu/spCancel/spGen là sidecar của Story Partner (/sp hỏi): mỗi thời điểm một
+	// advisor request, request mới hủy request cũ. Tách khỏi mu/interMu/exclusive
+	// vì cancel ở đây không bao giờ động vào Engine hay lifecycle.
+	// spGen để finish chỉ dọn đúng lượt mình (func không so sánh được).
+	spMu     sync.Mutex
+	spCancel context.CancelFunc
+	spGen    int
+	// resolveAdvisorModel là seam test: inject fake advisor model để không gọi
+	// mạng. Production luôn nil → resolveAdvisor đi ForRoleWithFailover thật.
+	resolveAdvisorModel func() agentcore.ChatModel
+
 	outputMu     sync.RWMutex
 	outputClosed bool
 
