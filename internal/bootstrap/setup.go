@@ -328,6 +328,7 @@ var (
 	setupDimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	setupHeaderStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99"))
 	setupInputStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
+	setupWarnStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("203"))
 )
 
 type setupSelectModel struct {
@@ -335,6 +336,7 @@ type setupSelectModel struct {
 	items     []setupProvider
 	cursor    int
 	cancelled bool
+	escArmed  bool
 }
 
 func (m setupSelectModel) Init() tea.Cmd { return nil }
@@ -343,18 +345,33 @@ func (m setupSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "up", "k":
+			m.escArmed = false
 			if m.cursor > 0 {
 				m.cursor--
 			}
 		case "down", "j":
+			m.escArmed = false
 			if m.cursor < len(m.items)-1 {
 				m.cursor++
 			}
 		case "enter":
 			return m, tea.Quit
-		case "q", "esc", "ctrl+c":
+		case "q", "ctrl+c":
 			m.cancelled = true
 			return m, tea.Quit
+		case "esc":
+			// Esc phai bam 2 lan moi huy. Ly do: mui ten gui chuoi escape
+			// "\x1b[A"/"\x1b[B"; neu terminal gui cham, bubbletea co the tra
+			// ve mot KeyEsc doc le. Neu Esc huy ngay thi nguoi dung chi can
+			// bam mui ten la mat toan bo phan thiet lap da nhap. Bam 2 lan
+			// loai bo rui ro ma van huy duoc bang cach cu.
+			if m.escArmed {
+				m.cancelled = true
+				return m, tea.Quit
+			}
+			m.escArmed = true
+		default:
+			m.escArmed = false
 		}
 	}
 	return m, nil
@@ -373,6 +390,10 @@ func (m setupSelectModel) View() string {
 		}
 		b.WriteString(cursor + label + "\n")
 	}
+	if m.escArmed {
+		b.WriteString(setupWarnStyle.Render("\n  Bấm Esc lần nữa để hủy thiết lập (Ctrl+C hủy ngay)"))
+		return b.String()
+	}
 	b.WriteString(setupDimStyle.Render("\n  ↑↓ Chọn · Enter Xác nhận · Esc Hủy"))
 	return b.String()
 }
@@ -386,6 +407,7 @@ type setupInputModel struct {
 	allowEmpty   bool   // Cho phép nhập thẳng giá trị trống
 	value        string
 	cancelled    bool
+	escArmed     bool
 }
 
 func (m setupInputModel) Init() tea.Cmd { return nil }
@@ -394,18 +416,29 @@ func (m setupInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "enter":
+			m.escArmed = false
 			if utils.CleanInputLine(m.value) != "" || m.defaultValue != "" || m.allowEmpty {
 				return m, tea.Quit
 			}
-		case "ctrl+c", "esc":
+		case "ctrl+c":
 			m.cancelled = true
 			return m, tea.Quit
+		case "esc":
+			// Xem giai thich o setupSelectModel.Update: Esc can 2 lan moi huy
+			// de mot chuoi escape bi cat khong lam bay mat phan dang nhap.
+			if m.escArmed {
+				m.cancelled = true
+				return m, tea.Quit
+			}
+			m.escArmed = true
 		case "backspace":
+			m.escArmed = false
 			if len(m.value) > 0 {
 				runes := []rune(m.value)
 				m.value = string(runes[:len(runes)-1])
 			}
 		default:
+			m.escArmed = false
 			if msg.Type == tea.KeyRunes {
 				m.value += utils.CleanInputRunes(msg.Runes)
 			} else if msg.Type == tea.KeySpace {
