@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -76,6 +77,10 @@ func ProviderPresets() []ProviderPreset {
 }
 
 // RunSetup chạy dẫn lần đầu, trả về cấu hình đã sinh.
+// errBack là tín hiệu nội bộ: người dùng bấm Esc muốn quay lại bước trước.
+// Không phải lỗi thật, RunSetup bắt và giảm bước.
+var errBack = errors.New("quay lai buoc truoc")
+
 func RunSetup() (Config, error) {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99")).
@@ -84,77 +89,102 @@ func RunSetup() (Config, error) {
 	fmt.Fprintf(os.Stderr, "  Xong có thể sửa file này để chỉnh các thiết lập nâng cao.\n")
 	fmt.Fprintln(os.Stderr)
 
-	// Bước 1: chọn Provider
-	sp, err := runProviderSelect()
-	if err != nil {
-		return Config{}, err
-	}
+	// Trạng thái của từng bước, giữ lại để quay lại không phải nhập lại từ đầu.
+	var (
+		sp           setupProvider
+		providerName string
+		pc           ProviderConfig
+		apiKey       string
+		baseURL      string
+		modelName    string
+		lang         string
+		langLabel    string
+	)
+	// 0 = chưa bước nào, chạy bước 1. step là bước đang hiển thị, giảm khi bấm Esc.
+	step := 1
 
-	providerName := sp.name
-	var pc ProviderConfig
-	printStepDone("Provider", sp.label)
-
-	// Proxy tùy chỉnh: hỏi thêm tên và loại giao thức API
-	if sp.needType {
-		providerName, err = runTextInput("Tên Provider", "my-proxy")
-		if err != nil {
-			return Config{}, err
+	for step > 0 && step <= 5 {
+		if step > 1 {
+			fmt.Fprintln(os.Stderr, lipgloss.NewStyle().Foreground(lipgloss.Color("245")).
+				Render("  ↩ Quay lại bước trước"))
+			fmt.Fprintln(os.Stderr)
 		}
-		providerType, err := runTypeSelect()
-		if err != nil {
-			return Config{}, err
+		canBack := step > 1
+		var err error
+
+		switch step {
+		case 1:
+			sp, err = runProviderSelect(canBack)
+			if err == nil {
+				providerName = sp.name
+				pc = ProviderConfig{}
+				printStepDone("Provider", sp.label)
+				// Proxy tùy chỉnh: hỏi thêm tên và loại giao thức API.
+				if sp.needType {
+					providerName, err = runTextInput("Tên Provider", "my-proxy", canBack)
+					if err == nil {
+						var providerType string
+						providerType, err = runTypeSelect(canBack)
+						if err == nil {
+							pc.Type = providerType
+						}
+					}
+				}
+			}
+		case 2:
+			if sp.apiKeyOptional {
+				apiKey, err = runOptionalTextInput("[2/5] API Key (có thể bỏ trống)", "Bỏ trống nếu không dùng API Key", canBack)
+			} else {
+				apiKey, err = runTextInput("[2/5] API Key", "sk-xxx", canBack)
+			}
+			if err == nil {
+				pc.APIKey = apiKey
+				if apiKey == "" {
+					printStepDone("API Key", "Chưa đặt")
+				} else {
+					printStepDone("API Key", maskKey(apiKey))
+				}
+			}
+		case 3:
+			baseHint := "Bỏ trống để dùng địa chỉ chính thức"
+			if sp.baseURL != "" {
+				baseHint = sp.baseURL
+			}
+			baseURL, err = runTextInputWithDefault("[3/5] Base URL (Enter dùng mặc định, dùng proxy thì điền địa chỉ proxy)", baseHint, sp.baseURL, canBack)
+			if err == nil {
+				pc.BaseURL = baseURL
+				if baseURL != "" {
+					printStepDone("Base URL", baseURL)
+				} else {
+					printStepDone("Base URL", "Mặc định")
+				}
+			}
+		case 4:
+			modelName, err = runTextInput("[4/5] Tên model", "Ví dụ: gpt-4o / claude-sonnet-4 / gemini-2.5-pro", canBack)
+			if err == nil {
+				pc.Models = []ModelConfig{{Name: modelName}}
+				printStepDone("Model", modelName)
+			}
+		case 5:
+			lang, langLabel, err = runLanguageSelect(canBack)
+			if err == nil {
+				printStepDone("Ngôn ngữ", langLabel)
+			}
 		}
-		pc.Type = providerType
+
+		switch {
+		case errors.Is(err, errBack):
+			step--
+		case err != nil:
+			return Config{}, err
+		default:
+			step++
+		}
 	}
 
-	// Bước 2: nhập API Key
-	var apiKey string
-	if sp.apiKeyOptional {
-		apiKey, err = runOptionalTextInput("[2/5] API Key (có thể bỏ trống)", "Bỏ trống nếu không dùng API Key")
-	} else {
-		apiKey, err = runTextInput("[2/5] API Key", "sk-xxx")
+	if step == 0 {
+		return Config{}, fmt.Errorf("đã hủy thiết lập")
 	}
-	if err != nil {
-		return Config{}, err
-	}
-	pc.APIKey = apiKey
-	if apiKey == "" {
-		printStepDone("API Key", "Chưa đặt")
-	} else {
-		printStepDone("API Key", maskKey(apiKey))
-	}
-
-	// Bước 3: Base URL (Enter thẳng để dùng địa chỉ chính thức)
-	baseDefault := sp.baseURL
-	baseHint := "Bỏ trống để dùng địa chỉ chính thức"
-	if baseDefault != "" {
-		baseHint = baseDefault
-	}
-	baseURL, err := runTextInputWithDefault("[3/5] Base URL (Enter dùng mặc định, dùng proxy thì điền địa chỉ proxy)", baseHint, baseDefault)
-	if err != nil {
-		return Config{}, err
-	}
-	pc.BaseURL = baseURL
-	if baseURL != "" {
-		printStepDone("Base URL", baseURL)
-	} else {
-		printStepDone("Base URL", "Mặc định")
-	}
-
-	// Bước 4: tên model (bắt buộc)
-	modelName, err := runTextInput("[4/5] Tên model", "Ví dụ: gpt-4o / claude-sonnet-4 / gemini-2.5-pro")
-	if err != nil {
-		return Config{}, err
-	}
-	printStepDone("Model", modelName)
-	pc.Models = []ModelConfig{{Name: modelName}}
-
-	// Bước 5: Ngôn ngữ sáng tác (mặc định Tiếng Việt)
-	lang, langLabel, err := runLanguageSelect()
-	if err != nil {
-		return Config{}, err
-	}
-	printStepDone("Ngôn ngữ", langLabel)
 
 	cfg := Config{
 		Provider:  providerName,
@@ -215,10 +245,11 @@ func maskKey(key string) string {
 
 // ---------- Thành phần TUI ----------
 
-func runProviderSelect() (setupProvider, error) {
+func runProviderSelect(canBack bool) (setupProvider, error) {
 	m := setupSelectModel{
-		title: "[1/5] Chọn Provider",
-		items: setupProviders,
+		title:   "[1/5] Chọn Provider",
+		items:   setupProviders,
+		canBack: canBack,
 	}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	final, err := p.Run()
@@ -229,6 +260,9 @@ func runProviderSelect() (setupProvider, error) {
 	if result.cancelled {
 		return setupProvider{}, fmt.Errorf("đã hủy thiết lập")
 	}
+	if result.backed {
+		return setupProvider{}, errBack
+	}
 	return result.items[result.cursor], nil
 }
 
@@ -238,10 +272,11 @@ var apiTypeOptions = []setupProvider{
 	{name: "gemini", label: "Tương thích Gemini"},
 }
 
-func runTypeSelect() (string, error) {
+func runTypeSelect(canBack bool) (string, error) {
 	m := setupSelectModel{
-		title: "Loại giao thức API",
-		items: apiTypeOptions,
+		title:   "Loại giao thức API",
+		items:   apiTypeOptions,
+		canBack: canBack,
 	}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	final, err := p.Run()
@@ -251,6 +286,9 @@ func runTypeSelect() (string, error) {
 	result := final.(setupSelectModel)
 	if result.cancelled {
 		return "", fmt.Errorf("đã hủy thiết lập")
+	}
+	if result.backed {
+		return "", errBack
 	}
 	return result.items[result.cursor].name, nil
 }
@@ -264,10 +302,11 @@ var languageOptions = []setupProvider{
 	{name: LangChinese, label: "中文 — 中文界面与中文小说"},
 }
 
-func runLanguageSelect() (lang, label string, err error) {
+func runLanguageSelect(canBack bool) (lang, label string, err error) {
 	m := setupSelectModel{
-		title: "[5/5] Ngôn ngữ giao diện & sáng tác truyện",
-		items: languageOptions,
+		title:   "[5/5] Ngôn ngữ giao diện & sáng tác truyện",
+		items:   languageOptions,
+		canBack: canBack,
 	}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	final, err := p.Run()
@@ -278,16 +317,19 @@ func runLanguageSelect() (lang, label string, err error) {
 	if result.cancelled {
 		return "", "", fmt.Errorf("đã hủy thiết lập")
 	}
+	if result.backed {
+		return "", "", errBack
+	}
 	picked := result.items[result.cursor]
 	return NormalizeLanguage(picked.name), picked.label, nil
 }
 
-func runTextInput(label, placeholder string) (string, error) {
-	return runTextInputWithDefault(label, placeholder, "")
+func runTextInput(label, placeholder string, canBack bool) (string, error) {
+	return runTextInputWithDefault(label, placeholder, "", canBack)
 }
 
-func runOptionalTextInput(label, placeholder string) (string, error) {
-	m := setupInputModel{label: label, placeholder: placeholder, allowEmpty: true}
+func runOptionalTextInput(label, placeholder string, canBack bool) (string, error) {
+	m := setupInputModel{label: label, placeholder: placeholder, allowEmpty: true, canBack: canBack}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	final, err := p.Run()
 	if err != nil {
@@ -304,8 +346,8 @@ func runOptionalTextInput(label, placeholder string) (string, error) {
 // Ô trống + Enter luôn được chấp nhận: trả về defaultValue nếu có, không thì ""
 // — nếu không, người dùng chọn provider không kèm baseURL dựng sẵn sẽ bị kẹt
 // vĩnh viễn ở bước này vì Enter không làm gì (issue #125).
-func runTextInputWithDefault(label, placeholder, defaultValue string) (string, error) {
-	m := setupInputModel{label: label, placeholder: placeholder, defaultValue: defaultValue, allowEmpty: true}
+func runTextInputWithDefault(label, placeholder, defaultValue string, canBack bool) (string, error) {
+	m := setupInputModel{label: label, placeholder: placeholder, defaultValue: defaultValue, allowEmpty: true, canBack: canBack}
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	final, err := p.Run()
 	if err != nil {
@@ -336,7 +378,10 @@ type setupSelectModel struct {
 	items     []setupProvider
 	cursor    int
 	cancelled bool
-	escArmed  bool
+	backed    bool   // Người dùng yêu cầu quay lại bước trước
+	canBack   bool   // Có bước trước để quay lại không
+	escArmed  bool   // Esc đang chờ bấm lần hai để huỷ
+	backHint  string // Gợi ý hiển thị cuối màn hình
 }
 
 func (m setupSelectModel) Init() tea.Cmd { return nil }
@@ -360,11 +405,16 @@ func (m setupSelectModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cancelled = true
 			return m, tea.Quit
 		case "esc":
-			// Esc phai bam 2 lan moi huy. Ly do: mui ten gui chuoi escape
-			// "\x1b[A"/"\x1b[B"; neu terminal gui cham, bubbletea co the tra
-			// ve mot KeyEsc doc le. Neu Esc huy ngay thi nguoi dung chi can
-			// bam mui ten la mat toan bo phan thiet lap da nhap. Bam 2 lan
-			// loai bo rui ro ma van huy duoc bang cach cu.
+			// Mũi tên trên Windows gửi chuỗi escape "\x1b[A"/"\x1b[B"; nếu
+			// terminal gửi chậm, bubbletea có thể trả về một KeyEsc đứng lẻ.
+			//
+			// Vì vậy Esc ở đây luôn ưu tiên hành động ít tổn hại nhất:
+			//   - có bước trước  -> quay lại, chỉ phải trả lời lại một câu;
+			//   - đang ở bước 1   -> phải bấm hai lần mới huỷ.
+			if m.canBack {
+				m.backed = true
+				return m, tea.Quit
+			}
 			if m.escArmed {
 				m.cancelled = true
 				return m, tea.Quit
@@ -394,7 +444,13 @@ func (m setupSelectModel) View() string {
 		b.WriteString(setupWarnStyle.Render("\n  Bấm Esc lần nữa để hủy thiết lập (Ctrl+C hủy ngay)"))
 		return b.String()
 	}
-	b.WriteString(setupDimStyle.Render("\n  ↑↓ Chọn · Enter Xác nhận · Esc Hủy"))
+	if m.backHint == "" {
+		m.backHint = "Esc Hủy"
+		if m.canBack {
+			m.backHint = "Esc Quay lại"
+		}
+	}
+	b.WriteString(setupDimStyle.Render("\n  ↑↓ Chọn · Enter Xác nhận · " + m.backHint))
 	return b.String()
 }
 
@@ -407,7 +463,10 @@ type setupInputModel struct {
 	allowEmpty   bool   // Cho phép nhập thẳng giá trị trống
 	value        string
 	cancelled    bool
+	backed       bool // Người dùng yêu cầu quay lại bước trước
+	canBack      bool
 	escArmed     bool
+	backHint     string
 }
 
 func (m setupInputModel) Init() tea.Cmd { return nil }
@@ -424,8 +483,12 @@ func (m setupInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cancelled = true
 			return m, tea.Quit
 		case "esc":
-			// Xem giai thich o setupSelectModel.Update: Esc can 2 lan moi huy
-			// de mot chuoi escape bi cat khong lam bay mat phan dang nhap.
+			// Xem giải thích dài ở setupSelectModel.Update. Ở ô nhập, quay lại
+			// càng đáng giá: người dùng đang giữa chừng một API key.
+			if m.canBack {
+				m.backed = true
+				return m, tea.Quit
+			}
 			if m.escArmed {
 				m.cancelled = true
 				return m, tea.Quit
@@ -461,7 +524,14 @@ func (m setupInputModel) View() string {
 		b.WriteString(m.value)
 		b.WriteString(setupCursorStyle.Render("▌"))
 	}
-	b.WriteString(setupDimStyle.Render("  (Enter Xác nhận, Esc Hủy)"))
+	hint := "Esc Hủy"
+	if m.canBack {
+		hint = "Esc Quay lại"
+	}
+	if m.escArmed {
+		hint = "Bấm Esc lần nữa để hủy"
+	}
+	b.WriteString(setupDimStyle.Render("  (Enter Xác nhận, " + hint + ")"))
 	b.WriteString("\n")
 	return b.String()
 }
