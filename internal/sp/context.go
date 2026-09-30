@@ -43,6 +43,9 @@ func progressAnchor(p *domain.Progress) string {
 // Writer: /sp trả lời dựa trên câu chuyện đã tồn tại, không dựa trên chương đang
 // nửa sinh nửa chết.
 func BuildSnapshot(st *storepkg.Store) (StorySnapshot, error) {
+	if st == nil {
+		return StorySnapshot{}, fmt.Errorf("sp: thiếu Store")
+	}
 	var lastErr error
 	for attempt := 0; attempt <= maxSnapshotRetries; attempt++ {
 		snap, anchorA, anchorB, retryable, err := buildOnce(st)
@@ -96,37 +99,34 @@ func buildOnce(st *storepkg.Store) (snap StorySnapshot, anchorA, anchorB string,
 		add(ContextBlock{ID: "premise", Kind: "premise", Content: premise})
 	}
 
-	// Dàn ý chương hiện tại + vài chương quanh nó.
-	if progA != nil {
-		cur := progA.CurrentChapter
-		if cur <= 0 {
-			cur = progA.LatestCompleted() + 1
+	// Dàn ý chương hiện tại + vài chương quanh nó. progA không nil ở đây
+	// (nil đã return ở trên), không cần kiểm tra lại.
+	cur := progA.CurrentChapter
+	if cur <= 0 {
+		cur = progA.LatestCompleted() + 1
+	}
+	for _, ch := range []int{cur - 1, cur, cur + 1} {
+		if ch <= 0 {
+			continue
 		}
-		for _, ch := range []int{cur - 1, cur, cur + 1} {
-			if ch <= 0 {
-				continue
-			}
-			if entry, err := st.Outline.GetChapterOutline(ch); err == nil && entry != nil {
-				add(ContextBlock{
-					ID:      fmt.Sprintf("outline:chapter:%d", ch),
-					Kind:    "outline",
-					Content: fmt.Sprintf("Chương %d: %s\nMốc chính: %s\nCảnh: %s", ch, entry.Title, entry.CoreEvent, strings.Join(entry.Scenes, "; ")),
-				})
-			}
+		if entry, err := st.Outline.GetChapterOutline(ch); err == nil && entry != nil {
+			add(ContextBlock{
+				ID:      fmt.Sprintf("outline:chapter:%d", ch),
+				Kind:    "outline",
+				Content: fmt.Sprintf("Chương %d: %s\nMốc chính: %s\nCảnh: %s", ch, entry.Title, entry.CoreEvent, strings.Join(entry.Scenes, "; ")),
+			})
 		}
 	}
 
 	// Tóm tắt các chương gần nhất đã chốt.
-	if progA != nil {
-		latest := progA.LatestCompleted()
-		if sums, err := st.Summaries.LoadRecentSummaries(latest, 3); err == nil {
-			for _, s := range sums {
-				add(ContextBlock{
-					ID:      fmt.Sprintf("summary:chapter:%d", s.Chapter),
-					Kind:    "summary",
-					Content: fmt.Sprintf("Chương %d (%s): %s\nSự kiện: %s", s.Chapter, s.Title, s.Summary, strings.Join(s.KeyEvents, "; ")),
-				})
-			}
+	latest := progA.LatestCompleted()
+	if sums, err := st.Summaries.LoadRecentSummaries(latest, 3); err == nil {
+		for _, s := range sums {
+			add(ContextBlock{
+				ID:      fmt.Sprintf("summary:chapter:%d", s.Chapter),
+				Kind:    "summary",
+				Content: fmt.Sprintf("Chương %d (%s): %s\nSự kiện: %s", s.Chapter, s.Title, s.Summary, strings.Join(s.KeyEvents, "; ")),
+			})
 		}
 	}
 
@@ -150,14 +150,12 @@ func buildOnce(st *storepkg.Store) (snap StorySnapshot, anchorA, anchorB string,
 	}
 
 	// Timeline gần nhất.
-	if progA != nil {
-		if tl, err := st.World.LoadRecentTimeline(progA.LatestCompleted(), 10); err == nil {
-			var lines []string
-			for _, e := range tl {
-				lines = append(lines, fmt.Sprintf("C%d [%s]: %s", e.Chapter, e.Time, e.Event))
-			}
-			add(ContextBlock{ID: "timeline:recent", Kind: "timeline", Content: strings.Join(lines, "\n")})
+	if tl, err := st.World.LoadRecentTimeline(progA.LatestCompleted(), 10); err == nil {
+		var lines []string
+		for _, e := range tl {
+			lines = append(lines, fmt.Sprintf("C%d [%s]: %s", e.Chapter, e.Time, e.Event))
 		}
+		add(ContextBlock{ID: "timeline:recent", Kind: "timeline", Content: strings.Join(lines, "\n")})
 	}
 
 	// Review gần nhất còn treo: chỉ lấy issue chưa xong, không lấy điểm số.

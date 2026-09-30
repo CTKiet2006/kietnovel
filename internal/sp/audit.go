@@ -4,8 +4,17 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 )
+
+// auditMu tuần tự hoá ghi audit trong cùng tiến trình.
+//
+// O_APPEND của kernel đã nguyên tử ở mức offset cho entry nhỏ, nhưng hai
+// goroutine cùng mở hai handle rồi Write xen kẽ vẫn có thể xé entry khi Go chia
+// nhỏ syscall. Mutex này rẻ hơn nhiều so với một dòng log hỏng — mà log hỏng thì
+// audit mất đúng tác dụng truy nguyên nhân.
+var auditMu sync.Mutex
 
 // auditEntry là một dòng audit cho mỗi request /sp.
 //
@@ -36,6 +45,8 @@ func writeAudit(dir string, e auditEntry) {
 	if dir == "" {
 		return
 	}
+	auditMu.Lock()
+	defer auditMu.Unlock()
 	e.DurationMs = int64(e.Duration / time.Millisecond)
 	data, err := json.Marshal(e)
 	if err != nil {
