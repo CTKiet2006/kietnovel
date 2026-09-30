@@ -6,11 +6,21 @@ go.work
 go.work.sum
 .DS_Store
 .env
+# Phai lo .kietnovel chu khong phai .ainovel: Dockerfile chay `COPY . .`, nen
+# thu muc nay chua config.json voi API key cua nguoi dung se bi nap vao image.
+# Truoc day chi lo ten cu nen key co the bi ro trong image.
+.kietnovel
 .ainovel
+# Cac thu muc du lieu va bien cu cua repo cha
 config
 workspace
 dist
 tasks
 refer
 output*
+novels
+simulate
+xuat_ban
 *.log
+kietnovel
+kietnovel.exe

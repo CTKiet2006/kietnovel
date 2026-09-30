@@ -18,10 +18,14 @@ import (
 	"strings"
 )
 
-// allow là file được phép giữ tên "ainovel-cli" — README và LICENSE ghi nhận
-// nguồn gốc, đổi tên ở đó sẽ mất ý nghĩa credit. Chính thư mục checker này cũng
-// phải được miễn: nó chứa chính các mẫu tìm kiếm, nếu không sẽ tự báo mình.
-var allow = regexp.MustCompile(`^(README(\.\w+)?\.md|LICENSE|NOTICE)$`)
+// allow là file được phép giữ tên cũ. Ba README + LICENSE ghi nhận nguồn gốc
+// AINovel-CLI, đổi tên ở đó sẽ mất ý nghĩa credit.
+//
+// .dockerignore cũng được miễn, nhưng lý do khác: nó phải liệt kê CẢ tên cũ
+// và tên mới. Bỏ tên cũ đi thì người dùng còn thư mục .ainovel (chứa API key)
+// sẽ lỡ được COPY vào Docker image. Dockerfile chạy `COPY . .`, nên đây là
+// đường rò bảo mật thật, không phải chuyện văn bản.
+var allow = regexp.MustCompile(`^(README(\.\w+)?\.md|LICENSE|NOTICE|\.dockerignore)$`)
 
 // selfDir là thư mục chứa checker, được bỏ qua khi quét.
 var selfDir = "internal" + string(filepath.Separator) + "tools" + string(filepath.Separator) + "checkself"

@@ -283,7 +283,7 @@ writer.md 只承担：执行协议、断点续跑认知模型、章节契约解�
 
 ### 6.5 提示词缓存
 
-长跑成本的第二杠杆（第一是模型选型）。完整讲解版见 `docs/prompt-cache-design.md`。三层分工：**litellm 只做协议翻译**，**agentcore 决定缓存放置与身份**，**ainovel 一行配置接入**。
+长跑成本的第二杠杆（第一是模型选型）。完整讲解版见 `docs/prompt-cache-design.md`。三层分工：**litellm 只做协议翻译**，**agentcore 决定缓存放置与身份**，**kietnovel 一行配置接入**。
 
 缓存收益的前提是**请求前缀字节稳定**，由三条纪律保证（都在 agentcore）：
 

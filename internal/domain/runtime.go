@@ -221,7 +221,7 @@ type UnsupportedAdvanceModeError struct {
 }
 
 func (e *UnsupportedAdvanceModeError) Error() string {
-	return fmt.Sprintf("不支持的章节推进模式 %q，请使用创建该项目的新版 ainovel", e.Mode)
+	return fmt.Sprintf("不支持的章节推进模式 %q，请使用创建该项目的新版 kietnovel", e.Mode)
 }
 
 // AdvanceHoldAfter is the deterministic trigger condition of a one-shot pause.

@@ -1,4 +1,4 @@
-# 提示词缓存设计：litellm / agentcore / ainovel 三层协同
+# 提示词缓存设计：litellm / agentcore / kietnovel 三层协同
 
 > 本文是一份讲解材料：介绍我们如何在三个协作仓库中设计端到端的 LLM 提示词缓存
 > （prompt caching），包含设计原理、真实排查案例与可对照的源码位置。
@@ -129,7 +129,7 @@ append-only，直到下次越过阈值。
 ### 纪律三：动态内容进尾部
 
 每轮变化的东西（世界状态信封、每轮提醒、最新工具结果）只允许**追加在消息尾部**，
-绝不回头修改中段。ainovel 的 `novel_context` 信封就是尾部追加式设计——它每章都变，
+绝不回头修改中段。kietnovel 的 `novel_context` 信封就是尾部追加式设计——它每章都变，
 但它变不影响前面几十万 token 的缓存。
 
 ---
@@ -139,7 +139,7 @@ append-only，直到下次越过阈值。
 OpenAI 系的 `prompt_cache_key` 解决的是**路由问题**：字节相同的请求若被负载均衡到
 不同实例，照样 miss。key 的设计目标是"同一条缓存血统的请求，永远带同一个 key"。
 
-我们的三级身份（ainovel `internal/agents/build.go`）：
+我们的三级身份（kietnovel `internal/agents/build.go`）：
 
 ```go
 // promptCacheBase 从书目录派生稳定短哈希，作为提示词缓存身份前缀：同一本书
@@ -355,7 +355,7 @@ func isOfficialBaseURL(baseURL string) bool {
 缓存是"看不见的功能"——坏了不报错，只是变贵。所以要有观测（借鉴 Claude Code 的
 promptCacheBreakDetection，做了轻量版）。
 
-判定口径（ainovel `internal/host/usage.go`）：
+判定口径（kietnovel `internal/host/usage.go`）：
 
 ```go
 // 同一会话（role+task）内：前缀未缩短，而命中量较上次下降 >5% 且降幅 ≥2000 tokens
@@ -457,6 +457,6 @@ agentcore.NewAgent(
 | TTL 解析（"ephemeral:1h"） | agentcore `llm/litellm.go` `cacheControlFromMetadata` |
 | 能力门控 | agentcore `llm/litellm.go` `applyCallConfig` |
 | 官方端点判定 + opt-in | litellm `provider/openai/capabilities.go` / `provider.go Config` |
-| 缓存身份（一书一基） | ainovel `internal/agents/build.go` `promptCacheBase` |
-| 断裂检测 | ainovel `internal/host/usage.go` `noteCacheBreak` |
-| 架构定位 | ainovel `docs/architecture.md` §6.6 |
+| 缓存身份（一书一基） | kietnovel `internal/agents/build.go` `promptCacheBase` |
+| 断裂检测 | kietnovel `internal/host/usage.go` `noteCacheBreak` |
+| 架构定位 | kietnovel `docs/architecture.md` §6.6 |

@@ -63,7 +63,7 @@ func TestCommandChannelEnvAndStdin(t *testing.T) {
 			`[System.IO.File]::WriteAllText(` + powerShellQuote(jsonFile) + `, $payload, $utf8)`
 	}
 	n := New(command, nil)
-	nt := Notification{Kind: KindBudget, Level: "warn", Title: "ainovel: 预算", Body: "已花费 $8.00"}
+	nt := Notification{Kind: KindBudget, Level: "warn", Title: "kietnovel: 预算", Body: "已花费 $8.00"}
 	if err := n.deliverError(nt); err != nil {
 		t.Fatalf("command 执行失败: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestCommandChannelEnvAndStdin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("command 未执行: %v", err)
 	}
-	if got := strings.TrimSpace(string(env)); got != "budget|warn|ainovel: 预算|已花费 $8.00" {
+	if got := strings.TrimSpace(string(env)); got != "budget|warn|kietnovel: 预算|已花费 $8.00" {
 		t.Errorf("环境变量传递不符: %q", got)
 	}
 

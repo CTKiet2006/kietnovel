@@ -72,7 +72,16 @@ kietnovel
 <details>
 <summary>其他方式</summary>
 
-**已装 Go ≥ 1.25** —— 不用 binary，直接从源码构建：
+**还没有 Go** —— 先装 Go，再用下面的方式 2：
+
+```powershell
+winget install GoLang.Go
+```
+
+或者直接下载安装包：<https://go.dev/dl/> → 选 Windows 的 `.msi`。装完后打开新终端，
+`go` 才会生效。
+
+**方式 2 —— 已装 Go ≥ 1.25**，直接从源码构建：
 
 ```powershell
 go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@latest

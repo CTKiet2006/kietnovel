@@ -178,7 +178,7 @@ func TestMergeConfig_ProviderExtraFields(t *testing.T) {
 				Extra: map[string]any{
 					"user_agent": "override-client/1.0",
 					"headers": map[string]any{
-						"X-Custom-Client": "ainovel",
+						"X-Custom-Client": "kietnovel",
 					},
 				},
 			},
@@ -209,8 +209,8 @@ func TestMergeConfig_ProviderExtraFields(t *testing.T) {
 	if !ok {
 		t.Fatalf("Extra[headers] missing or invalid: %#v", pc.Extra["headers"])
 	}
-	if got := headers["X-Custom-Client"]; got != "ainovel" {
-		t.Fatalf("Extra.headers[X-Custom-Client] = %#v, want ainovel", got)
+	if got := headers["X-Custom-Client"]; got != "kietnovel" {
+		t.Fatalf("Extra.headers[X-Custom-Client] = %#v, want kietnovel", got)
 	}
 }
 

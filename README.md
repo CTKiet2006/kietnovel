@@ -74,7 +74,16 @@ file đang chạy.
 <details>
 <summary>Cách khác</summary>
 
-**Đã có Go ≥ 1.25** — không cần binary, tự build từ source:
+**Nếu chưa có Go** — tải trước, rồi quay lại dùng cách 2:
+
+```powershell
+winget install GoLang.Go
+```
+
+Hoặc tải thẳng file cài: <https://go.dev/dl/> → chọn bản Windows `.msi`. Sau khi cài,
+mở terminal mới để `go` có hiệu lực.
+
+**Cách 2 — đã có Go ≥ 1.25**, tự build từ source:
 
 ```powershell
 go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@latest
