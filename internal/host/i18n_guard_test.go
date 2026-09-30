@@ -38,6 +38,14 @@ var displayFuncs = map[string]bool{
 	"updateModelState":       true,
 }
 
+// toolDisplayKeys là mọi tool có tiêu đề khối hiển thị (✻ …). Nhãn này hiện thẳng
+// ra khối trong bảng hoạt động, nên phải là nguồn tiếng Việt và phải có bản dịch.
+var toolDisplayKeys = []string{
+	"✻ Lên kế hoạch", "✻ Trau chuốt", "✻ Ghi chương", "✻ Duyệt",
+	"✻ Tóm tắt cung", "✻ Tóm tắt tập", "✻ Thiết lập", "✻ Sửa dàn ý",
+	"✻ Đọc chương", "✻ Kiểm tra nhất quán", "✻ Truy vấn ngữ cảnh",
+}
+
 // TestKhoaNhanHienThiDaDichHet kiểm nghịch: một nhãn hiển thị mà không có bản
 // dịch ở en và zh thì TUI sẽ in ra tiếng Việt. Đó chính là lớp lỗi mà Msg +
 // i18n.Tf sinh ra để chặn, nên ở đây phải bắt trước khi nó chạy.
@@ -71,6 +79,10 @@ func TestKhoaNhanHienThiDaDichHet(t *testing.T) {
 		{Key: "Thử lại (%d/%d, %s nữa): ", Args: []any{2, 7, "2s"}},
 		{Key: "%s ngữ cảnh %.0f%% (%d/%d) chiến lược: %s",
 			Args: []any{"writer", 42.0, 1000, 24000, "gần"}},
+	}
+	// Tiêu đề khối tool: không có Args, dịch thẳng theo chuỗi.
+	for _, k := range toolDisplayKeys {
+		msgs = append(msgs, Msg{Key: k})
 	}
 
 	for _, m := range msgs {

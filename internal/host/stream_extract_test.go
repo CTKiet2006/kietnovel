@@ -49,7 +49,7 @@ func mustNotContain(t *testing.T, got, want string) {
 func TestExtract_PlanChapter(t *testing.T) {
 	in := `{"chapter":1,"title":"卖身契","goal":"建立矿场基线","conflict":"父债","hook":"灰矿","emotion_arc":"压抑"}`
 	out := feedAll(t, "plan_chapter", in)
-	mustContain(t, out, "✻ 规划")
+	mustContain(t, out, "✻ Lên kế hoạch")
 	mustContain(t, out, "chapter: 1")
 	mustContain(t, out, "title: 卖身契")
 	mustContain(t, out, "goal: 建立矿场基线")
@@ -66,7 +66,7 @@ func TestExtract_FoundationCharacters(t *testing.T) {
 		`{"name":"顾小灯","role":"重要配角","description":"药坊试药童女。"}` +
 		`]}`
 	out := feedAll(t, "save_foundation", in)
-	mustContain(t, out, "✻ 设定")
+	mustContain(t, out, "✻ Thiết lập")
 	mustContain(t, out, "type: characters")
 	mustContain(t, out, "scale: long")
 	// generic rendering: every field is shown, including the aliases / traits that were previously skipped by the whitelist
@@ -122,7 +122,7 @@ func TestExtract_FoundationUpdateCompass(t *testing.T) {
 func TestExtract_SaveReview(t *testing.T) {
 	in := `{"chapter":3,"scope":"chapter","verdict":"polish","summary":"节奏略慢。","dimensions":[{"dimension":"hook","score":55,"verdict":"fail"}],"issues":[{"type":"hook","severity":"error","description":"章末缺钩子。"}],"affected_chapters":[3,4]}`
 	out := feedAll(t, "save_review", in)
-	mustContain(t, out, "✻ 审阅")
+	mustContain(t, out, "✻ Duyệt")
 	mustContain(t, out, "verdict: polish")
 	mustContain(t, out, "summary: 节奏略慢。")
 	mustContain(t, out, "dimension: hook")
@@ -140,7 +140,7 @@ func TestExtract_SaveReview(t *testing.T) {
 func TestExtract_CommitChapter(t *testing.T) {
 	in := `{"chapter":1,"summary":"被卖入矿场。","characters":["沈砺","母亲"],"key_events":["签卖身契"],"foreshadow_updates":[{"id":"f1","action":"plant","description":"灰矿发烫。"}],"state_changes":[{"entity":"沈砺","field":"身份","old_value":"采药少年","new_value":"矿场杂役"}]}`
 	out := feedAll(t, "commit_chapter", in)
-	mustContain(t, out, "✻ 章节提交")
+	mustContain(t, out, "✻ Ghi chương")
 	mustContain(t, out, "summary: 被卖入矿场。")
 	mustContain(t, out, "- 沈砺")
 	mustContain(t, out, "- 母亲")
@@ -159,7 +159,7 @@ func TestExtract_CommitChapter(t *testing.T) {
 func TestExtract_EditChapter(t *testing.T) {
 	in := `{"chapter":24,"old_string":"沈砺低头不语。\n他攥紧了拳头。","new_string":"沈砺没有抬头，喉结滚动一下。\n指节攥得发白。","replace_all":false}`
 	out := feedAll(t, "edit_chapter", in)
-	mustContain(t, out, "✻ 打磨")
+	mustContain(t, out, "✻ Trau chuốt")
 	mustContain(t, out, "chapter: 24")
 	mustContain(t, out, "old_string: 沈砺低头不语。\n他攥紧了拳头。")
 	mustContain(t, out, "new_string: 沈砺没有抬头，喉结滚动一下。\n指节攥得发白。")
@@ -171,14 +171,14 @@ func TestExtract_EditChapter(t *testing.T) {
 func TestExtract_ReadChapter(t *testing.T) {
 	in := `{"chapter":234,"source":"final"}`
 	out := feedAll(t, "read_chapter", in)
-	mustContain(t, out, "✻ 读章节")
+	mustContain(t, out, "✻ Đọc chương")
 	mustContain(t, out, "chapter: 234")
 	mustContain(t, out, "source: final")
 }
 
 func TestExtract_CheckConsistency(t *testing.T) {
 	out := feedAll(t, "check_consistency", `{"chapter":234}`)
-	mustContain(t, out, "✻ 一致性检查")
+	mustContain(t, out, "✻ Kiểm tra nhất quán")
 	mustContain(t, out, "chapter: 234")
 }
 
@@ -186,12 +186,12 @@ func TestExtract_CheckConsistency(t *testing.T) {
 // which must not be completely silent - at least output a header so the user notices the call.
 func TestExtract_NovelContextEmptyArgs(t *testing.T) {
 	out := feedAll(t, "novel_context", `{}`)
-	mustContain(t, out, "✻ 查询上下文")
+	mustContain(t, out, "✻ Truy vấn ngữ cảnh")
 }
 
 func TestExtract_NovelContextWithChapter(t *testing.T) {
 	out := feedAll(t, "novel_context", `{"chapter":234}`)
-	mustContain(t, out, "✻ 查询上下文")
+	mustContain(t, out, "✻ Truy vấn ngữ cảnh")
 	mustContain(t, out, "chapter: 234")
 }
 

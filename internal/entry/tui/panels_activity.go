@@ -410,7 +410,9 @@ func renderStreamContent(rounds []string, width int, cursor string) string {
 
 	var blocks []string
 	for _, round := range rounds {
-		text := strings.TrimSpace(round)
+		// Host soạn tiêu đề khối (✻ …) bằng tiếng Việt làm nguồn, theo đúng quy ước
+		// i18n. Dịch ở đây — chỗ duy nhất khối đó được vẽ — nên en/zh hiện đúng.
+		text := i18n.T(strings.TrimSpace(round))
 		if text == "" {
 			continue
 		}
