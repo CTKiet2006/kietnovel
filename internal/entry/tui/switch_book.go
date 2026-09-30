@@ -60,6 +60,9 @@ func (m Model) switchBook(dir string) (Model, tea.Cmd, error) {
 	fresh.hostOpts = m.hostOpts
 	fresh.disableUpdateCheck = m.disableUpdateCheck
 	fresh.updateHint = m.updateHint
+	// Chuyển truyện trong phiên thì KHÔNG hiện màn chào: người dùng vừa chủ động
+	// chọn, hỏi lại là thừa. Màn chào chỉ dành cho lúc mở app.
+	fresh.welcomeSeen = true
 	// Lịch sử phím là của người dùng, không phải của truyện: giữ lại, đổi truyện
 	// không có nghĩa mất đường lui.
 	fresh.inputHistory = m.inputHistory

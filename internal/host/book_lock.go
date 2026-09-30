@@ -38,9 +38,11 @@ func acquireBookLease(dir string) (*bookLease, error) {
 	}
 	if !locked {
 		return nil, closeBookLockAfterFailure(fileLock, fmt.Errorf(
-			"%w: %s; hãy đóng terminal khác đang thao tác thư mục này, hoặc dùng một thư mục truyện khác",
+			"%w: %s\n\n%s",
 			ErrBookInUse,
 			absDir,
+			"Thường là do bạn mở hai cửa sổ terminal cùng một truyện — hai engine cùng ghi vào một thư mục sẽ làm hỏng dữ liệu.\n"+
+				"Cách xử lý: đóng cửa sổ kia rồi chạy lại; hoặc mở truyện KHÁC bằng cách đặt NOVEL_DIR trỏ sang thư mục gốc của nó rồi chạy lại.",
 		))
 	}
 	return &bookLease{lock: fileLock}, nil
