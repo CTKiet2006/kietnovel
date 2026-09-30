@@ -89,7 +89,7 @@ func renderBooksModal(w, h int, s *booksState, errMsg string) string {
 		body = s.renderNewDraft()
 	case booksSwitchConfirm:
 		title = i18n.T("Chuyển truyện — xác nhận")
-		hint = i18n.T("  y Chuyển · Esc Ở lại")
+		hint = i18n.T("  Enter/y Chuyển · Esc Ở lại")
 		body = s.renderSwitchConfirm()
 	default:
 		body = s.renderList()
@@ -237,12 +237,14 @@ func (m Model) handleBooksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case tea.KeyEsc:
 			s.mode = booksList
 			s.target, s.targetName, s.switchWhy = "", "", ""
+		case tea.KeyEnter:
+			// Enter = đồng ý chuyển. An toàn vì chuyển truyện không xoá gì:
+			// truyện cũ nằm nguyên trên đĩa. (Khác với booksDeleteConfirm,
+			// nơi Enter cố ý KHÔNG có tác dụng để tránh xoá nhầm.)
+			return m.confirmSwitchFromModal()
 		case tea.KeyRunes:
 			if string(msg.Runes) == "y" {
-				dir := s.target
-				s.mode, s.target, s.targetName, s.switchWhy = booksList, "", "", ""
-				m.books = nil
-				return m.doSwitch(dir)
+				return m.confirmSwitchFromModal()
 			}
 		}
 		return m, nil
@@ -289,6 +291,15 @@ func (m Model) handleBooksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// confirmSwitchFromModal chốt việc chuyển từ khung xác nhận: dọn state rồi đi.
+// Tách riêng để Enter và 'y' dùng chung một đường, khỏi lệch nhau lần nữa.
+func (m Model) confirmSwitchFromModal() (tea.Model, tea.Cmd) {
+	dir := m.books.target
+	m.books.mode, m.books.target, m.books.targetName, m.books.switchWhy = booksList, "", "", ""
+	m.books = nil
+	return m.doSwitch(dir)
 }
 
 func renderBooksError(m Model, msg string) (tea.Model, tea.Cmd) {
