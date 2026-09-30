@@ -104,7 +104,7 @@ layered_outline / characters / world_rules 的 `content` 直接传 JSON 数组�
 {
   "ending_direction": "主题性终局描述（如'主角在权力与良知之间抉择'）",
   "open_threads": ["活跃长线 A", "关系线 B", "伏笔 C"],
-  "estimated_scale": "预计 4-6 卷",
+  "estimated_scale": "4-6",
   "last_updated": 0
 }
 ```
@@ -113,7 +113,7 @@ layered_outline / characters / world_rules 的 `content` 直接传 JSON 数组�
 
 1. **优先依据用户启动 prompt 中的明示或暗示**（如"想写长篇连载 / 300 章左右 / 类似某某连载"）
 2. 用户未提及时，**按题材惯例**给区间（不是定值）：修仙/玄幻连载 150-400 章起步、都市/职场长篇 80-200 章、文学/严肃题材 30-80 章
-3. 用区间表达（"预计 8-12 卷"），不要写死单一数字，给中期调整留余地
+3. 用区间表达（示例："8-12"），不要写死单一数字，给中期调整留余地。**`estimated_scale` 只写纯数字区间（如 "8-12"），不要带“预计”“卷/章/册”等单位词**——显示层会按写作语言补上单位，写死单位会让界面混入别的语言
 
 首次落盘认真给，但它可随创作演化经 update_compass 上调或下调——是随笔调整的罗盘，不是签死的合同。
 
@@ -201,7 +201,7 @@ layered_outline / characters / world_rules 的 `content` 直接传 JSON 数组�
 用户中途想改变全书规模时走这里。核心是先把用户的篇幅意图落到 compass，再据此扩展或收束大纲：
 
 1. 调 novel_context 获取 `planning_memory` 中的大纲、指南针和卷摘要，以及 `foundation_memory` 中的角色快照和伏笔台账
-2. **先 update_compass**：把 `estimated_scale` 改成反映用户新目标的区间（如"约 38-42 章"），按需补充/保留 open_threads。这是后续完结判定的锚点，必须先落盘。
+2. **先 update_compass**：把 `estimated_scale` 改成反映用户新目标的区间（如 "38-42"），按需补充/保留 open_threads。这是后续完结判定的锚点，必须先落盘。
 3. 据目标与当前规划的差额扩展或收束：
    - 目标 > 当前 → 卷末用 `append_volume` 追加新卷、卷内下一骨架弧用 `expand_next_arc` 展开，补足到目标规模；新增内容要承担真实叙事功能，不是注水拉长
    - 目标 < 当前 → 提前收束：追加**收官卷**（`append_volume` 带 `"final": true`，把剩余必收长线/伏笔全部压进该卷各弧）；当前卷内尚未展开的骨架弧在后续 `expand_next_arc` 时按最小必要章数展开，为收官让路。若完结条件当下已全部满足，也可直接 complete_book

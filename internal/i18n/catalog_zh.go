@@ -335,6 +335,7 @@ var zhCatalog = map[string]string{
 	// panels_outline.go
 	"  ··· Chương tiếp theo sẽ tự sinh khi viết tiếp": "  ··· 下一章将在续写时自动生成",
 	"  → Kết truyện: %s":                              "  → 结局：%s",
+	"dự kiến %s tập":                                  "预计 %s 卷",
 	"  ┄ Tập tiếp: ":                                  "  ┄ 下一卷：",
 	" đang làm":                                       " 处理中",
 	":: Dàn ý":                                        ":: 大纲",

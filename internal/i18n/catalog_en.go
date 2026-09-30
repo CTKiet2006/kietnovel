@@ -336,6 +336,7 @@ var enCatalog = map[string]string{
 	// panels_outline.go
 	"  ··· Chương tiếp theo sẽ tự sinh khi viết tiếp": "  ··· The next chapter is generated automatically when you keep writing",
 	"  → Kết truyện: %s":                              "  → Ending: %s",
+	"dự kiến %s tập":                                  "est. %s vols",
 	"  ┄ Tập tiếp: ":                                  "  ┄ Next volume: ",
 	" đang làm":                                       " Working",
 	":: Dàn ý":                                        ":: Outline",
