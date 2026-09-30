@@ -126,6 +126,45 @@ func NewUsageTracker(set *bootstrap.ModelSet, store *storepkg.Store) *UsageTrack
 	}
 }
 
+// RecordSidecar ghi accounting cho tác vụ phụ (sidecar) như /sp hỏi.
+//
+// Khác Record ở đúng một điểm: KHÔNG cộng vào overall và KHÔNG gọi onCost.
+// overall là số BudgetSentinel dùng để quyết định abort Engine; một câu hỏi phụ
+// mà đẩy tổng vượt trần rồi dừng cả máy đang viết là sai nguyên tắc "sidecar
+// không can thiệp Engine".
+//
+// Nhưng vẫn cộng vào perAgent["advisor"] + perModel và vẫn notifyDirty để persist:
+// tiền thật đã đốt thì phải còn dấu vết, chỉ là không được dùng để giết Engine.
+func (t *UsageTracker) RecordSidecar(agentName string, u agentcore.Usage, provider, modelName string) {
+	if t == nil {
+		return
+	}
+	role := agentRoleName(agentName)
+	t.noteCacheBreak(role, "sidecar", u)
+	provider, modelName = t.effectiveModel(role, provider, modelName)
+	cost, saved, capable := t.resolveCost(modelName, u)
+
+	t.mu.Lock()
+	per := t.perAgent[role]
+	if per == nil {
+		per = &agentTotals{}
+		t.perAgent[role] = per
+	}
+	addUsage(per, u, cost, saved, capable)
+
+	if key := modelUsageKey(provider, modelName); key != "" {
+		perModel := t.perModel[key]
+		if perModel == nil {
+			perModel = &agentTotals{}
+			t.perModel[key] = perModel
+		}
+		addUsage(perModel, u, cost, saved, capable)
+	}
+	t.mu.Unlock()
+
+	t.notifyDirty()
+}
+
 // Record dispatches one agent message onto two paths: accumulation and diagnostics.
 //
 // Accumulation only looks at whether Usage exists - "which messages carry Usage" is an agentcore/litellm adapter

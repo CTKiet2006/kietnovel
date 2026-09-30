@@ -199,6 +199,7 @@ var knownRoles = map[string]bool{
 	"architect":         true,
 	"writer":            true,
 	"editor":            true,
+	"advisor":           true,
 	"import_segment":    true,
 	"import_analyze":    true,
 	"import_synthesize": true,
