@@ -34,7 +34,11 @@ type ContextBlock struct {
 // style stats), còn snapshot này phục vụ TRẢ LỜI CÂU HỎI — chỉ những gì đã được
 // Store ghi nhận. Không bao giờ chứa live stream của Writer đang viết dở.
 type StorySnapshot struct {
-	CapturedAt     time.Time
+	CapturedAt time.Time
+	// Chapter là số chương đang viết tại lúc chụp. Để audit biết câu hỏi được
+	// hỏi trong bối cảnh chương nào — không có nó thì digest chỉ nói "dữ kiện
+	// gì" mà không nói "lúc nào".
+	Chapter        int
 	ProgressDigest string
 	Blocks         []ContextBlock
 }

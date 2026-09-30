@@ -26,6 +26,7 @@ type auditEntry struct {
 	Mode           string        `json:"mode"`
 	Question       string        `json:"question"`
 	SnapshotDigest string        `json:"snapshot_digest"`
+	Chapter        int           `json:"chapter"`
 	Provider       string        `json:"provider"`
 	Model          string        `json:"model"`
 	Answer         string        `json:"answer"`
