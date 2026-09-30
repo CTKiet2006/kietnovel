@@ -73,10 +73,10 @@ func Run(cfg bootstrap.Config, bundle assets.Bundle, opts Options) error {
 		if err != nil {
 			return err
 		}
-		if label == "" {
+		if label.Empty() {
 			return fmt.Errorf("headless 模式需要 --prompt，或输出目录 %q 下已有可恢复会话", eng.Dir())
 		}
-		fmt.Fprintf(stderr, "headless 恢复: %s (%s)\n", eng.Dir(), label)
+		fmt.Fprintf(stderr, "headless 恢复: %s (%s)\n", eng.Dir(), label.String())
 		return consume(eng, stdout, stderr, false)
 	}
 

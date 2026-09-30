@@ -570,37 +570,41 @@ func (h *Host) Reopen(direction string) error {
 }
 
 // Resume chế độ khôi phục: sinh resume prompt từ checkpoint + progress rồi khởi động.
-func (h *Host) Resume() (string, error) {
+// Resume khôi phục phiên viết từ store. Trả về Msg (chưa dịch) để TUI hiển thị
+// đúng ngôn ngữ; dùng resumeLabel.String() nếu cần chuỗi thô cho log.
+func (h *Host) Resume() (Msg, error) {
 	h.mu.Lock()
 	if h.lifecycle == lifecycleRunning {
 		h.mu.Unlock()
-		return "", fmt.Errorf("already running")
+		return Msg{}, fmt.Errorf("already running")
 	}
 	if h.cocreating {
 		h.mu.Unlock()
-		return "", fmt.Errorf("Đang trong đồng sáng tác, hãy kết thúc đồng sáng tác trước")
+		return Msg{}, fmt.Errorf("Đang trong đồng sáng tác, hãy kết thúc đồng sáng tác trước")
 	}
 	if h.exclusive != "" {
 		ex := h.exclusive
 		h.mu.Unlock()
-		return "", fmt.Errorf("Đang %s, xong rồi hãy khôi phục để viết tiếp", ex)
+		return Msg{}, fmt.Errorf("Đang %s, xong rồi hãy khôi phục để viết tiếp", ex)
 	}
 	h.mu.Unlock()
 	label, err := resumeLabel(h.store)
 	if err != nil {
-		return "", err
+		return Msg{}, err
 	}
-	if label == "" {
-		return "", nil // Chế độ tạo mới, không có gì để khôi phục
+	if label.Empty() {
+		return Msg{}, nil // Chế độ tạo mới, không có gì để khôi phục
 	}
 	if err := h.requireCleanChapters(); err != nil {
 		return label, err
 	}
 	if err := h.budget.Refuse(); err != nil {
-		return "", err
+		return Msg{}, err
 	}
 
-	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "Khôi phục việc viết: " + label, Level: "info"})
+	h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM",
+		SummaryMsg: &Msg{Key: "Khôi phục việc viết: %s", Args: []any{label.String()}},
+		Summary:    "Khôi phục việc viết: " + label.String(), Level: "info"})
 	for _, w := range h.store.CheckConsistency() {
 		h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "Cảnh báo nhất quán: " + w, Level: "warn"})
 	}
@@ -1298,8 +1302,8 @@ func (h *Host) Snapshot() UISnapshot {
 	snap.Agents = h.observer.agentSnapshots()
 	snap.StatusLabel = deriveStatusLabel(snap)
 
-	// Nhãn khôi phục
-	if label, err := resumeLabel(h.store); err == nil && label != "" {
+	// Nhãn khôi phục: giữ dạng Msg (chưa dịch) để TUI hiển thị đúng ngôn ngữ.
+	if label, err := resumeLabel(h.store); err == nil && !label.Empty() {
 		snap.RecoveryLabel = label
 	}
 

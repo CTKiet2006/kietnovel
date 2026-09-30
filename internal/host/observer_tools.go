@@ -76,15 +76,16 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 		// Summary does not embed a static delay - the UI counts down from RetryAt every second; Detail / the log keep the delay snapshot from emission time.
 		delay := retryProgressDelay(ev.Progress)
 		retryEv := Event{
-			ID:       o.retryEventID(ev.Progress.Agent, ev.Progress.Attempt),
-			Time:     time.Now(),
-			Category: "SYSTEM",
-			Agent:    ev.Progress.Agent,
-			Summary:  retryPrefix(ev.Progress.Attempt, ev.Progress.MaxRetries, 0) + utils.TruncateRunes(ev.Progress.Message, 80),
-			Detail:   retryPrefix(ev.Progress.Attempt, ev.Progress.MaxRetries, delay) + ev.Progress.Message,
-			Kind:     errorKind(nil, ev.Progress.Message),
-			Level:    "warn",
-			Depth:    1,
+			ID:         o.retryEventID(ev.Progress.Agent, ev.Progress.Attempt),
+			Time:       time.Now(),
+			Category:   "SYSTEM",
+			Agent:      ev.Progress.Agent,
+			Summary:    retryPrefix(ev.Progress.Attempt, ev.Progress.MaxRetries, 0).String() + utils.TruncateRunes(ev.Progress.Message, 80),
+			SummaryMsg: Ptr(retryPrefix(ev.Progress.Attempt, ev.Progress.MaxRetries, 0)),
+			Detail:     retryPrefix(ev.Progress.Attempt, ev.Progress.MaxRetries, delay).String() + ev.Progress.Message,
+			Kind:       errorKind(nil, ev.Progress.Message),
+			Level:      "warn",
+			Depth:      1,
 		}
 		if delay > 0 {
 			retryEv.RetryAt = retryEv.Time.Add(delay)

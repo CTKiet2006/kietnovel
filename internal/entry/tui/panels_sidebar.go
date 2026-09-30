@@ -18,9 +18,10 @@ func renderStateContent(snap host.UISnapshot, contentW int) string {
 	idleAgents := sidebarIdleAgents(snap.Agents)
 	var sections []string
 
-	if snap.RecoveryLabel != "" {
+	// RecoveryLabel là Msg (chưa dịch) do host gửi: dịch Key trước rồi mới điền Args.
+	if !snap.RecoveryLabel.Empty() {
 		sections = append(sections, lipgloss.NewStyle().Foreground(colorMuted).Italic(true).
-			Render(truncate(snap.RecoveryLabel, contentW)))
+			Render(truncate(i18n.Tf(snap.RecoveryLabel.Key, snap.RecoveryLabel.Args...), contentW)))
 	}
 
 	var overview strings.Builder
