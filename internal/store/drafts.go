@@ -70,10 +70,13 @@ func (s *DraftStore) LoadDraft(chapter int) (string, error) {
 	return string(data), nil
 }
 
-// LoadChapterContent loads the chapter draft body and its word count.
 // ListDrafts liệt kê số chương đang có bản nháp trong drafts/, tăng dần.
 // Dùng cho màn đọc: người viết cần xem được bản nháp để quyết định có chốt hay
 // không, chứ chỉ đọc bản chốt thì thành vòng luẩn quẩn.
+//
+// Tên file bản nháp là %02d.draft.md (xem SaveDraft), KHÔNG phải %02d.md. Trước
+// đây hàm này chỉ cắt đuôi ".md" rồi Atoi, nên Atoi("01.draft") lỗi và bỏ qua
+// hết — màn đọc chỉ thấy chương đã chốt, đúng cái lỗi nó sinh ra để chữa.
 func (s *DraftStore) ListDrafts() ([]int, error) {
 	entries, err := os.ReadDir(s.io.path("drafts"))
 	if err != nil {
@@ -91,7 +94,12 @@ func (s *DraftStore) ListDrafts() ([]int, error) {
 		if !strings.HasSuffix(name, ".md") {
 			continue
 		}
-		n, err := strconv.Atoi(strings.TrimSuffix(name, ".md"))
+		base := strings.TrimSuffix(name, ".md")
+		// %02d.draft.md là bản nháp; %02d.md cũng chấp nhận phòng khi tên file
+		// khác. Phải cắt ".draft" TRƯỚC rồi mới Atoi, ngược lại thì Atoi nhận
+		// chuỗi "01.draft" và báo lỗi.
+		base = strings.TrimSuffix(base, ".draft")
+		n, err := strconv.Atoi(base)
 		if err != nil || n <= 0 {
 			continue
 		}
