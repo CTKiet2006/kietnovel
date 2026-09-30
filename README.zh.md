@@ -69,6 +69,21 @@ kietnovel
 
 **更新：** 再跑一次上面的命令即可。请先退出 `kietnovel` —— Windows 不允许覆盖正在运行的文件。
 
+**降级到旧版本：**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1.3.2
+```
+
+没装 Go？先下载脚本再运行：
+
+```powershell
+irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.3.3/scripts/install-windows.ps1 -OutFile ki.ps1
+.\ki.ps1 -Version v1.3.2
+```
+
+可用版本：v1.3.4、v1.3.3、v1.3.2、v1.2.5、v1.2.4、v1.2.3、v1.2.2、v1.2.1、v1.1.0。
+
 <details>
 <summary>其他方式</summary>
 

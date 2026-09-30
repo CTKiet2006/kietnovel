@@ -71,6 +71,21 @@ user PATH.
 **Updating:** run the same command again. Quit `kietnovel` first — Windows cannot overwrite a
 running file.
 
+**Downgrading to an older version:**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1.3.2
+```
+
+No Go? Download the script first, then run it:
+
+```powershell
+irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.3.3/scripts/install-windows.ps1 -OutFile ki.ps1
+.\ki.ps1 -Version v1.3.2
+```
+
+Available: v1.3.4, v1.3.3, v1.3.2, v1.2.5, v1.2.4, v1.2.3, v1.2.2, v1.2.1, v1.1.0.
+
 <details>
 <summary>Other options</summary>
 

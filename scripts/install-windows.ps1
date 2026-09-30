@@ -17,7 +17,12 @@
 [CmdletBinding()]
 param(
     # Bỏ qua bước thêm thư mục vào user PATH (dành cho ai muốn tự quản lý).
-    [switch]$NoPath
+    [switch]$NoPath,
+
+    # Ghim một phiên bản cũ. Bỏ trống thì lấy bản mới nhất.
+    # Ví dụ hạ về bản trước:  -Version v1.3.2
+    # Hoặc dùng ngắn:         powershell -c "irm <url> | iex" -Version v1.3.2
+    [string]$Version
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,17 +58,28 @@ else { throw "Khong do duoc kien truc may (PROCESSOR_ARCHITECTURE=$arch)." }
 
 Write-Step "Kien truc: $goArch"
 
-# Chon ban moi nhat co asset Windows. Release tag duoc sap xep ban chay bang
-# version, nen lay danh sach tag roi chon phan tuoi nhat - tranh tinh huong
-# @latest cua proxy con tro tag cu.
-Write-Step 'Tim ban moi nhat...'
+# Chon ban can cai. Mac dinh la ban moi nhat; -Version de ghim ban cu (ha ban).
+# Danh sach release sap xep ban chay theo version, nen lay phan tuoi nhat - tranh
+# tinh huong @latest cua proxy con tro tag cu.
 $tags = Invoke-RestMethod -Headers @{ 'User-Agent' = 'kietnovel-installer' } `
                           -Uri "https://api.github.com/repos/$repo/releases"
 if (-not $tags -or $tags.Count -eq 0) { throw 'Khong tim thay release nao tren GitHub.' }
 
-$release = $tags | Where-Object { $_.draft -eq $false -and $_.prerelease -eq $false } |
-           Select-Object -First 1
-if (-not $release) { throw 'Khong tim thay ban phat hanh chinh thuc nao.' }
+$official = $tags | Where-Object { $_.draft -eq $false -and $_.prerelease -eq $false }
+
+if ($Version) {
+    $want = if ($Version -match '^v') { $Version } else { "v$Version" }
+    $release = $official | Where-Object { $_.tag_name -eq $want } | Select-Object -First 1
+    if (-not $release) {
+        $have = ($official | ForEach-Object { $_.tag_name }) -join ', '
+        throw "Khong tim thay ban '$want'. Da phat hanh: $have"
+    }
+    Write-Step "Ghim phien ban $want"
+} else {
+    Write-Step 'Tim ban moi nhat...'
+    $release = $official | Select-Object -First 1
+    if (-not $release) { throw 'Khong tim thay ban phat hanh chinh thuc nao.' }
+}
 
 Write-Ok "$($release.tag_name)"
 

@@ -30,6 +30,14 @@ jobs:
         shell: bash
         run: test -z "$(gofmt -l .)"
 
+      # Chay tach, khong dua qua `go test ./...`. Test cung chay trong do, nhung
+      # neu sau nay ai loai package khoi ./... thi no se bi bo qua trong im lang.
+      # De rieng ra day de mat tieng la thay vi con thuoc mot buoc khac.
+      - name: Stale name check
+        env:
+          GOWORK: "off"
+        run: go run ./internal/tools/checkself
+
       - name: Installer syntax check
         if: runner.os == 'Linux'
         run: sh -n scripts/install.sh
