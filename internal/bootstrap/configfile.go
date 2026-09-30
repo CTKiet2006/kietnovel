@@ -12,9 +12,22 @@ import (
 
 const configDirName = ".kietnovel"
 
+// EnvConfigHome cho phép đổi "nhà" dùng cho cấu hình. Rỗng = nhà thật.
+//
+// Chỉ dùng cho test và môi trường cô lập. Cần vì: các lệnh TUI ghi cấu hình qua
+// EffectiveConfigPath, và test gọi chúng sẽ GHI ĐÈ config.json thật của người
+// dùng — mất API key. Test đơn vị mà đụng dữ liệu thật là loại lỗi tự giấu mình
+// tốt nhất: vẫn báo xanh. Biến này cho phép test trỏ vào thư mục tạm.
+func configHomeDir() (string, error) {
+	if h := os.Getenv("KIETNOVEL_CONFIG_HOME"); h != "" {
+		return h, nil
+	}
+	return os.UserHomeDir()
+}
+
 // DefaultConfigPath trả về đường dẫn file cấu hình toàn cục ~/.kietnovel/config.json.
 func DefaultConfigPath() string {
-	home, err := os.UserHomeDir()
+	home, err := configHomeDir()
 	if err != nil {
 		return ""
 	}
@@ -24,7 +37,7 @@ func DefaultConfigPath() string {
 // DefaultConfigDir trả về đường dẫn thư mục ~/.kietnovel; khi không lấy được home thì trả chuỗi trống.
 // Chỉ dùng để đọc/ghi file không bắt buộc tồn tại (như cache model), không tự tạo thư mục.
 func DefaultConfigDir() string {
-	home, err := os.UserHomeDir()
+	home, err := configHomeDir()
 	if err != nil {
 		return ""
 	}
@@ -33,7 +46,7 @@ func DefaultConfigDir() string {
 
 // configDir trả về đường dẫn thư mục ~/.kietnovel, chưa có thì tạo.
 func configDir() (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := configHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home dir: %w", err)
 	}
