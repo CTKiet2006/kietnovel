@@ -52,8 +52,11 @@ type engine struct {
 	wg      sync.WaitGroup
 	cancel  context.CancelFunc
 	running bool
-	pending []controlOp       // control-state actions to intervene, committed at the boundary
-	next    *flow.Instruction // the instruction to execute first on the next round (plan_start / arbiter dispatch)
+	// aborting đánh dấu vòng lặp hiện tại bị dừng chủ ý (người dùng tạm dừng, vào
+	// đồng sáng tác, chạm trần ngân sách) chứ không phải hỏng. Xem abort().
+	aborting bool
+	pending  []controlOp       // control-state actions to intervene, committed at the boundary
+	next     *flow.Instruction // the instruction to execute first on the next round (plan_start / arbiter dispatch)
 	// deferGateForNext lives and dies with the next op: a hold+dispatch must first run the paired
 	// editor/writer so it establishes the rewrite queue, and only then can the Gate judge rewrites_drained.
 	deferGateForNext bool
@@ -97,6 +100,9 @@ func (e *engine) start(initial *flow.Instruction) bool {
 	ctx = agentcore.WithToolProgress(ctx, e.observer.workerProgress)
 	e.cancel = cancel
 	e.running = true
+	// Mỗi vòng lặp bắt đầu chưa bị dừng: cờ của vòng trước không được mang sang,
+	// không thì lỗi thật ở vòng sau sẽ bị quy cho là do dừng.
+	e.aborting = false
 	// An empty initial does not overwrite e.next - a steer arriving during the stop may already have queued a
 	// verdict dispatch (e.g. an editor rewrite) through applyControlOp, and start(nil) wiping it would let
 	// Route dispatch a writer to continue, the opposite of the user's intent.
@@ -115,13 +121,28 @@ func (e *engine) start(initial *flow.Instruction) bool {
 }
 
 // abort cancels the current loop (pause semantics; the checkpoint makes it lossless).
+//
+// Sets aborting first, so any tool call interrupted by this cancel is reported as
+// "stopped" rather than as a failure. Canceling the context halfway through a model
+// call is normal (user pause, entering co-create, budget cap); showing it as a red
+// error makes a normal operation look like a fault. The flag is cleared when the
+// next run starts, so a real error in a later run still shows up.
 func (e *engine) abort() {
 	e.mu.Lock()
+	e.aborting = true
 	cancel := e.cancel
 	e.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
+}
+
+// isAborting reports whether the current loop was stopped by an explicit abort,
+// as opposed to a genuine failure.
+func (e *engine) isAborting() bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.aborting
 }
 
 // wait waits for the current Engine goroutine to exit completely. Host.Close calls cancel first and then this,

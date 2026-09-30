@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"github.com/CTKiet2006/kietnovel/internal/i18n"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -339,6 +340,75 @@ func commandRegistryInstance() commandRegistry {
 				})
 				m.refreshEventViewport()
 				return m, cmd
+			},
+		},
+		{
+			Name:        "read",
+			Aliases:     []string{"doc"},
+			Group:       "writing",
+			Usage:       "/read [số chương]",
+			Description: i18n.T("Đọc các chương đã lưu ngay trong TUI"),
+			AutoExecute: true,
+			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
+				// Đọc không đụng tới Engine nên không cần NeedsIdle: vẫn đọc được
+				// trong lúc đang viết. Chỉ mở khung, không khởi động việc gì.
+				m.reader = newReaderState(m.runtime, m.width, m.height, strings.Join(args, " "))
+				m.textarea.Blur()
+				return m, nil
+			},
+		},
+		{
+			Name:        "books",
+			Aliases:     []string{"truyen"},
+			Group:       "writing",
+			Usage:       "/books",
+			Description: i18n.T("Xem danh sách truyện, tạo mới hoặc xoá"),
+			AutoExecute: true,
+			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
+				return openBooks(m, booksList)
+			},
+		},
+		{
+			Name:        "new",
+			Group:       "writing",
+			Usage:       "/new [tên truyện]",
+			Description: i18n.T("Tạo thư mục truyện mới trong output/"),
+			AutoExecute: true,
+			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
+				if len(args) == 0 {
+					return openBooks(m, booksNewDraft)
+				}
+				m.books = newBooksState(m.width, m.height, booksNewDraft)
+				m.books.draft = strings.Join(args, " ")
+				return m.createBookConfirmed()
+			},
+		},
+		{
+			Name:        "delete",
+			Aliases:     []string{"rm"},
+			Group:       "writing",
+			Usage:       "/delete [tên truyện]",
+			Description: i18n.T("Xoá truyện — có bước xác nhận, không khôi phục được"),
+			AutoExecute: true,
+			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
+				next, cmd := openBooks(m, booksList)
+				mm := next.(Model)
+				if len(args) == 0 {
+					return mm, cmd
+				}
+				want := strings.Join(args, " ")
+				for _, bk := range mm.books.list {
+					if bk.Name == want || filepath.Base(bk.Dir) == want {
+						res, err := mm.runtime.InspectBook(bk.Dir)
+						if err != nil {
+							return renderBooksError(mm, err.Error())
+						}
+						mm.books.pending = &res
+						mm.books.mode = booksDeleteConfirm
+						return mm, cmd
+					}
+				}
+				return renderBooksError(mm, i18n.Tf("Không tìm thấy truyện %q.", want))
 			},
 		},
 		{

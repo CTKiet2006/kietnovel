@@ -151,6 +151,13 @@ func (b *Bundle) ApplyLanguage(lang string) {
 	b.Prompts.ArchitectLong += d
 	b.Prompts.Writer += d
 	b.Prompts.Editor += d
+	// Arbiter cũng phải nhận directive. Thiếu đoạn này thì nhiệm vụ Arbiter sinh ra
+	// vẫn bằng Trung, Architect làm theo nhiệm vụ đó, và tiền đề ra tiếng Trung dù
+	// config đã đặt language=vi. Directive gắn vào Architect là không đủ — nó
+	// chỉ nói "viết bằng tiếng Việt", còn nhiệm vụ truyền xuống lại là tiếng Trung.
+	b.Prompts.ArbiterPlanStart += d
+	b.Prompts.ArbiterIntervention += d
+	b.Prompts.ArbiterFailure += d
 }
 
 // OverrideVoice replaces the assembled voice section wholesale with raw (used by eval for voice A/B).

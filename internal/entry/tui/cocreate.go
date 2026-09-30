@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"github.com/CTKiet2006/kietnovel/internal/i18n"
+	"regexp"
 	"strings"
 
 	"github.com/CTKiet2006/kietnovel/internal/entry/startup"
@@ -239,6 +240,53 @@ func coCreateColumns(bodyW int) (leftW, rightW int) {
 	return leftW, rightW
 }
 
+// padToHeight ép một khối đã vẽ về đúng n dòng, thêm dòng trống vào cuối nếu thiếu.
+//
+// Cần vì viewport trả về ít dòng hơn chiều cao của nó khi hội thoại còn ngắn
+// (ví dụ mới vào đồng sáng tác). Nếu không ép, cột trái ngắn hơn ngân sách dòng,
+// khung modal giữ nguyên chiều cao nên hở lỗ ở đáy và ô nhập bị đẩy lên lơ lửng
+// giữa cột thay vì nằm sát đáy. Thêm dòng trống phía trên ô nhập cũng đúng chuẩn
+// chat: tin nhắn dồn từ trên xuống, ô nhập neo đáy.
+// stripInlineMarkdown bỏ ký hiệu emphasis của markdown, giữ lại chữ.
+//
+// Cột chỉ đạo bên phải dùng renderMarkdownPreview nên hiện markdown thật. Cột
+// hội thoại bên trái không dùng được: nội dung stream từng khung, dựng block
+// markdown mỗi lần vẽ sẽ nhấp nháy và tốn. Bỏ ký hiệu là cách rẻ và ổn định —
+// người đọc thấy câu văn sạch thay vì "**đêm 3/11**" lộ nguyên dấu sao.
+//
+// Chỉ bỏ cặp ký hiệu, không đụng danh sách đầu dòng hay tiêu đề: chúng vẫn đọc
+// được sau khi bỏ dấu.
+func stripInlineMarkdown(s string) string {
+	if !strings.ContainsAny(s, "*_`") {
+		return s
+	}
+	// **đậm** trước, rồi *nghiêng* / _nghiêng_, cuối cùng `mã`.
+	for _, re := range []*regexp.Regexp{
+		regexp.MustCompile(`\*\*([^*]+)\*\*`),
+		regexp.MustCompile("__([^_]+)__"),
+		regexp.MustCompile("`([^`]+)`"),
+		regexp.MustCompile(`\*([^*\n]+)\*`),
+		regexp.MustCompile(`_([^_\n]+)_`),
+	} {
+		s = re.ReplaceAllString(s, "$1")
+	}
+	return s
+}
+
+func padToHeight(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	// Không cắt bớt: nếu khối dài hơn n thì nội dung đã tự cuộn trong viewport,
+	// giữ nguyên để không mất dòng đang hiện.
+	for len(lines) < n {
+		lines = append(lines, "")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func renderCoCreateBody(width, height int, state *cocreateState, errMsg, inputView string, spinnerFrame int) string {
 	if state == nil {
 		return ""
@@ -271,7 +319,8 @@ func renderCoCreateBody(width, height int, state *cocreateState, errMsg, inputVi
 		convH = 4
 	}
 
-	convPanel := renderCoCreateConversationPanel(innerW, convH, state, errMsg, spinnerFrame)
+	convPanel := padToHeight(
+		renderCoCreateConversationPanel(innerW, convH, state, errMsg, spinnerFrame), convH)
 
 	var stack string
 	if suggestionsBox == "" {
@@ -285,7 +334,7 @@ func renderCoCreateBody(width, height int, state *cocreateState, errMsg, inputVi
 		BorderForeground(colorDim).
 		Render(stack)
 
-	rightPanel := renderCoCreatePromptPanel(rightW, height, state)
+	rightPanel := padToHeight(renderCoCreatePromptPanel(rightW, height, state), height)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftCol, rightPanel)
 }
 
@@ -480,7 +529,7 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 		}
 		if isUser {
 			lines = append(lines, userRole)
-			for _, line := range wrapStreamText(strings.TrimSpace(item.Content), wrapW) {
+			for _, line := range wrapStreamText(stripInlineMarkdown(strings.TrimSpace(item.Content)), wrapW) {
 				// Cả dòng Render một lần, tránh ANSI reset màu tiền tố nối với màu chữ rỉ màu.
 				lines = append(lines, userBody.Render("▌ "+line))
 			}
@@ -488,7 +537,7 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 			lines = append(lines, aiRole)
 			// assistant trong history giữ Raw đủ bốn đoạn (cho ngữ cảnh model), UI chỉ hiện đoạn [REPLY].
 			display := extractReplyForDisplay(item.Content)
-			for _, line := range wrapStreamText(strings.TrimSpace(display), wrapW) {
+			for _, line := range wrapStreamText(stripInlineMarkdown(strings.TrimSpace(display)), wrapW) {
 				lines = append(lines, aiBody.Render("  "+line))
 			}
 		}
@@ -505,7 +554,7 @@ func renderCoCreateConversationPanel(width, height int, state *cocreateState, er
 		}
 		if state.streamReply() != "" {
 			lines = append(lines, aiRole)
-			for _, line := range wrapStreamText(state.streamReply(), wrapW) {
+			for _, line := range wrapStreamText(stripInlineMarkdown(state.streamReply()), wrapW) {
 				lines = append(lines, aiBody.Render("  "+line))
 			}
 			lines = append(lines, "")

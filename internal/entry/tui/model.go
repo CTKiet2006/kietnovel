@@ -63,6 +63,9 @@ type Model struct {
 	version            string
 	importer           *importState
 	importSeq          int
+	reader             *readerState
+	books              *booksState
+	booksErr           string
 	simulator          *simulationState
 	simSeq             int
 	compItems          []commandPaletteItem
@@ -590,6 +593,23 @@ func (m *Model) syncRuntimePlaceholder() {
 	}
 }
 
+// clipToHeight cắt một khối đã vẽ còn đúng n dòng.
+//
+// Chỉ cắt phần thừa ở đáy, không đụng dòng nào đang hiện. Cần khi thành phần
+// (thanh trạng thái, gợi ý) tự xuống dòng ở terminal hẹp: khối bèn cao hơn số
+// dòng terminal thì terminal cuộn, và con trỏ thật không còn nằm ở dòng mà khối
+// vẽ ra — gõ vào thì ký tự hiện lệch chỗ rồi mới nhảy về.
+func clipToHeight(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	lines := strings.Split(strings.ReplaceAll(s, "\r\n", "\n"), "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[:n], "\n")
+}
+
 func (m *Model) renderBottomBar() string {
 	inputView := highlightCommandToken(m.textarea.View(), m.textarea.Value(), m.commandToken)
 	inputBox := renderInputBox(
@@ -634,6 +654,14 @@ func (m Model) View() string {
 	}
 	if m.help != nil {
 		return renderHelpModal(m.width, m.height, m.help)
+	}
+	// Khung đọc đứng sau /help: cả hai đều là lớp phủ, nhưng /help là bảng tra
+	// cứu nên bấm được ở trên.
+	if m.reader != nil {
+		return renderReadModal(m.width, m.height, m.reader)
+	}
+	if m.books != nil {
+		return renderBooksModal(m.width, m.height, m.books, m.booksErr)
 	}
 	if m.report != nil {
 		return renderReportModal(m.width, m.height, m.report)
@@ -681,6 +709,14 @@ func (m Model) View() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, left, center, right)
 	}
 
+	// Cắt thân khung về đúng ngân sách dòng. Ở terminal hẹp, thanh trạng thái và
+	// gợi ý có thể xuống dòng làm body cao hơn bodyH; JoinVertical rồi cho ra
+	// khung CAO HƠN terminal, terminal cuộn, và con trỏ thật lệch khỏi dòng vẽ —
+	// đó là lý do gõ chữ thì ký tự hiện lệch chỗ rồi mới "bay" về đúng dòng.
+	if h := lipgloss.Height(body); h > bodyH && bodyH > 0 {
+		body = clipToHeight(body, bodyH)
+	}
+
 	view := lipgloss.JoinVertical(lipgloss.Left, topBar, body, inputBox)
 
 	// Popup phủ chồng: nổi trên đáy body, không ảnh hưởng bố cục
@@ -692,6 +728,17 @@ func (m Model) View() string {
 	} else if m.compActive {
 		commandBar := renderCommandPalette(m.width, m.compItems, m.compIdx)
 		view = overlayAboveInput(view, commandBar, inputH)
+	}
+	// Khung phải vừa đúng terminal, cả hai chiều.
+	//
+	// Cao quá terminal: terminal cuộn, con trỏ thật lệch khỏi dòng khung vẽ ra.
+	// Thấp hơn terminal: terminal giữ con trỏ ở dưới khung, gõ vào thì ký tự
+	// hiện ở dòng trống phía dưới chứ không phải trong ô nhập. Cả hai đều cho
+	// cảm giác chữ "bay" khỏi chỗ đang gõ.
+	//
+	// Kẹp ở đây, sau khi các popup đã phủ, vì popup cũng có thể tự cao hơn.
+	if m.height > 0 {
+		view = padToHeight(view, m.height)
 	}
 	return view
 }

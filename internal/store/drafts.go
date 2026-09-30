@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -69,6 +71,36 @@ func (s *DraftStore) LoadDraft(chapter int) (string, error) {
 }
 
 // LoadChapterContent loads the chapter draft body and its word count.
+// ListDrafts liệt kê số chương đang có bản nháp trong drafts/, tăng dần.
+// Dùng cho màn đọc: người viết cần xem được bản nháp để quyết định có chốt hay
+// không, chứ chỉ đọc bản chốt thì thành vòng luẩn quẩn.
+func (s *DraftStore) ListDrafts() ([]int, error) {
+	entries, err := os.ReadDir(s.io.path("drafts"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []int
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimSuffix(name, ".md"))
+		if err != nil || n <= 0 {
+			continue
+		}
+		out = append(out, n)
+	}
+	sort.Ints(out)
+	return out, nil
+}
+
 func (s *DraftStore) LoadChapterContent(chapter int) (string, int, error) {
 	draft, err := s.LoadDraft(chapter)
 	if err != nil {
