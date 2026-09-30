@@ -55,6 +55,36 @@ func TestRenderErrorEventKeepsOneLineSummary(t *testing.T) {
 	}
 }
 
+// TestCompassScaleRange chốt việc bóc số cho estimated_scale, vì có hai dạng
+// dữ liệu cùng tồn tại: protocol mới yêu cầu khoảng số thuần ("4-6"), còn sách
+// đã tạo trước đó lưu kèm chữ "预计 4-6 卷". Cả hai phải hiện ra giống nhau,
+// và cả hai phải sạch Hán tự khi hiển thị tiếng Việt.
+func TestCompassScaleRange(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"4-6", "4-6"},
+		{"预计 4-6 卷", "4-6"},
+		{"约 38-42 章", "38-42"},
+		{"8 - 12", "8 - 12"},
+		{"3", "3"},
+		{"", ""},
+		{"khong co so", ""},
+	}
+	for _, c := range cases {
+		if got := compassScaleRange(c.in); got != c.want {
+			t.Errorf("compassScaleRange(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestCompassScaleKhongLoHanTu: giá trị bóc ra phải sạch Hán tự, vì nó được in
+// thẳng lên panel kèm đơn vị tiếng Việt.
+func TestCompassScaleKhongLoHanTu(t *testing.T) {
+	got := compassScaleRange("预计 4-6 卷")
+	if got != "4-6" {
+		t.Fatalf("got %q, want %q", got, "4-6")
+	}
+}
+
 func TestRenderRunningModelShowsStateAndElapsed(t *testing.T) {
 	out := ansi.Strip(renderEventLine(host.Event{
 		ID:       "model-1",

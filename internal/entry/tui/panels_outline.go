@@ -2,11 +2,12 @@ package tui
 
 import (
 	"fmt"
-	"github.com/CTKiet2006/kietnovel/internal/i18n"
+	"regexp"
 	"strconv"
 	"strings"
 
 	"github.com/CTKiet2006/kietnovel/internal/host"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -14,6 +15,19 @@ import (
 // Bậc short tối đa 25 chương, dưới 20 cột đơn vừa một màn hình mà vẫn giữ được nhãn "đang làm";
 // truyện dài chế độ layered cuộn bung ra thì n tự vượt 20, mượt mà chuyển nhiều cột.
 const outlineGridThreshold = 20
+
+// scaleRangeRe bóc khoang so kiem tu estimated_scale.
+var scaleRangeRe = regexp.MustCompile(`\d+(?:\s*[-–~]\s*\d+)?`)
+
+// compassScaleRange bóc phan so cua estimated_scale.
+//
+// Protocol moi yeu cau chi tra ve khoang so thuan ("4-6") de lop voice ghep don vi
+// theo ngon ngu dang chon. Nhung sach da tao truoc do luu kem chu vi du
+// "预计 4-6 卷", va LLM van co the tu them tu. Boc so giup ca hai dang hien thi
+// giong nhau, ma khong phai do ten don vi cua mo hinh co khop hay khong.
+func compassScaleRange(s string) string {
+	return scaleRangeRe.FindString(strings.TrimSpace(s))
+}
 
 // renderOutlineSection chọn layout theo số chương: ít thì cột đơn (kèm nhãn "đang làm"), nhiều thì lưới nhiều cột.
 func renderOutlineSection(snap host.UISnapshot, contentW int) string {
@@ -180,8 +194,8 @@ func renderDetailContent(snap host.UISnapshot, contentW int) string {
 			b.WriteString("\n")
 			if snap.CompassDirection != "" {
 				direction := fmt.Sprintf(i18n.T("  → Kết truyện: %s"), snap.CompassDirection)
-				if snap.CompassScale != "" {
-					direction += "(" + snap.CompassScale + ")"
+				if scale := compassScaleRange(snap.CompassScale); scale != "" {
+					direction += " (" + i18n.Tf("dự kiến %s tập", scale) + ")"
 				}
 				b.WriteString(compassStyle.Render(truncate(direction, contentW)))
 				b.WriteString("\n")
