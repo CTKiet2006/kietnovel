@@ -214,3 +214,63 @@ func TestEscMotLanKhongHuyOInput(t *testing.T) {
 		t.Fatal("Esc lần hai ở ô nhập mới hủy")
 	}
 }
+
+// TestEscQuayLaiKhiCoBuocTruoc là hành vi chính của bản vá này: ở bước 2 trở đi,
+// Esc phải quay lại bước trước thay vì huỷ. Người dùng chọn sai Provider ở bước 1
+// thì chỉ phải sửa lại, không phải làm lại từ đầu.
+func TestEscQuayLaiKhiCoBuocTruoc(t *testing.T) {
+	// Bước 1: không có bước trước nên Esc vẫn phải bấm hai lần mới hủy.
+	first := setupSelectModel{title: "t", items: setupProviders, canBack: false}
+	a1, c1 := first.Update(key("esc"))
+	if c1 != nil || a1.(setupSelectModel).backed {
+		t.Fatal("bước 1 không được quay lại")
+	}
+
+	// Bước 2 trở đi: Esc quay lại ngay, chỉ một lần.
+	later := setupSelectModel{title: "t", items: setupProviders, canBack: true}
+	a2, c2 := later.Update(key("esc"))
+	r2 := a2.(setupSelectModel)
+	if c2 == nil {
+		t.Fatal("Esc khi có bước trước phải thoát màn hình con để quay lại")
+	}
+	if !r2.backed {
+		t.Fatal("Esc khi có bước trước phải báo quay lại")
+	}
+	if r2.cancelled {
+		t.Fatal("Esc khi quay lại không được đồng thời hủy")
+	}
+}
+
+// TestEscQuayLaiOInput: ô nhập ở bước sau cũng quay lại, và giữ nguyên dữ liệu
+// đang gõ (không mất).
+func TestEscQuayLaiOInput(t *testing.T) {
+	m := setupInputModel{label: "t", value: "sk-abc", canBack: true}
+	next, cmd := m.Update(key("esc"))
+	r := next.(setupInputModel)
+	if cmd == nil {
+		t.Fatal("Esc ở ô nhập bước sau phải thoát con để quay lại")
+	}
+	if !r.backed || r.cancelled {
+		t.Fatalf("phải báo quay lại, không hủy (backed=%v cancelled=%v)", r.backed, r.cancelled)
+	}
+	if r.value != "sk-abc" {
+		t.Fatalf("mất nội dung đang gõ khi quay lại: %q", r.value)
+	}
+}
+
+// TestQuayLaiKhongLamMatConTro: quay lại bước chọn phải giữ vị trí đang chọn,
+// không nhảy về đầu danh sách.
+func TestQuayLaiKhongLamMatConTro(t *testing.T) {
+	m := setupSelectModel{title: "t", items: setupProviders, canBack: true}
+	m.cursor = 4
+	next, _ := m.Update(key("down"))
+	m = next.(setupSelectModel)
+	if m.cursor != 5 {
+		t.Fatalf("cursor = %d, mong 5", m.cursor)
+	}
+	// Bấm phím khác rồi Esc: con trỏ phải giữ nguyên.
+	after, _ := m.Update(key("esc"))
+	if got := after.(setupSelectModel).cursor; got != 5 {
+		t.Fatalf("cursor đổi khi quay lại: %d", got)
+	}
+}
