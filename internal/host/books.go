@@ -69,10 +69,18 @@ func readBook(dir, fallbackName string) Book {
 		_ = json.Unmarshal(data, &prog)
 	}
 	b.Words = prog.TotalWordCount
-	_, errPremise := os.Stat(filepath.Join(dir, "meta", "premise.md"))
-	_, errOutline := os.Stat(filepath.Join(dir, "meta", "outline.md"))
-	b.HasOutline = errPremise == nil || errOutline == nil
+	// premise.md và outline.md nằm ở GỐC thư mục truyện, không phải trong meta/.
+	// Kiểm tra trong meta/ khiến mọi truyện đều bị gán "chưa có dàn ý" — và câu
+	// đó hiện sai ngay cả khi truyện đã có 9 chương dàn ý.
+	b.HasOutline = fileExists(filepath.Join(dir, "premise.md")) ||
+		fileExists(filepath.Join(dir, "outline.md")) ||
+		fileExists(filepath.Join(dir, "outline.json"))
 	return b
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // Books liệt kê các truyện đang tồn tại trong cây đầu ra. base là thư mục gốc
