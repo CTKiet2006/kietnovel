@@ -69,7 +69,11 @@ Write-Ok "$($release.tag_name)"
 
 # --- 2. Tim asset + checksum dung -------------------------------------------
 
-$fileName = "kietnovel_$($release.tag_name)_Windows_$goArch.zip"
+# GoReleaser loai bo chu "v" trong ten asset (ProjectName_Version_... voi
+# Version khong co "v"), con tag cua GitHub thi co. Bo "v" de khop ten that.
+$ver = $release.tag_name -replace '^v', ''
+
+$fileName = "kietnovel_${ver}_Windows_$goArch.zip"
 $asset    = $release.assets | Where-Object { $_.name -eq $fileName } | Select-Object -First 1
 if (-not $asset) {
     $have = ($release.assets | ForEach-Object { $_.name }) -join ', '
