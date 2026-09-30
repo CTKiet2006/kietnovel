@@ -258,17 +258,21 @@ func (m Model) handleBooksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyUp:
 		if s.cursor > 0 {
 			s.cursor--
+			m.booksErr = ""
 		}
 	case tea.KeyDown:
 		if s.cursor < len(s.list)-1 {
 			s.cursor++
+			m.booksErr = ""
 		}
 	case tea.KeyEnter:
-		// Enter trên truyện đang mở: báo ra chứ không im lặng, vì người dùng
-		// có thể tưởng nó hỏng.
 		if bk := s.selected(); bk != nil {
 			if sameDir(bk.Dir, m.runtime.Dir()) {
-				return renderBooksNotice(m, i18n.Tf("Truyện %q đang mở rồi.", bk.Name))
+				// Báo NGAY TRONG MODAL qua booksErr, không qua dòng sự kiện:
+				// modal đang che toàn màn hình nên báo ra sự kiện thì người
+				// dùng không thấy, tưởng bấm Enter bị đơ.
+				m.booksErr = i18n.Tf("Truyện %q đang mở rồi — chọn truyện khác để chuyển.", bk.Name)
+				return m, nil
 			}
 			return m.askSwitch(bk.Dir, bk.Name)
 		}
