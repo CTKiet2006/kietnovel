@@ -56,7 +56,7 @@
 
 ```powershell
 # 1. Cài (một lệnh, không cần cài Go)
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.5.0/scripts/install-windows.ps1 | iex
+irm https://github.com/CTKiet2006/kietnovel/releases/latest/download/install-windows.ps1 | iex
 
 # 2. Mở terminal mới, rồi chạy
 kietnovel
@@ -82,11 +82,9 @@ powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1
 没装 Go？先下载脚本再运行：
 
 ```powershell
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.5.0/scripts/install-windows.ps1 -OutFile ki.ps1
+irm https://github.com/CTKiet2006/kietnovel/releases/latest/download/install-windows.ps1 -OutFile ki.ps1
 .\ki.ps1 -Version v1.4.0
 ```
-
-可用版本：v1.5.0、v1.4.0、v1.3.4、v1.3.3、v1.3.2、v1.2.5、v1.2.4、v1.2.3、v1.2.2、v1.2.1、v1.1.0。
 
 <details>
 <summary>其他方式</summary>
@@ -229,6 +227,10 @@ prompt 集合保持作者的原版，用中文写成 —— 其质量已经过�
 | `/importsim <file>` | 从 json 文件导入文风模拟档案 |
 | `/sync` | 把你对章节文件的手工修改同步回系统 |
 | `/export` | 把作品导出为完整文本文件（.txt 或 .epub） |
+| `/read [n]` | 在 TUI 里直接读小说——已定稿章节和未完成草稿都能读 |
+| `/books` | 查看 `output/` 下的作品列表，在多本之间切换 |
+| `/new [标题]` | 新建作品并立即打开开始写（标题可带中文和空格） |
+| `/delete [标题]` | 删除作品——两步确认，第二步需输入 `y`，不可恢复 |
 | `/language [vi\|en\|zh]` | 查看或切换界面语言；选项会保存到配置里 |
 
 ### 实时干预（Steer）

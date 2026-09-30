@@ -56,7 +56,7 @@ Không cần Docker. Ba bước:
 
 ```powershell
 # 1. Cài (một lệnh, không cần cài Go)
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.5.0/scripts/install-windows.ps1 | iex
+irm https://github.com/CTKiet2006/kietnovel/releases/latest/download/install-windows.ps1 | iex
 
 # 2. Mở terminal mới, rồi chạy
 kietnovel
@@ -85,11 +85,11 @@ powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1
 Nếu không có Go, tải script rồi chạy:
 
 ```powershell
-irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.5.0/scripts/install-windows.ps1 -OutFile ki.ps1
+irm https://github.com/CTKiet2006/kietnovel/releases/latest/download/install-windows.ps1 -OutFile ki.ps1
 .\ki.ps1 -Version v1.4.0
 ```
 
-Bản hiện có: v1.5.0, v1.4.0, v1.3.4, v1.3.3, v1.3.2, v1.2.5, v1.2.4, v1.2.3, v1.2.2, v1.2.1, v1.1.0.
+Tất cả bản phát hành: <https://github.com/CTKiet2006/kietnovel/releases>
 
 <details>
 <summary>Cách khác</summary>
@@ -134,7 +134,6 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 Chạy binary trực tiếp thì **không** có thư mục `config/`. Nếu `--headless` báo *"headless
 không hỗ trợ thiết lập lần đầu"*, hãy mở TUI một lần để hoàn tất cấu hình.
 
-
 ## 3. Tùy Chọn Ngôn Ngữ (vi / en / zh)
 
 Trong file cấu hình `~/.kietnovel/config.json`, bạn có thể chỉ định trường `"language"`.
@@ -165,7 +164,6 @@ duy trì hai bản prompt song song dễ lệch nội dung.
 
 Giao diện đổi ngay. Riêng **ngôn ngữ sáng tác** được nạp một lần lúc khởi động, nên
 có hiệu lực đầy đủ từ lần mở kế tiếp - ứng dụng sẽ nhắc việc này ngay sau khi đổi.
-
 
 ## 4. Cấu Hình Nhà Cung Cấp AI (LLM)
 
@@ -210,7 +208,6 @@ Cấu trúc chung:
 }
 ```
 
-
 ## 5. Hướng Dẫn Sử Dụng & Bảng Lệnh TUI
 
 Gõ `kietnovel` để vào TUI. Tại màn hình chào:
@@ -239,6 +236,10 @@ Gõ `/` trong TUI để mở bảng chọn lệnh:
 | `/importsim <file>` | Nhập hồ sơ mô phỏng văn phong từ tệp json |
 | `/sync` | Đồng bộ các chỉnh sửa thủ công của bạn trên các file chương vào hệ thống |
 | `/export` | Xuất tác phẩm thành file văn bản hoàn chỉnh (.txt hoặc .epub) |
+| `/read [n]` | Đọc truyện ngay trong TUI — cả chương đã chốt lẫn bản nháp đang làm dở |
+| `/books` | Xem danh sách truyện trong `output/`, chuyển qua lại giữa các truyện |
+| `/new [tên]` | Tạo truyện mới và mở luôn để viết (tên có dấu và khoảng trắng đều được) |
+| `/delete [tên]` | Xoá truyện — hai bước, bước hai phải gõ `y`, không khôi phục được |
 | `/language [vi\|en\|zh]` | Xem hoặc đổi ngôn ngữ giao diện; lựa chọn được lưu vào cấu hình |
 
 ### Can thiệp thời gian thực (Steer)
