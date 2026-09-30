@@ -67,10 +67,10 @@ kietnovel
 Muốn ghim đúng một phiên bản thay vì bản mới nhất:
 
 ```powershell
-go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@v1.0.0
+go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@v1.1.0
 ```
 
-> **Lưu ý:** ngay sau khi phát hành phiên bản mới, `proxy.golang.org` có thể mất vài phút mới thấy tag. Trong lúc đó `@latest` trỏ nhầm tag cũ — hãy dùng `@v1.0.0` để cài chắc chắn.
+> **Lưu ý:** ngay sau khi phát hành phiên bản mới, `proxy.golang.org` có thể mất vài phút mới thấy tag. Trong lúc đó `@latest` trỏ nhầm tag cũ — hãy dùng `@v1.1.0` để cài chắc chắn.
 
 ### Cài vào thư mục riêng (nếu `go\bin` chưa có trong PATH)
 
