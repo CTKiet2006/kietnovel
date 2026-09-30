@@ -1,5 +1,7 @@
 # kietnovel
 
+> **Tiếng Việt** · [English](README.en.md) · [中文](README.zh.md)
+
 > Originally inspired by and initially based on AINovel-CLI by voocel. KietNovel is now independently developed — an AI engine for writing full-length novels, with a trilingual interface (Vietnamese / English / Chinese).
 
 Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định chạy trọn một bộ truyện, model chỉ được gọi đúng chỗ cần phán đoán — Engine điều phối 3 agent tự chủ Architect / Writer / Editor theo bảng quyết định, Arbiter ngữ nghĩa chỉ thức dậy khi cần. Từ một câu ý tưởng tới tiểu thuyết hoàn chỉnh.
@@ -50,47 +52,38 @@ Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định 
 
 ## 2. Cài Đặt & Khởi Chạy Nhanh
 
-Không cần Docker. Có hai cách, **không cần cài Go** nếu bạn dùng cách 1.
-
-### Cách 1 — một lệnh, không cần Go (khuyên dùng)
+Không cần Docker. Ba bước:
 
 ```powershell
+# 1. Cài (một lệnh, không cần cài Go)
 irm https://raw.githubusercontent.com/CTKiet2006/kietnovel/v1.2.1/scripts/install-windows.ps1 | iex
-```
 
-Lệnh trên tải bản dựng sẵn đúng cho Windows của bạn (x86_64 hoặc arm64), kiểm tra
-SHA-256, giải nén vào `%LOCALAPPDATA%\kietnovel\bin`, rồi tự thêm thư mục đó vào
-user PATH. Mở terminal mới rồi gõ:
-
-```powershell
+# 2. Mở terminal mới, rồi chạy
 kietnovel
+
+# 3. Lần đầu: Setup Wizard hỏi Provider, API key, Model và ngôn ngữ (vi / en / zh)
 ```
 
-Khoảng 5.7 MB, xong trong vài giây.
+Cài trong khoảng 5.7 MB. Script tự tải bản dựng sẵn đúng kiến trúc máy (x86_64 / arm64),
+kiểm tra SHA-256, giải nén vào `%LOCALAPPDATA%\kietnovel\bin` và thêm thư mục đó vào
+user PATH.
 
-> Ghim theo tag (`v1.2.1`) chứ không theo `main` — CDN của GitHub cache khá lâu, dùng
-> `main` có thể bạn nhận script cũ trong vài phút sau khi vừa sửa. Script có kiểm tra
-> checksum nên không bao giờ cài nhầm file hỏng.
+**Cập nhật:** chạy lại lệnh trên. Thoát `kietnovel` trước — Windows không cho ghi đè
+file đang chạy.
 
-### Cách 2 — nếu bạn đã có Go ≥ 1.25
+<details>
+<summary>Cách khác</summary>
+
+**Đã có Go ≥ 1.25** — không cần binary, tự build từ source:
 
 ```powershell
 go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@latest
 ```
 
-Cách này tải source về build (~26 MB dependency rồi compile), chậm hơn cách 1 trên máy
-yếu nhưng không cần tải binary. Binary đặt ở `C:\Users\<bạn>\go\bin` (thư mục này đã
-nằm trong PATH nếu bạn cài Go bằng installer mặc định).
+Chậm hơn đáng kể: phải tải ~26 MB dependency rồi compile (25 giây trên máy 16 luồng,
+vài phút trên máy yếu).
 
-### Ghim đúng một phiên bản
-
-```powershell
-go install github.com/CTKiet2006/kietnovel/cmd/kietnovel@v1.2.1
-```
-
-> **Lưu ý:** ngay sau khi phát hành phiên bản mới, `proxy.golang.org` có thể mất vài phút mới thấy tag. Trong lúc đó `@latest` trỏ nhầm tag cũ — hãy dùng `@v1.2.1` để cài chắc chắn.
-
-### Cài từ source (muốn tự build hoặc sửa code)
+**Từ source** (muốn sửa code):
 
 ```powershell
 git clone https://github.com/CTKiet2006/kietnovel.git
@@ -98,20 +91,7 @@ cd kietnovel
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
-Script build, chép binary vào `%LOCALAPPDATA%\kietnovel\bin\` và tự thêm thư mục đó vào user PATH.
-
-### Chạy tại chỗ, không cài
-
-```powershell
-git clone https://github.com/CTKiet2006/kietnovel.git
-cd kietnovel
-go build -o kietnovel.exe ./cmd/kietnovel
-.\kietnovel.exe
-```
-
-**Cập nhật:** chạy lại lệnh `go install ...@latest` (thoát `kietnovel` trước nếu đang mở — Windows không cho ghi đè file đang chạy).
-
-Lần đầu chạy, hệ thống tự bật **Setup Wizard** tiếng Việt để chọn Provider, nhập API Key/Base URL, chọn Model và Ngôn ngữ sáng tác. Xong là viết được ngay.
+</details>
 
 ### Vị trí dữ liệu
 
@@ -122,16 +102,9 @@ Lần đầu chạy, hệ thống tự bật **Setup Wizard** tiếng Việt đ�
 | Quy tắc viết cá nhân | `~/.ainovel/rules/*.md` hoặc `./.ainovel/rules/*.md` |
 | Truyện đang viết | `./output/novel/` — hoặc đặt `NOVEL_DIR` (mục 6) |
 
-⚠️ Chạy binary trực tiếp thì **không** có thư mục `config/`. File cấu hình nằm trong home dir của bạn. Nếu chạy `--headless` mà báo *"headless không hỗ trợ thiết lập lần đầu"*, hãy mở TUI một lần để hoàn tất cấu hình.
+Chạy binary trực tiếp thì **không** có thư mục `config/`. Nếu `--headless` báo *"headless
+không hỗ trợ thiết lập lần đầu"*, hãy mở TUI một lần để hoàn tất cấu hình.
 
-### Chạy nhiều bộ truyện
-
-Đặt biến môi trường `NOVEL_DIR` trước khi chạy:
-
-```powershell
-$env:NOVEL_DIR = ".\novels\tien-hiep-ky"
-kietnovel
-```
 
 ## 3. Tùy Chọn Ngôn Ngữ (vi / en / zh)
 
@@ -167,9 +140,18 @@ có hiệu lực đầy đủ từ lần mở kế tiếp - ứng dụng sẽ nh
 
 ## 4. Cấu Hình Nhà Cung Cấp AI (LLM)
 
-File cấu hình: `~/.ainovel/config.json`. Lần chạy đầu tiên Setup Wizard sẽ tạo file này cho bạn — dưới đây là các ví dụ tham khảo.
+File cấu hình: `~/.ainovel/config.json` (Setup Wizard tạo sẵn). Chọn Provider trong
+wizard là xong — mục này chỉ dành khi muốn tự sửa tay.
 
-### DeepSeek (rẻ nhất, nên thử trước)
+| Provider | `model` gợi ý | Ghi chú |
+|---|---|---|
+| DeepSeek | `deepseek-chat` | Rẻ nhất, nên thử trước |
+| OpenRouter | `anthropic/claude-3.5-sonnet` | Một key, nhiều hãng |
+| Gemini | `gemini-2.5-pro` | Context dài |
+| Anthropic | `claude-3.5-sonnet` | |
+| OpenAI | `gpt-4o` | |
+
+Cấu trúc chung:
 
 ```json
 {
@@ -177,95 +159,40 @@ File cấu hình: `~/.ainovel/config.json`. Lần chạy đầu tiên Setup Wiza
   "provider": "deepseek",
   "model": "deepseek-chat",
   "providers": {
-    "deepseek": {
-      "api_key": "YOUR_DEEPSEEK_API_KEY"
-    }
+    "deepseek": { "api_key": "YOUR_API_KEY" }
   },
   "context_window": 64000,
   "style": "default"
 }
 ```
 
-### OpenRouter
+`context_window` tự dò từ model nếu bỏ trống. `reasoning_effort`:
+`off / low / medium / high / xhigh / max`. Thêm nhiều provider và dùng làm fallback:
 
 ```json
 {
-  "language": "vi",
-  "provider": "openrouter",
-  "model": "anthropic/claude-3.5-sonnet",
-  "providers": {
-    "openrouter": {
-      "api_key": "sk-or-v1-YOUR_OPENROUTER_API_KEY"
-    }
-  },
-  "context_window": 128000,
-  "reasoning_effort": "off",
-  "style": "default"
-}
-```
-
-Google Gemini:
-
-```json
-{
-  "language": "vi",
-  "provider": "gemini",
-  "model": "gemini-2.5-pro",
-  "providers": {
-    "gemini": {
-      "api_key": "YOUR_GEMINI_API_KEY"
-    }
-  },
-  "context_window": 1000000,
-  "style": "default"
-}
-```
-
-### Phối hợp nhiều Model theo vai trò
-
-Hệ thống cho phép gán model mạnh làm Biên tập / Kiến trúc sư và model rẻ, nhanh làm Người viết — cắt đáng kể chi phí:
-
-```json
-{
-  "language": "vi",
-  "provider": "deepseek",
-  "model": "deepseek-chat",
-  "providers": {
-    "deepseek": { "api_key": "YOUR_DEEPSEEK_API_KEY" },
-    "openrouter": { "api_key": "sk-or-v1-YOUR_KEY" }
-  },
   "roles": {
-    "architect": { "provider": "openrouter", "model": "anthropic/claude-3.5-sonnet" },
-    "editor": { "provider": "openrouter", "model": "anthropic/claude-3.5-sonnet" },
-    "writer": { "provider": "deepseek", "model": "deepseek-chat" }
-  },
-  "context_window": 128000,
-  "style": "default"
+    "writer": {
+      "provider": "openrouter",
+      "model": "anthropic/claude-3.5-sonnet",
+      "fallbacks": ["deepseek", "gemini"]
+    }
+  }
 }
 ```
+
 
 ## 5. Hướng Dẫn Sử Dụng & Bảng Lệnh TUI
 
-### Khởi động TUI & Chế độ sáng tác
+Gõ `kietnovel` để vào TUI. Tại màn hình chào:
 
-Chạy lệnh:
-
-```bash
-kietnovel
-```
-
-Tại màn hình chào mừng:
-
-- Phím `Tab`: Chuyển đổi giữa 2 chế độ:
-  - **Bắt đầu nhanh**: Nhập 1 câu tóm tắt ý tưởng (ví dụ: "Tiểu thuyết tiên hiệp phàm nhân, nhân vật chính cơ trí, quyết đoán"), AI tự động lập dàn ý và sáng tác ngay.
-  - **Đồng sáng tác (Co-create)**: AI sẽ trao đổi cùng bạn từng bước để làm rõ thiết lập thế giới, nhân vật, cốt truyện trước khi viết.
-- Phím `Enter`: Bắt đầu quá trình sáng tác.
-- Phím `/`: Mở thanh tìm kiếm và thực thi lệnh nhanh (Slash Commands).
-- `Ctrl+C` 2 lần: Lưu an toàn toàn bộ trạng thái và thoát ra.
+- `Tab` — chuyển giữa **Bắt đầu nhanh** (nhập 1 câu, AI tự dàn ý rồi viết) và
+  **Đồng sáng tác** (trao đổi từng bước để chốt thế giới/nhân vật trước khi viết).
+- `Enter` — bắt đầu. `/` — tìm lệnh. `Ctrl+C` 2 lần — lưu trạng thái rồi thoát.
 
 ### Danh sách Lệnh Điều Khiển (Slash Commands)
 
-Khi đang ở trong giao diện TUI, bạn có thể gõ `/` để mở bảng chọn lệnh:
+Gõ `/` trong TUI để mở bảng chọn lệnh:
 
 | Lệnh | Mô tả |
 |------|-------|
@@ -319,7 +246,7 @@ $env:NOVEL_DIR = ".\novels\do-thi-di-nang"
 kietnovel
 ```
 
-Mỗi bộ truyện có văn phong (`style/`), checkpoint và tiến độ riêng, không lẫn nhau. Bỏ `NOVEL_DIR` thì dùng `./output/novel` theo thư mục làm việc như bản gốc.
+Mỗi bộ truyện có văn phong (`style/`), checkpoint và tiến độ riêng, không lẫn nhau.
 
 Cấu trúc thư mục đầu ra của mỗi truyện:
 
@@ -335,7 +262,8 @@ novels/<tên-truyện>/output/novel/
 └── meta/                # Checkpoint, tiến độ, nhật ký token
 ```
 
-> Mỗi giá trị `NOVEL_DIR` là một bộ truyện riêng: văn phong (`style/`), checkpoint và tiến độ đi theo thư mục truyện, không lẫn nhau. Không đặt `NOVEL_DIR` thì dùng `./output/novel` theo thư mục làm việc như bản gốc.
+> Mỗi giá trị `NOVEL_DIR` là một bộ truyện riêng. Không đặt `NOVEL_DIR` thì dùng
+> `./output/novel` theo thư mục làm việc.
 
 ## 7. Tính Năng Nâng Cao
 
@@ -406,19 +334,19 @@ Gõ `/export` trong TUI hoặc chỉ định tham số:
 
 ### Quy hoạch cuộn 2 tầng (Rolling Planning)
 
-Khác với các công cụ AI thông thường lên dàn ý cứng một lần cho cả trăm chương khiến câu chuyện càng về sau càng rỗng và loãng, kietnovel áp dụng cơ chế La bàn (Compass) + Tầm nhìn cuộn:
-
-- Ban đầu chỉ dựng khung 2 Tập (Volume) và dàn ý chi tiết cho Cung đầu tiên (Arc 1).
-- Khi viết gần hết một Cung, Editor đánh giá tổng kết và Architect mới tiếp tục mở rộng Cung tiếp theo dựa trên diễn biến thực tế của truyện.
+Thay vì lên dàn ý cứng một lần cho cả trăm chương — khiến câu chuyện càng về sau càng
+rỗng — kietnovel dựng khung 2 Tập và dàn ý chi tiết cho Cung đầu tiên. Khi viết gần
+hết một Cung, Editor tổng kết rồi Architect mới mở rộng Cung tiếp theo dựa trên diễn
+biến thực tế của truyện.
 
 ### Quản lý & Nén ngữ cảnh 4 cấp
 
-Để viết được truyện dài 500+ chương mà không bị tràn context window hay mất trí nhớ, hệ thống sử dụng đường ống nén 4 cấp:
+Để viết được truyện dài 500+ chương mà không tràn context window:
 
-1. **ToolResultMicrocompact**: Dọn dẹp kết quả trung gian của các lệnh tool cũ.
-2. **LightTrim**: Cắt tỉa các đoạn text dài không còn cần thiết.
-3. **StoreSummaryCompact**: Thay thế tin nhắn cũ bằng bản tóm tắt đã lưu trong Store (0 tốn LLM token).
-4. **FullSummary**: Dùng prompt chuyên dụng tóm tắt ngữ cảnh tự sự (giữ vững trạng thái nhân vật, manh mối phục bút).
+1. **ToolResultMicrocompact** — dọn kết quả trung gian của tool cũ.
+2. **LightTrim** — cắt đoạn text dài không còn cần.
+3. **StoreSummaryCompact** — thay tin nhắn cũ bằng bản tóm tắt đã lưu trong Store (không tốn token).
+4. **FullSummary** — prompt chuyên dụng tóm tắt ngữ cảnh tự sự.
 
 ### Đánh giá chất lượng 7 chiều của Editor
 
@@ -492,23 +420,8 @@ Hệ thống sẽ tự động tổng hợp các yêu cầu này vào bộ quy t
 
 ### License
 
-Apache License 2.0 — xem [LICENSE](LICENSE).
-
-Phần đóng góp mới của kietnovel:
-
-    Copyright 2026 KietNovel contributors
-
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
-
-        http://www.apache.org/licenses/LICENSE-2.0
-
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
+Apache License 2.0 — xem [LICENSE](LICENSE). Phần đóng góp mới của kietnovel:
+Copyright 2026 KietNovel contributors.
 
 ---
 
