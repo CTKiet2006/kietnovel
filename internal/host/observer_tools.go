@@ -103,35 +103,60 @@ func (o *observer) handleToolUpdate(ev agentcore.Event) {
 		// detail is not misread in tui.log as two separate faults.
 		if call, ok := o.toolStarts[ev.Progress.Agent]; ok {
 			delete(o.toolStarts, ev.Progress.Agent)
-			detail := fmt.Sprintf("%s 错误: %s", ev.Progress.Tool, msg)
+			// Dừng chủ ý giữa chừng (tạm dừng, vào đồng sáng tác, chạm trần
+			// ngân sách) không phải lỗi: đánh dấu ✕ đỏ sẽ làm thao tác bình
+			// thường trông như hỏng. Báo "đã dừng" ở mức info.
+			stopped := o.stoppedOnPurpose(msg)
+			detail := fmt.Sprintf("%s lỗi: %s", ev.Progress.Tool, msg)
+			if stopped {
+				detail = fmt.Sprintf("%s đã dừng: %s", ev.Progress.Tool, msg)
+			}
 			finishEv := Event{
 				ID:         call.id,
 				Time:       call.start,
 				FinishedAt: time.Now(),
-				Failed:     true,
+				Failed:     !stopped,
 				Category:   "TOOL",
 				Agent:      ev.Progress.Agent,
-				Summary:    fmt.Sprintf("%s 错误: %s", call.summary, utils.TruncateRunes(msg, 100)),
+				Summary:    fmt.Sprintf("%s lỗi: %s", call.summary, utils.TruncateRunes(msg, 100)),
+				SummaryMsg: Ptr(Msg{Key: "%s lỗi: %s", Args: []any{call.summary, utils.TruncateRunes(msg, 100)}}),
 				Detail:     detail,
 				Kind:       errorKind(nil, msg),
 				Level:      "error",
 				Depth:      call.depth,
 				Duration:   time.Since(call.start),
 			}
+			if stopped {
+				finishEv.Summary = fmt.Sprintf("%s đã dừng: %s", call.summary, utils.TruncateRunes(msg, 100))
+				finishEv.SummaryMsg = Ptr(Msg{Key: "%s đã dừng: %s",
+					Args: []any{call.summary, utils.TruncateRunes(msg, 100)}})
+				finishEv.Level = "info"
+				finishEv.Kind = ""
+			}
 			o.emitEv(finishEv)
 			o.persistEvent(finishEv)
 			return
 		}
 		// The rare progress stream without a start cannot be updated in place, so keep a separate ERROR event to expose the fault.
+		stopped := o.stoppedOnPurpose(msg)
+		summary := fmt.Sprintf("%s lỗi: %s", ev.Progress.Tool, utils.TruncateRunes(msg, 100))
+		summaryKey := "%s lỗi: %s"
+		level := "error"
+		if stopped {
+			summary = fmt.Sprintf("%s đã dừng: %s", ev.Progress.Tool, utils.TruncateRunes(msg, 100))
+			summaryKey = "%s đã dừng: %s"
+			level = "info"
+		}
 		errEv := Event{
-			Time:     time.Now(),
-			Category: "ERROR",
-			Agent:    ev.Progress.Agent,
-			Summary:  fmt.Sprintf("%s 错误: %s", ev.Progress.Tool, utils.TruncateRunes(msg, 100)),
-			Detail:   fmt.Sprintf("%s 错误: %s", ev.Progress.Tool, msg),
-			Kind:     errorKind(nil, msg),
-			Level:    "error",
-			Depth:    1,
+			Time:       time.Now(),
+			Category:   "ERROR",
+			Agent:      ev.Progress.Agent,
+			Summary:    summary,
+			SummaryMsg: Ptr(Msg{Key: summaryKey, Args: []any{ev.Progress.Tool, utils.TruncateRunes(msg, 100)}}),
+			Detail:     fmt.Sprintf("%s lỗi: %s", ev.Progress.Tool, msg),
+			Kind:       errorKind(nil, msg),
+			Level:      level,
+			Depth:      1,
 		}
 		o.emitEv(errEv)
 		o.persistEvent(errEv)
@@ -169,13 +194,16 @@ func dispatchSummary(agent, task string) string {
 	return agent + "（" + utils.TruncateRunes(firstLine, 30) + "）"
 }
 
+// dispatchDetail dựng phần Detail của sự kiện DISPATCH. Detail là field log đầy đủ
+// (TUI không đọc), nên ở đây dùng tiếng Việt thường, không qua i18n — host không
+// import i18n, và dịch ở tầng log chỉ thêm rắc rối cho không ai đọc.
 func dispatchDetail(task, reason string) string {
 	var parts []string
 	if strings.TrimSpace(reason) != "" {
-		parts = append(parts, "派发原因: "+reason)
+		parts = append(parts, "Lý do phân công: "+reason)
 	}
 	if strings.TrimSpace(task) != "" {
-		parts = append(parts, "完整任务:\n"+task)
+		parts = append(parts, "Nhiệm vụ đầy đủ:\n"+task)
 	}
 	return strings.Join(parts, "\n")
 }
@@ -185,26 +213,37 @@ func (o *observer) emitCallFinish(call *activeCall, category, agentName string, 
 		return
 	}
 	failed := callErr != nil
+	// Dừng chủ ý làm context chết, nên callErr thành context canceled. Đó không
+	// phải lỗi — báo "đã dừng" ở mức info, không tô đỏ, không gắn Kind lỗi.
+	stopped := failed && o.stoppedOnPurpose(callErr.Error())
 	level := "success"
-	if failed {
+	if failed && !stopped {
 		level = "error"
 	}
 	summary := call.summary
+	summaryMsg := call.summaryMsg
 	detail := ""
 	kind := ""
 	if failed {
 		detail = callErr.Error()
 		kind = errorKind(callErr, detail)
-		summary = fmt.Sprintf("%s 错误: %s", call.summary, utils.TruncateRunes(detail, 100))
+		summary = fmt.Sprintf("%s lỗi: %s", call.summary, utils.TruncateRunes(detail, 100))
+		summaryMsg = Msg{Key: "%s lỗi: %s", Args: []any{call.summary, utils.TruncateRunes(detail, 100)}}
+	}
+	if stopped {
+		summary = fmt.Sprintf("%s đã dừng: %s", call.summary, utils.TruncateRunes(detail, 100))
+		summaryMsg = Msg{Key: "%s đã dừng: %s", Args: []any{call.summary, utils.TruncateRunes(detail, 100)}}
+		kind = ""
 	}
 	finishEv := Event{
 		ID:         call.id,
 		Time:       call.start,
 		FinishedAt: time.Now(),
-		Failed:     failed,
+		Failed:     failed && !stopped,
 		Category:   category,
 		Agent:      agentName,
 		Summary:    summary,
+		SummaryMsg: Ptr(summaryMsg),
 		Detail:     detail,
 		Kind:       kind,
 		Level:      level,
@@ -232,7 +271,7 @@ func displayToolName(tool string, args json.RawMessage) string {
 			Chapter int `json:"chapter"`
 		}
 		if json.Unmarshal(args, &p) == nil && p.Chapter > 0 {
-			return fmt.Sprintf("%s(第%d章)", tool, p.Chapter)
+			return fmt.Sprintf("%s (chương %d)", tool, p.Chapter)
 		}
 	case "save_review":
 		var p struct {
@@ -244,12 +283,12 @@ func displayToolName(tool string, args json.RawMessage) string {
 			label := ""
 			switch p.Scope {
 			case "arc":
-				label = "本弧"
+				label = "cung này"
 			case "global":
-				label = "全局"
+				label = "toàn cục"
 			default:
 				if p.Chapter > 0 {
-					label = fmt.Sprintf("第%d章", p.Chapter)
+					label = fmt.Sprintf("chương %d", p.Chapter)
 				}
 			}
 			if label == "" {
@@ -265,7 +304,7 @@ func displayToolName(tool string, args json.RawMessage) string {
 			Chapter int `json:"chapter"`
 		}
 		if json.Unmarshal(args, &p) == nil && p.Chapter > 0 {
-			return fmt.Sprintf("%s(第%d章)", tool, p.Chapter)
+			return fmt.Sprintf("%s (chương %d)", tool, p.Chapter)
 		}
 	case "read_chapter":
 		var p struct {
@@ -276,11 +315,11 @@ func displayToolName(tool string, args json.RawMessage) string {
 		if json.Unmarshal(args, &p) == nil && p.Chapter > 0 {
 			suffix := ""
 			if p.Character != "" {
-				suffix = "·" + p.Character + "对话"
+				suffix = "· đối thoại " + p.Character
 			} else if p.Source == "draft" {
-				suffix = "·草稿"
+				suffix = "· bản nháp"
 			}
-			return fmt.Sprintf("%s(第%d章%s)", tool, p.Chapter, suffix)
+			return fmt.Sprintf("%s (chương %d%s)", tool, p.Chapter, suffix)
 		}
 	}
 	return tool

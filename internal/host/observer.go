@@ -65,7 +65,13 @@ type activeCall struct {
 
 // observer projects Engine dispatches and Worker progress onto the Host's output channel.
 // It is a pure observer and takes part in no control decision.
+// isAborting báo vòng lặp hiện tại có bị dừng chủ ý không. Observer dùng để phân
+// biệt "bị dừng giữa chừng" với lỗi thật: hủy context khi người dùng tạm dừng hay
+// vào đồng sáng tác là việc bình thường, không nên hiện thành lỗi đỏ.
+// Nil nghĩa là không biết, coi như lỗi thật (thiên về báo lỗi hơn là bỏ sót).
 type observer struct {
+	isAborting func() bool
+
 	emitEv  func(Event)
 	emitD   func(string)
 	emitC   func()
@@ -116,6 +122,15 @@ func newObserver(s *storepkg.Store, emitEv func(Event), emitD func(string), emit
 		streamExtractors:    make(map[string]*agentExtractor),
 		retryEvents:         make(map[string]string),
 	}
+}
+
+// stoppedOnPurpose báo lỗi này chỉ là hệ quả của việc dừng chủ ý, không phải hỏng.
+// Chỉ đúng khi thông điệp là do hủy context; lỗi khác vẫn là lỗi thật dù có dừng.
+func (o *observer) stoppedOnPurpose(msg string) bool {
+	if o.isAborting == nil {
+		return false
+	}
+	return o.isAborting() && strings.Contains(msg, "context canceled")
 }
 
 // ── Engine direct-drive entry points ──

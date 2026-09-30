@@ -220,6 +220,7 @@ func New(cfg bootstrap.Config, bundle assets.Bundle, options ...NewOption) (*Hos
 	}
 	h.runCtx, h.runCancel = context.WithCancel(context.Background())
 	h.observer = newObserver(store, h.emitEvent, h.emitDelta, h.emitClear)
+	h.observer.isAborting = func() bool { return h.engine.isAborting() }
 	workers.SetEventObserver(func(meta subagent.RunMeta, ev agentcore.Event) {
 		h.observer.handleWorkerEvent(meta.Agent, ev)
 	})

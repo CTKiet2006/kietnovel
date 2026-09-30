@@ -162,7 +162,7 @@ func TestObserverSeparatesModelResponseFromToolExecution(t *testing.T) {
 	if modelEnd.ID != events[0].ID || modelEnd.Summary != "Đã có phản hồi model" || modelEnd.FinishedAt.IsZero() {
 		t.Fatalf("model end = %+v", modelEnd)
 	}
-	if toolStart.Category != "TOOL" || toolStart.Summary != "draft_chapter(第11章)" || !toolStart.Running() {
+	if toolStart.Category != "TOOL" || toolStart.Summary != "draft_chapter (chương 11)" || !toolStart.Running() {
 		t.Fatalf("tool start = %+v", toolStart)
 	}
 	if toolEnd.ID != toolStart.ID || toolEnd.FinishedAt.IsZero() {

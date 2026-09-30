@@ -75,6 +75,10 @@ func (m Model) handleOverlayKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return m.handleBlockingModalKey(msg, m.handleModelConfigKey)
 	case m.help != nil:
 		return m.handleBlockingModalKey(msg, m.handleHelpKey)
+	case m.reader != nil:
+		return m.handleBlockingModalKey(msg, m.handleReaderKey)
+	case m.books != nil:
+		return m.handleBlockingModalKey(msg, m.handleBooksKey)
 	case m.modelSwitch != nil:
 		return m.handleBlockingModalKey(msg, m.handleModelSwitchKey)
 	case m.report != nil:
