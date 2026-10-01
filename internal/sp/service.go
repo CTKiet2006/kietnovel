@@ -96,30 +96,29 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 		Provider:       s.deps.Provider,
 		Model:          s.deps.ModelName,
 	}
+	// Actual attempt TRƯỚC, Usage overlay SAU — thứ tự này là bắt buộc.
+	// ResolveIdentity (LastTarget của failoverModel) cho biết attempt thành công
+	// gần nhất là primary hay fallback, kể cả khi Usage rỗng identity hoặc
+	// Usage nil hoàn toàn. Không kiểm tra "cả hai có trùng primary không" vì
+	// Usage.Provider="fallback"/Model="" hoặc Usage==nil đều lọt qua khe đó.
+	if s.deps.ResolveIdentity != nil {
+		if p, n := s.deps.ResolveIdentity(); p != "" && n != "" {
+			res.Provider, res.Model = p, n
+		}
+	}
 	if resp != nil && resp.Message.Usage != nil {
 		u := *resp.Message.Usage
 		res.InputTokens, res.OutputTokens = u.Input, u.Output
 		res.CacheRead, res.CacheWrite = u.CacheRead, u.CacheWrite
-		// Thứ tự ưu tiên identity: Usage thật > attempt thực tế > resolve ban đầu.
-		// Usage có provider/model (sau failover vẫn là fallback) thì dùng ngay.
+		// Usage overlay từng field: field nào có thật thì đè.
 		if strings.TrimSpace(u.Provider) != "" {
 			res.Provider = u.Provider
 		}
 		if strings.TrimSpace(u.Model) != "" {
 			res.Model = u.Model
 		}
-		// Usage thiếu identity (bằng resolve ban đầu) thì hỏi attempt thực tế:
-		// failover chạy fallback mà Usage rỗng thì đây là nguồn duy nhất đúng.
-		// Rỗng nữa thì giữ resolve, không đoán.
-		if res.Provider == s.deps.Provider && res.Model == s.deps.ModelName &&
-			s.deps.ResolveIdentity != nil {
-			if p, n := s.deps.ResolveIdentity(); p != "" && n != "" {
-				res.Provider, res.Model = p, n
-			}
-		}
 		// Điền identity cuối vào usage trước khi accounting: cùng một identity
-		// cho Result, accounting và audit — không để audit ghi primary trong khi
-		// request chạy fallback.
+		// cho Result, accounting và audit.
 		u.Provider, u.Model = res.Provider, res.Model
 		if s.deps.RecordUsage != nil {
 			s.deps.RecordUsage(u)
