@@ -25,6 +25,7 @@ type auditEntry struct {
 	At             time.Time     `json:"at"`
 	Mode           string        `json:"mode"`
 	Question       string        `json:"question"`
+	Language       string        `json:"language"`
 	SnapshotDigest string        `json:"snapshot_digest"`
 	Chapter        int           `json:"chapter"`
 	Provider       string        `json:"provider"`

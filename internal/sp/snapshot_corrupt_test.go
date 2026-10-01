@@ -70,10 +70,43 @@ func TestSnapshotThieuFileVanQua(t *testing.T) {
 }
 
 // TestPromptKhongCheIDKhongTonTai — contract chỉ được VÍ DỤ các ID khối có thật.
+func TestPromptBaLocaleTagsKhongDoi(t *testing.T) {
+	tags := []string{"[FACT]", "[INFERENCE]", "[OPTION]", "[UNKNOWN]"}
+	langs := map[string][]string{
+		"vi": {"Bạn là Story Partner"},
+		"en": {"Answer in English", "You are Story Partner"},
+		"zh": {"请使用中文回答", "Story Partner"},
+	}
+	for lang, musts := range langs {
+		sys, _ := RenderPrompt(StorySnapshot{}, "Q?", lang)
+		for _, m := range append(tags, musts...) {
+			if !strings.Contains(sys, m) {
+				t.Errorf("%s thiếu %q", lang, m)
+			}
+		}
+	}
+	// Lang lạ/rỗng về vi.
+	sys, _ := RenderPrompt(StorySnapshot{}, "Q?", "fr")
+	if !strings.Contains(sys, "Bạn là Story Partner") {
+		t.Error("lang lạ phải về vi")
+	}
+	sys, _ = RenderPrompt(StorySnapshot{}, "Q?", "")
+	if !strings.Contains(sys, "Bạn là Story Partner") {
+		t.Error("lang rỗng phải về vi")
+	}
+	// User prompt giống nhau mọi locale (story content không đổi theo UI).
+	blocks := []ContextBlock{{ID: "progress", Kind: "progress", Content: "x"}}
+	_, uVi := RenderPrompt(StorySnapshot{Blocks: blocks}, "Q?", "vi")
+	_, uEn := RenderPrompt(StorySnapshot{Blocks: blocks}, "Q?", "en")
+	if uVi != uEn {
+		t.Error("user prompt phải giống nhau mọi locale")
+	}
+}
+
 // Câu cấm ("cấm tự chế ID entity-level kiểu [character:ngoc]") được phép nhắc
 // tới nó như ví dụ cấm — test chỉ bắt dạng "dạng [character:..." (ví dụ cho phép).
 func TestPromptKhongCheIDKhongTonTai(t *testing.T) {
-	sys, _ := RenderPrompt(StorySnapshot{}, "Hỏi?")
+	sys, _ := RenderPrompt(StorySnapshot{}, "Hỏi?", "vi")
 	if strings.Contains(sys, "dạng [character:") {
 		t.Error("prompt còn ví dụ cho phép cite ID entity-level không tồn tại trong snapshot")
 	}

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/CTKiet2006/kietnovel/internal/i18n"
@@ -184,7 +185,74 @@ func TestDisplayNameChiuTagTho(t *testing.T) {
 	}
 }
 
-// i18n.Language đang là gì thì PaletteItems() mặc định cũng hiện đúng locale đó.
+// Collision: trong cùng locale, hai command không được trùng tên hiển thị,
+// và alias không được đè lên command/subcommand khác. Trùng thì Find lặng lẽ
+// lấy command đầu tiên — sai khó phát hiện.
+func TestKhongCollisionTenTheoLocale(t *testing.T) {
+	r := commandRegistryInstance()
+	for _, lang := range []string{"vi", "en", "zh"} {
+		seen := map[string]string{} // tên thường -> command ID
+		claim := func(name, id string) {
+			key := strings.ToLower(strings.TrimSpace(name))
+			if key == "" {
+				return
+			}
+			if owner, ok := seen[key]; ok && owner != id {
+				t.Errorf("locale %s: tên %q trùng giữa %q và %q", lang, name, owner, id)
+			} else {
+				seen[key] = id
+			}
+		}
+		for _, spec := range r.specs {
+			id := spec.CommandID()
+			claim(spec.DisplayName(lang), id)
+			claim(spec.Name, id)
+			for _, a := range spec.Aliases {
+				claim(a, id)
+			}
+			if names, ok := spec.Names[lang]; ok {
+				for _, n := range names {
+					claim(n, id)
+				}
+			}
+		}
+	}
+}
+
+// ID phải duy nhất toàn registry.
+func TestCommandIDuyNhat(t *testing.T) {
+	seen := map[string]bool{}
+	for _, spec := range commandRegistryInstance().specs {
+		id := spec.CommandID()
+		if seen[id] {
+			t.Errorf("trùng ID %q", id)
+		}
+		seen[id] = true
+	}
+}
+
+// B4: đổi UI language thì tên hiển thị đổi ngay trong session, không restart.
+// retranslate() dựng lại compItems từ PaletteItems() (đọc i18n.Language hiện
+// tại) nên cơ chế đã đúng — test khóa hành vi đó.
+func TestDoiUIThiTenHienThiDoiNgay(t *testing.T) {
+	defer i18n.SetLanguage(i18n.LangVietnamese)
+	r := commandRegistryInstance()
+	spec, _ := r.Find("read")
+
+	i18n.SetLanguage(i18n.LangEnglish)
+	if got := spec.DisplayName(i18n.Language()); got != "read" {
+		t.Errorf("UI en: %q", got)
+	}
+	i18n.SetLanguage(i18n.LangChinese)
+	if got := spec.DisplayName(i18n.Language()); got != "阅读" {
+		t.Errorf("UI zh: %q", got)
+	}
+	i18n.SetLanguage(i18n.LangVietnamese)
+	if got := spec.DisplayName(i18n.Language()); got != "đọc" {
+		t.Errorf("UI vi: %q", got)
+	}
+}
+
 func TestPaletteMacDinhTheoUILang(t *testing.T) {
 	defer i18n.SetLanguage(i18n.LangVietnamese)
 	i18n.SetLanguage(i18n.LangVietnamese)

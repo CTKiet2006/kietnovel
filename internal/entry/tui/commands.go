@@ -139,6 +139,7 @@ func commandRegistryInstance() commandRegistry {
 	return newCommandRegistry([]slashCommandSpec{
 		{
 			Name:        "help",
+			ID:          "help",
 			Group:       "system",
 			Usage:       "/help",
 			Description: i18n.T("Xem danh sách lệnh"),
@@ -151,6 +152,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "model",
+			ID:          "model",
 			Group:       "system",
 			Usage:       "/model [role]",
 			Description: i18n.T("Đổi model và mức suy luận của từng vai trò"),
@@ -174,6 +176,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "config",
+			ID:          "config",
 			Group:       "system",
 			Usage:       "/config",
 			Description: i18n.T("Thêm/sửa Provider, model và context window"),
@@ -191,6 +194,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "diag",
+			ID:          "diag",
 			Group:       "analysis",
 			Usage:       "/diag",
 			Description: i18n.T("Chẩn đoán sức khỏe truyện đang viết"),
@@ -204,6 +208,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "review",
+			ID:          "review",
 			Group:       "writing",
 			Usage:       "/review on|off",
 			Description: i18n.T("Bật/tắt duyệt từng chương"),
@@ -227,6 +232,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "next",
+			ID:          "next",
 			Group:       "writing",
 			Usage:       "/next",
 			Description: i18n.T("Duyệt để viết chương tiếp theo"),
@@ -248,6 +254,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "start",
+			ID:          "start",
 			Group:       "writing",
 			Usage:       "/start <path>",
 			Description: i18n.T("Tạo truyện mới từ file thiết lập/dàn ý"),
@@ -270,6 +277,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "import",
+			ID:          "import",
 			Group:       "writing",
 			Usage:       i18n.T("/import <path> [--yes] [--story=open|closed] [--continue] [--guide=<hướng dẫn cắt chương>]"),
 			Description: i18n.T("Nhập truyện ngoài vào để viết tiếp (không tham số thì tiếp tục lần nhập dở; --guide chỉnh cách cắt chương bằng ngôn ngữ tự nhiên)"),
@@ -292,6 +300,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "reopen",
+			ID:          "reopen",
 			Group:       "writing",
 			Usage:       i18n.T("/reopen [hướng viết tiếp]"),
 			Description: i18n.T("Mở lại truyện đã hoàn thành để viết tiếp"),
@@ -309,6 +318,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "cocreate",
+			ID:          "cocreate",
 			Aliases:     []string{"plan"},
 			Group:       "writing",
 			Usage:       "/cocreate",
@@ -337,6 +347,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "simulate",
+			ID:          "simulate",
 			Group:       "writing",
 			Usage:       "/simulate",
 			Description: i18n.T("Đọc ./simulate để tạo/cập nhật hồ sơ văn phong"),
@@ -358,6 +369,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "importsim",
+			ID:          "importsim",
 			Group:       "writing",
 			Usage:       "/importsim <profile.json>",
 			Description: i18n.T("Nhập hồ sơ văn phong có sẵn từ file json"),
@@ -379,6 +391,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "sync",
+			ID:          "sync",
 			Group:       "writing",
 			Usage:       "/sync [--check]",
 			Description: i18n.T("Kiểm tra/nhận các chương bạn sửa tay"),
@@ -402,6 +415,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "export",
+			ID:          "export",
 			Group:       "writing",
 			Usage:       "/export [path] [from=N] [to=M] [--overwrite]",
 			Description: i18n.T("Xuất các chương đã xong ra TXT/EPUB"),
@@ -507,6 +521,17 @@ func commandRegistryInstance() commandRegistry {
 			Description: i18n.T("Ngôn ngữ giao diện (ui) và ngôn ngữ sáng tác (write) — tách riêng"),
 			AutoExecute: true,
 			Run:         runLanguageCommand,
+		},
+		{
+			// /sp giữ NGUYÊN mọi locale (C1): nó là identifier/brand name, chỉ
+			// localize subcommand (hỏi/ask/问 → ask qua subcommandCatalog).
+			Name:        "sp",
+			ID:          "sp",
+			Group:       "writing",
+			Usage:       "/sp [hỏi] <câu hỏi>",
+			Description: i18n.T("Hỏi Story Partner mà không dừng máy đang viết"),
+			AutoExecute: true,
+			Run:         runSPCommand,
 		},
 	})
 }
