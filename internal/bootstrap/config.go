@@ -340,7 +340,13 @@ type NotifyConfig struct {
 func (n NotifyConfig) IsEnabled() bool { return n.Enabled == nil || *n.Enabled }
 
 // ValidateBase kiểm tra cấu hình cơ bản.
+// Lưu ý: hàm này chuẩn hoá Roles về key canonical (NormalizeRoles) nên cấu hình
+// hợp lệ đi ra luôn nhất quán — "Writer" trong file không còn sống song song
+// với "writer" ở tầng dưới.
 func (c *Config) ValidateBase() error {
+	if err := c.NormalizeRoles(); err != nil {
+		return err
+	}
 	if err := validateConfigText("provider", c.Provider); err != nil {
 		return err
 	}
@@ -567,12 +573,36 @@ func (c Config) ResolveContextWindow(provider, modelName string) (int, ContextWi
 	return DefaultContextWindow, CtxWindowDefault
 }
 
-// ResolveReasoningEffort trả về chuỗi cường độ suy luận hiệu lực của một vai trò (off/low/medium/high/xhigh/max hoặc trống).
+// NormalizeRoles chuẩn hoá key của map Roles về dạng canonical (NormRole).
+// Hai key thô khác nhau mà cùng về một canonical (ví dụ "Writer" + "writer")
+// là cấu hình mơ hồ — entry nào thắng phụ thuộc thứ tự duyệt map (nondeterministic)
+// — nên trả ErrConfig nêu rõ cả hai key, bắt người dùng sửa file thay vì đoán.
+// Không va chạm thì ghi đè map bằng bản canonical (idempotent).
+func (c *Config) NormalizeRoles() error {
+	if len(c.Roles) == 0 {
+		return nil
+	}
+	out := make(map[string]RoleConfig, len(c.Roles))
+	origin := make(map[string]string, len(c.Roles))
+	for raw, rc := range c.Roles {
+		key := NormRole(raw)
+		if prev, dup := origin[key]; dup {
+			return fmt.Errorf("roles %q và %q cùng trỏ một vai trò %q: gộp lại thành một key duy nhất: %w", prev, raw, key, errs.ErrConfig)
+		}
+		origin[key] = raw
+		out[key] = rc
+	}
+	c.Roles = out
+	return nil
+}
+
 // Ưu tiên: Roles[role].ReasoningEffort cấp vai trò → ReasoningEffort mặc định top-level → "" (không override, giữ mặc định của model/provider).
 // role trống hoặc "default" thì lấy thẳng mặc định top-level. Tính hợp lệ của giá trị do agents.ParseThinkingLevel gác.
 func (c Config) ResolveReasoningEffort(role string) string {
 	if role != "" && role != "default" {
-		if rc, ok := c.Roles[role]; ok && rc.ReasoningEffort != "" {
+		// Tra bằng key canonical để cấu hình dựng tay (không qua ValidateBase)
+		// vẫn đúng; cấu hình đã validate thì map vốn đã canonical.
+		if rc, ok := c.Roles[NormRole(role)]; ok && rc.ReasoningEffort != "" {
 			return rc.ReasoningEffort
 		}
 	}
