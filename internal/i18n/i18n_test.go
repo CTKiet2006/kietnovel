@@ -1,6 +1,14 @@
 package i18n
 
 import (
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -110,6 +118,91 @@ func TestAvailable(t *testing.T) {
 	for i := range want {
 		if Available[i] != want[i] {
 			t.Fatalf("Available = %v, muon %v", Available, want)
+		}
+	}
+}
+
+// TestMoiChuoiTDeuCoBanDich quét toàn bộ literal i18n.T("...")/i18n.Tf("...") trong
+// source và bắt mỗi chuỗi phải có mặt trong cả catalog en lẫn zh.
+//
+// Trước test này, thêm một chuỗi TUI mới mà quên catalog thì app vẫn pass test và
+// lặng lẽ rơi về tiếng Việt ở EN/ZH. Test này biến "quên dịch" thành build đỏ.
+//
+// Giới hạn có chủ ý (ghi rõ để không ai "sửa test cho qua"):
+//   - chỉ bắt string literal trực tiếp; chuỗi dựng động (nối biến, Sprintf trước
+//     rồi mới T()) không quét được — những chỗ đó phải tự rà bằng mắt.
+//   - chỉ quét package có gọi i18n (hiện tại: entry/tui, host); thêm package mới
+//     gọi i18n thì thêm vào dirs dưới đây.
+//   - bỏ qua file *_test.go.
+func TestMoiChuoiTDeuCoBanDich(t *testing.T) {
+	dirs := []string{"../entry/tui", "../host"}
+	got := map[string]map[string]bool{} // literal -> {file:line}
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatalf("đọc %s: %v", dir, err)
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			path := filepath.Join(dir, name)
+			fset := token.NewFileSet()
+			f, err := parser.ParseFile(fset, path, nil, 0)
+			if err != nil {
+				t.Fatalf("parse %s: %v", path, err)
+			}
+			ast.Inspect(f, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				id, ok := sel.X.(*ast.Ident)
+				if !ok || id.Name != "i18n" || (sel.Sel.Name != "T" && sel.Sel.Name != "Tf") {
+					return true
+				}
+				if len(call.Args) == 0 {
+					return true
+				}
+				lit, ok := call.Args[0].(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					return true
+				}
+				s, err := strconv.Unquote(lit.Value)
+				if err != nil {
+					return true
+				}
+				if s == "" {
+					return true
+				}
+				pos := fset.Position(lit.Pos())
+				if got[s] == nil {
+					got[s] = map[string]bool{}
+				}
+				got[s][fmt.Sprintf("%s:%d", path, pos.Line)] = true
+				return true
+			})
+		}
+	}
+	if len(got) == 0 {
+		t.Fatal("không quét được literal nào — test hỏng, không phải coverage tốt")
+	}
+	for _, lang := range []string{LangEnglish, LangChinese} {
+		table := catalog[lang]
+		for s, locs := range got {
+			if _, ok := table[s]; !ok {
+				var where []string
+				for loc := range locs {
+					where = append(where, loc)
+				}
+				sort.Strings(where)
+				t.Errorf("%s thiếu %q (dùng ở %s)", lang, s, strings.Join(where, ", "))
+			}
 		}
 	}
 }

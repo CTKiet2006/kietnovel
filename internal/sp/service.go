@@ -30,6 +30,10 @@ type Deps struct {
 	// RecordUsage ghi accounting sidecar. BẮT BUỘC là đường không trigger abort
 	// Engine (RecordSidecar của UsageTracker), không phải Record thường.
 	RecordUsage func(u agentcore.Usage)
+	// OnMissingUsage gọi khi model trả lời nhưng Usage nil — để host bật cảnh báo
+	// missing-usage (không thì usage = 0 mà im lặng, tưởng miễn phí).
+	// Nil thì bỏ qua.
+	OnMissingUsage func()
 	// AuditDir là thư mục ghi audit, ví dụ <book>/logs/sp. Không nằm trong meta/.
 	AuditDir string
 }
@@ -60,13 +64,38 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 
+	// Entry audit dựng dần: đường hỏng nào sau điểm này cũng ghi status/error để
+	// tra được, thay vì im lặng như trước.
+	entry := auditEntry{
+		At:       start,
+		Mode:     string(req.Mode),
+		Question: req.Question,
+		Language: requestLanguage(req),
+	}
+	fail := func(err error) (Result, error) {
+		if ctx.Err() != nil {
+			entry.Status = "canceled"
+			entry.Error = ctx.Err().Error()
+			entry.Duration = time.Since(start)
+			writeAudit(s.deps.AuditDir, entry)
+			return Result{}, ctx.Err()
+		}
+		entry.Status = "error"
+		entry.Error = err.Error()
+		entry.Duration = time.Since(start)
+		writeAudit(s.deps.AuditDir, entry)
+		return Result{}, err
+	}
+
 	snap, err := BuildSnapshot(s.deps.Store)
 	if err != nil {
-		return Result{}, err
+		return fail(err)
 	}
 	if err := ctx.Err(); err != nil {
-		return Result{}, err
+		return fail(err)
 	}
+	entry.SnapshotDigest = snap.ProgressDigest
+	entry.Chapter = snap.Chapter
 
 	system, user := RenderPrompt(snap, req.Question, requestLanguage(req))
 	msgs := []agentcore.Message{
@@ -79,13 +108,11 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 		// Cancel phải về context.Canceled thay vì lỗi provider chung chung:
 		// model thật khi ctx hủy giữa flight có thể trả lỗi bọc ngoài, và
 		// caller (single-flight, UI) dựa vào errors.Is(err, context.Canceled).
-		if ctx.Err() != nil {
-			return Result{}, ctx.Err()
-		}
-		return Result{}, err
+		// fail() ưu tiên ctx.Err() nên vẫn về Canceled đúng.
+		return fail(err)
 	}
 	if err := ctx.Err(); err != nil {
-		return Result{}, err
+		return fail(err)
 	}
 
 	res := Result{
@@ -123,21 +150,18 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 		if s.deps.RecordUsage != nil {
 			s.deps.RecordUsage(u)
 		}
+	} else if s.deps.OnMissingUsage != nil {
+		// Model trả lời nhưng Usage nil: usage = 0 mà im lặng thì tưởng miễn phí.
+		s.deps.OnMissingUsage()
 	}
-	writeAudit(s.deps.AuditDir, auditEntry{
-		At:             start,
-		Mode:           string(req.Mode),
-		Question:       req.Question,
-		Language:       requestLanguage(req),
-		SnapshotDigest: snap.ProgressDigest,
-		Chapter:        snap.Chapter,
-		Provider:       res.Provider,
-		Model:          res.Model,
-		Answer:         res.Answer,
-		InputTokens:    res.InputTokens,
-		OutputTokens:   res.OutputTokens,
-		Duration:       time.Since(start),
-	})
+	entry.Status = "success"
+	entry.Provider = res.Provider
+	entry.Model = res.Model
+	entry.Answer = res.Answer
+	entry.InputTokens = res.InputTokens
+	entry.OutputTokens = res.OutputTokens
+	entry.Duration = time.Since(start)
+	writeAudit(s.deps.AuditDir, entry)
 	return res, nil
 }
 
@@ -153,15 +177,9 @@ func validate(req Request) error {
 
 // requestLanguage chuẩn hoá ngôn ngữ trả lời: rỗng hoặc lạ thì về vi.
 // Không đọc global UI state ở đây — caller capture từ trước.
+// Dùng chung requestLangCode với prompt.go để service và prompt không lệch nhau.
 func requestLanguage(req Request) string {
-	switch strings.ToLower(strings.TrimSpace(req.Language)) {
-	case "en":
-		return "en"
-	case "zh":
-		return "zh"
-	default:
-		return "vi"
-	}
+	return requestLangCode(req.Language)
 }
 
 func textBlocks(s string) []agentcore.ContentBlock {

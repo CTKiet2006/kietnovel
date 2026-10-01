@@ -135,8 +135,17 @@ type ModelSet struct {
 	config    Config
 }
 
+// NormRole chuẩn hoá tên vai trò về dạng canonical (lowercase + trim).
+// Lý do tồn tại: ValidateBase chấp nhận "Writer"/"WRITER" (đúng), nhưng nếu key
+// map giữ nguyên dạng gốc thì lookup "writer" sẽ trượt silent về default model.
+// Mọi điểm đọc/ghi ms.models/ms.fallbacks/ms.config.Roles đều phải qua đây.
+func NormRole(role string) string {
+	return strings.ToLower(strings.TrimSpace(role))
+}
+
 // ForRole trả về model của vai trò chỉ định, chưa cấu hình thì trả model mặc định.
 func (ms *ModelSet) ForRole(role string) agentcore.ChatModel {
+	role = NormRole(role)
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 	if m, ok := ms.models[role]; ok {
@@ -145,22 +154,40 @@ func (ms *ModelSet) ForRole(role string) agentcore.ChatModel {
 	return ms.Default
 }
 
+// RoleTarget là snapshot nguyên tử của model + identity một vai trò, đọc dưới
+// một RLock duy nhất. Dùng khi caller cần cả object lẫn metadata (provider/name)
+// mà không chịu được khe giữa hai lần đọc riêng (ví dụ /model advisor đổi đúng
+// lúc resolve: object là model mới nhưng metadata vẫn là model cũ).
+type RoleTarget struct {
+	Model    agentcore.ChatModel
+	Provider string
+	Name     string
+	Explicit bool
+}
+
+// ResolveRoleTarget resolve vai trò + identity dưới một RLock duy nhất.
+func (ms *ModelSet) ResolveRoleTarget(role string, report FailoverReporter) RoleTarget {
+	role = NormRole(role)
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+	if primary, ok := ms.models[role]; ok {
+		p, n := primary.Current()
+		if len(ms.fallbacks[role]) == 0 {
+			return RoleTarget{Model: primary, Provider: p, Name: n, Explicit: true}
+		}
+		return RoleTarget{
+			Model:    &failoverModel{role: role, primary: primary, set: ms, report: report},
+			Provider: p, Name: n, Explicit: true,
+		}
+	}
+	p, n := ms.Default.Current()
+	return RoleTarget{Model: ms.Default, Provider: p, Name: n, Explicit: false}
+}
+
 // ForRoleWithFailover trả về model vai trò kèm fallback ở cấp từng request.
 // Chỉ hiệu lực khi vai trò đó cấu hình fallbacks tường minh; chưa cấu hình thì suy biến thành model thường.
 func (ms *ModelSet) ForRoleWithFailover(role string, report FailoverReporter) agentcore.ChatModel {
-	ms.mu.RLock()
-	defer ms.mu.RUnlock()
-	primary, ok := ms.models[role]
-	if !ok {
-		return ms.Default
-	}
-	targets := ms.fallbacks[role]
-	if len(targets) == 0 {
-		return primary
-	}
-	return &failoverModel{
-		role: role, primary: primary, set: ms, report: report,
-	}
+	return ms.ResolveRoleTarget(role, report).Model
 }
 
 // Summary trả về tóm tắt phân bổ model (để log).
@@ -183,6 +210,7 @@ func (ms *ModelSet) Summary() string {
 // CurrentSelection trả về provider/model đang hiệu lực của vai trò.
 // role trống hoặc "default" thì trả model mặc định.
 func (ms *ModelSet) CurrentSelection(role string) (provider, model string, explicit bool) {
+	role = NormRole(role)
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 	if role == "" || role == "default" {
@@ -219,6 +247,7 @@ func (ms *ModelSet) Swap(role, provider, model string) error {
 		return nil
 	}
 
+	role = NormRole(role)
 	if !knownRoles[role] {
 		return fmt.Errorf("role %q không xác định: %w", role, errs.ErrConfig)
 	}
@@ -260,6 +289,7 @@ func (ms *ModelSet) ApplyPrepared(candidate *ModelSet) {
 
 	nextModels := make(map[string]*SwappableModel, len(candidate.models))
 	for role, next := range candidate.models {
+		role = NormRole(role)
 		provider, name := next.Current()
 		if existing, ok := ms.models[role]; ok {
 			existing.Swap(provider, name, next.SwappableModel.Current(), next.JSONSchemaOverride())
@@ -268,12 +298,17 @@ func (ms *ModelSet) ApplyPrepared(candidate *ModelSet) {
 			nextModels[role] = next
 		}
 	}
+	nextFallbacks := make(map[string][]modelTarget, len(candidate.fallbacks))
+	for role, targets := range candidate.fallbacks {
+		nextFallbacks[NormRole(role)] = targets
+	}
 	ms.models = nextModels
-	ms.fallbacks = candidate.fallbacks
+	ms.fallbacks = nextFallbacks
 	ms.config = CloneConfig(candidate.config)
 }
 
 func (ms *ModelSet) fallbackTargets(role string) []modelTarget {
+	role = NormRole(role)
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
 	return append([]modelTarget(nil), ms.fallbacks[role]...)
@@ -319,8 +354,10 @@ func NewModelSet(cfg Config) (*ModelSet, error) {
 		config:    cfg,
 	}
 
-	// Tạo model override cho vai trò
+	// Tạo model override cho vai trò. Key chuẩn hoá một lần ở đây để
+	// "Writer"/"WRITER" trong file cấu hình không tạo entry ma trượt lookup.
 	for role, rc := range cfg.Roles {
+		role = NormRole(role)
 		pc, ok := cfg.Providers[rc.Provider]
 		if !ok {
 			return nil, fmt.Errorf("role %s trỏ tới provider %q không xác định: %w", role, rc.Provider, errs.ErrConfig)

@@ -135,12 +135,17 @@ func NewUsageTracker(set *bootstrap.ModelSet, store *storepkg.Store) *UsageTrack
 //
 // Nhưng vẫn cộng vào perAgent["advisor"] + perModel và vẫn notifyDirty để persist:
 // tiền thật đã đốt thì phải còn dấu vết, chỉ là không được dùng để giết Engine.
-func (t *UsageTracker) RecordSidecar(agentName string, u agentcore.Usage, provider, modelName string) {
+//
+// task là lineage của cache detector: mỗi /sp request là một prompt lineage mới
+// (snapshot/question khác nhau, model có thể đổi), nên mỗi request phải có task
+// riêng. Dùng chung một task cho mọi request thì detector so B với baseline của
+// A và báo "đứt cache" oan cho một lineage hoàn toàn mới.
+func (t *UsageTracker) RecordSidecar(agentName, task string, u agentcore.Usage, provider, modelName string) {
 	if t == nil {
 		return
 	}
 	role := agentRoleName(agentName)
-	t.noteCacheBreakSidecar(role, "sidecar", u)
+	t.noteCacheBreakSidecar(role, task, u)
 	provider, modelName = t.effectiveModel(role, provider, modelName)
 	cost, saved, capable := t.resolveCost(modelName, u)
 
