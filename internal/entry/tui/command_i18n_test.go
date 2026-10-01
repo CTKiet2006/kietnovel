@@ -295,10 +295,10 @@ func TestHelpTheoLocale(t *testing.T) {
 func TestUsageTextFallback(t *testing.T) {
 	r := commandRegistryInstance()
 	spec, _ := r.Find("sp")
-	if got := spec.UsageText("fr"); got != "/sp [hỏi] <câu hỏi>" {
+	if got := spec.UsageText("fr"); got != "/sp [hỏi] <câu hỏi> | /sp soi | /sp gợi ý" {
 		t.Errorf("fr phải về Usage chuẩn: %q", got)
 	}
-	if got := spec.UsageText("EN"); got != "/sp [ask] <question>" {
+	if got := spec.UsageText("EN"); got != "/sp [ask] <question> | /sp inspect | /sp suggest" {
 		t.Errorf("EN phải chuẩn hoá về en: %q", got)
 	}
 }

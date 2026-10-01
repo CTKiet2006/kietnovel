@@ -116,8 +116,65 @@ func TestPromptBaLocaleTagsKhongDoi(t *testing.T) {
 	}
 }
 
-// Câu cấm ("cấm tự chế ID entity-level kiểu [character:ngoc]") được phép nhắc
-// tới nó như ví dụ cấm — test chỉ bắt dạng "dạng [character:..." (ví dụ cho phép).
+// P4.2: wrapper RenderPrompt cho ask phải byte-identical với RenderPromptForMode
+// ask — regression ở đường hỏi chính là không chấp nhận được.
+func TestRenderPromptWrapperByteIdenticalAsk(t *testing.T) {
+	snap := StorySnapshot{ProgressDigest: "abc", Blocks: []ContextBlock{
+		{ID: "progress", Kind: "progress", Content: "x"},
+		{ID: "outline:chapter:5", Kind: "outline", Content: "y"},
+	}}
+	for _, lang := range []string{"vi", "en", "zh", "", "fr"} {
+		s1, u1 := RenderPrompt(snap, "Q?", lang)
+		s2, u2 := RenderPromptForMode(snap, ModeAsk, "Q?", lang)
+		if s1 != s2 || u1 != u2 {
+			t.Errorf("lang %q: wrapper khác ForMode(ask)", lang)
+		}
+	}
+}
+
+// P4.2: prompt inspect/suggest giữ tags, có task riêng theo mode, đủ 3 locale.
+func TestPromptModeTaskRieng(t *testing.T) {
+	snap := StorySnapshot{}
+	cases := []struct {
+		mode Mode
+		lang string
+		must []string
+		not  []string
+	}{
+		{ModeInspect, "vi", []string{"[FACT]", "[UNKNOWN]", "CHẨN ĐOÁN"}, []string{"ĐỀ XUẤT HƯỚNG"}},
+		{ModeInspect, "en", []string{"[FACT]", "DIAGNOSE"}, []string{"PROPOSE NEXT"}},
+		{ModeInspect, "zh", []string{"[FACT]", "诊断"}, []string{"后续方向"}},
+		{ModeSuggest, "vi", []string{"[OPTION]", "ĐỀ XUẤT HƯỚNG"}, []string{"CHẨN ĐOÁN"}},
+		{ModeSuggest, "en", []string{"[OPTION]", "PROPOSE NEXT"}, []string{"DIAGNOSE"}},
+		{ModeSuggest, "zh", []string{"[OPTION]", "后续方向"}, []string{"诊断故事状态"}},
+	}
+	for _, c := range cases {
+		sys, _ := RenderPromptForMode(snap, c.mode, "", c.lang)
+		for _, m := range c.must {
+			if !strings.Contains(sys, m) {
+				t.Errorf("%s/%s thiếu %q", c.mode, c.lang, m)
+			}
+		}
+		for _, n := range c.not {
+			if strings.Contains(sys, n) {
+				t.Errorf("%s/%s lẫn task mode khác %q", c.mode, c.lang, n)
+			}
+		}
+	}
+}
+
+// P4.2: user section render giống hệt mọi mode (question rỗng ở soi/gợi ý OK).
+func TestRenderPromptForModeUserGiongNhau(t *testing.T) {
+	snap := StorySnapshot{ProgressDigest: "d", Blocks: []ContextBlock{
+		{ID: "progress", Kind: "progress", Content: "x"},
+	}}
+	_, uAsk := RenderPromptForMode(snap, ModeAsk, "", "vi")
+	_, uSoi := RenderPromptForMode(snap, ModeInspect, "", "vi")
+	_, uGoiY := RenderPromptForMode(snap, ModeSuggest, "", "vi")
+	if uAsk != uSoi || uSoi != uGoiY {
+		t.Error("user section phải giống hệt mọi mode")
+	}
+}
 func TestPromptKhongCheIDKhongTonTai(t *testing.T) {
 	sys, _ := RenderPrompt(StorySnapshot{}, "Hỏi?", "vi")
 	if strings.Contains(sys, "dạng [character:") {

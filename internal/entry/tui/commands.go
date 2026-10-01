@@ -136,7 +136,9 @@ func resolveSubcommand(arg string, table map[string][]string) (string, bool) {
 // Định nghĩa trước để parser ổn định, khỏi migrate lần hai.
 var subcommandCatalog = map[string]map[string][]string{
 	"story_partner": {
-		"ask": {"hỏi", "ask", "问"},
+		"ask":     {"hỏi", "ask", "问"},
+		"inspect": {"soi", "inspect", "检查"},
+		"suggest": {"gợi ý", "suggest", "建议"},
 	},
 }
 
@@ -693,12 +695,12 @@ func commandRegistryInstance() commandRegistry {
 			Name: "sp",
 			ID:   "sp",
 			UsageByLang: map[string]string{
-				"vi": "/sp [hỏi] <câu hỏi>",
-				"en": "/sp [ask] <question>",
-				"zh": "/sp [问] <问题>",
+				"vi": "/sp [hỏi] <câu hỏi> | /sp soi | /sp gợi ý",
+				"en": "/sp [ask] <question> | /sp inspect | /sp suggest",
+				"zh": "/sp [问] <问题> | /sp 检查 | /sp 建议",
 			},
 			Group:       "writing",
-			Usage:       "/sp [hỏi] <câu hỏi>",
+			Usage:       "/sp [hỏi] <câu hỏi> | /sp soi | /sp gợi ý",
 			Description: i18n.T("Hỏi Story Partner mà không dừng máy đang viết"),
 			AutoExecute: true,
 			Run:         runSPCommand,

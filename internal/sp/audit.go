@@ -30,17 +30,26 @@ type auditEntry struct {
 	// debug được "hỏi lúc 20:35 mà sao không thấy log" — entry hỏng vẫn có
 	// digest/question để truy. Lỗi validate (mode sai, câu hỏi rỗng) và thiếu
 	// Deps cấu hình thì không audit: request chưa bắt đầu, ghi chỉ thêm nhiễu.
-	Status         string        `json:"status"`
-	Error          string        `json:"error,omitempty"`
-	SnapshotDigest string        `json:"snapshot_digest"`
-	Chapter        int           `json:"chapter"`
-	Provider       string        `json:"provider"`
-	Model          string        `json:"model"`
-	Answer         string        `json:"answer"`
-	InputTokens    int           `json:"input_tokens"`
-	OutputTokens   int           `json:"output_tokens"`
-	DurationMs     int64         `json:"duration_ms"`
-	Duration       time.Duration `json:"-"`
+	Status         string `json:"status"`
+	Error          string `json:"error,omitempty"`
+	SnapshotDigest string `json:"snapshot_digest"`
+	Chapter        int    `json:"chapter"`
+	// Context metrics của projection (không phải snapshot gốc): debug được
+	// "snapshot nào → mode nào → gửi bao nhiêu → cắt gì".
+	ContextChars     int      `json:"context_chars"`
+	ContextBlocks    int      `json:"context_blocks"`
+	ContextTruncated bool     `json:"context_truncated"`
+	ContextOmitted   []string `json:"context_omitted,omitempty"`
+	// EstimatedInputTokens chỉ là ước thô (chars/4) để debug, KHÔNG dùng để
+	// ra quyết định budget — tên field ghi rõ estimate.
+	EstimatedInputTokens int           `json:"estimated_input_tokens,omitempty"`
+	Provider             string        `json:"provider"`
+	Model                string        `json:"model"`
+	Answer               string        `json:"answer"`
+	InputTokens          int           `json:"input_tokens"`
+	OutputTokens         int           `json:"output_tokens"`
+	DurationMs           int64         `json:"duration_ms"`
+	Duration             time.Duration `json:"-"`
 }
 
 // writeAudit ghi một dòng JSON vào <dir>/sp.jsonl. Không nằm trong meta/: audit

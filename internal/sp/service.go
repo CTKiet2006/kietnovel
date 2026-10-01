@@ -97,7 +97,20 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 	entry.SnapshotDigest = snap.ProgressDigest
 	entry.Chapter = snap.Chapter
 
-	system, user := RenderPrompt(snap, req.Question, requestLanguage(req))
+	// Project context theo mode + budget TRƯỚC khi render: cùng input thuần
+	// (deterministic) nên metrics ở đây khớp đúng text RenderPromptForMode gửi
+	// model bên dưới. Không mutate snapshot gốc.
+	proj, err := ProjectSnapshot(snap, req.Mode, BudgetForMode(req.Mode))
+	if err != nil {
+		return fail(err)
+	}
+	entry.ContextChars = proj.Chars
+	entry.ContextBlocks = len(proj.Blocks)
+	entry.ContextTruncated = proj.Truncated
+	entry.ContextOmitted = proj.Omitted
+	entry.EstimatedInputTokens = EstimateTokens(proj.Chars)
+
+	system, user := RenderPromptForMode(snap, req.Mode, req.Question, requestLanguage(req))
 	msgs := []agentcore.Message{
 		{Role: agentcore.RoleSystem, Content: textBlocks(system)},
 		{Role: agentcore.RoleUser, Content: textBlocks(user)},
@@ -166,10 +179,14 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 }
 
 func validate(req Request) error {
-	if req.Mode != ModeAsk {
-		return fmt.Errorf("sp: mode %q chưa hỗ trợ ở phase 1 (chỉ có ask)", req.Mode)
+	switch req.Mode {
+	case ModeAsk, ModeInspect, ModeSuggest:
+	default:
+		return fmt.Errorf("sp: mode %q chưa hỗ trợ (chỉ có ask/inspect/suggest)", req.Mode)
 	}
-	if strings.TrimSpace(req.Question) == "" {
+	// Chỉ ask bắt buộc có câu hỏi. soi/gợi ý tự xác định context từ story state,
+	// question rỗng là hợp lệ (TUI đã lờ text thừa lúc parse).
+	if req.Mode == ModeAsk && strings.TrimSpace(req.Question) == "" {
 		return errors.New("sp: câu hỏi rỗng")
 	}
 	return nil
