@@ -405,7 +405,7 @@ func (c *Config) ValidateBase() error {
 		// host áp vai trò sau khi ToLower+TrimSpace (host.go), nên validate cũng vậy
 		// để "Writer" trong cấu hình không bị từ chối oan.
 		if !knownRoles[strings.ToLower(strings.TrimSpace(role))] {
-			return fmt.Errorf("role %q không xác định trong cấu hình roles (hợp lệ: architect/writer/editor/import_segment/import_analyze/import_synthesize): %w", role, errs.ErrConfig)
+			return fmt.Errorf("role %q không xác định trong cấu hình roles (hợp lệ: architect/writer/editor/advisor/import_segment/import_analyze/import_synthesize): %w", role, errs.ErrConfig)
 		}
 		if rc.Provider == "" || rc.Model == "" {
 			return fmt.Errorf("role %q phải có đủ provider và model: %w", role, errs.ErrConfig)

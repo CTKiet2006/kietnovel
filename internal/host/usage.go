@@ -140,7 +140,7 @@ func (t *UsageTracker) RecordSidecar(agentName string, u agentcore.Usage, provid
 		return
 	}
 	role := agentRoleName(agentName)
-	t.noteCacheBreak(role, "sidecar", u)
+	t.noteCacheBreakSidecar(role, "sidecar", u)
 	provider, modelName = t.effectiveModel(role, provider, modelName)
 	cost, saved, capable := t.resolveCost(modelName, u)
 
@@ -199,6 +199,18 @@ func (t *UsageTracker) Record(agentName, task string, msg agentcore.AgentMessage
 // a legitimate drop that only resets the baseline without warning. The attribution hint is given by priority:
 // an interval over TTL -> suspected expiry; a very short interval while the client bytes should be stable -> suspected server-side eviction or routing drift (a relay round-robining over upstreams is a common cause).
 func (t *UsageTracker) noteCacheBreak(role, task string, u agentcore.Usage) {
+	t.noteCacheBreakInner(role, task, u, false)
+}
+
+// noteCacheBreakSidecar là đường phát hiện đứt cache cho sidecar (/sp hỏi).
+// Chỉ cập nhật perAgent của advisor, TUYỆT ĐỐI không chạm overall — overall là
+// số liệu của Engine, sidecar làm tăng OverallCacheBreaks sẽ khiến chẩn đoán
+// cache của Engine bị nhiễm.
+func (t *UsageTracker) noteCacheBreakSidecar(role, task string, u agentcore.Usage) {
+	t.noteCacheBreakInner(role, task, u, true)
+}
+
+func (t *UsageTracker) noteCacheBreakInner(role, task string, u agentcore.Usage, sidecar bool) {
 	now := time.Now()
 	prefix := u.Input // every litellm provider guarantees that Input includes CacheRead
 
@@ -216,7 +228,9 @@ func (t *UsageTracker) noteCacheBreak(role, task string, u agentcore.Usage) {
 		float64(u.CacheRead) < float64(prevRead)*cacheBreakKeepRatio &&
 		prevRead-u.CacheRead >= cacheBreakMinDropTokens
 	if broke {
-		t.overall.CacheBreaks++
+		if !sidecar {
+			t.overall.CacheBreaks++
+		}
 		per := t.perAgent[role]
 		if per == nil {
 			per = &agentTotals{}
