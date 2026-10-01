@@ -1487,6 +1487,10 @@ func (h *Host) SwitchModel(role, provider, model string) error {
 	if provider == "" || model == "" {
 		return fmt.Errorf("provider and model are required")
 	}
+	// Chuẩn hoá một lần ở đây để "/model Writer ..." không tạo entry "Writer"
+	// song song với "writer" trong cfg.Roles (ghi đĩa sai + lookup trượt).
+	// Swap bên dưới cũng chuẩn hoá nữa, gọi hai lần vẫn cùng kết quả.
+	role = bootstrap.NormRole(role)
 	if err := h.models.Swap(role, provider, model); err != nil {
 		return err
 	}

@@ -24,6 +24,61 @@ func advisorTestConfig(withAdvisor bool) Config {
 	return cfg
 }
 
+// TestRoleKeyChuanHoa — P1: "Writer"/"WRITER"/"ADVISOR" trong file cấu hình phải
+// resolve đúng model khi lookup "writer"/"advisor". Trước fix, ValidateBase cho
+// qua nhưng NewModelSet giữ key thô → lookup trượt silent về default model.
+func TestRoleKeyChuanHoa(t *testing.T) {
+	cfg := advisorTestConfig(false)
+	cfg.Roles = map[string]RoleConfig{
+		"Writer":  {Provider: "openrouter", Model: "writer-model"},
+		"ADVISOR": {Provider: "openrouter", Model: "advisor-model"},
+	}
+	ms, err := NewModelSet(cfg)
+	if err != nil {
+		t.Fatalf("NewModelSet: %v", err)
+	}
+	for _, role := range []string{"writer", "Writer", "WRITER", " writer "} {
+		got := ms.ForRole(role)
+		sw, ok := got.(*SwappableModel)
+		if !ok {
+			t.Fatalf("ForRole(%q) kiểu %T", role, got)
+		}
+		if _, m := sw.Current(); m != "writer-model" {
+			t.Errorf("ForRole(%q) ra model %q, mong writer-model (rơi default silent)", role, m)
+		}
+	}
+	got := ms.ForRoleWithFailover("ADVISOR", nil)
+	sw, ok := got.(*SwappableModel)
+	if !ok {
+		t.Fatalf("kiểu trả về %T", got)
+	}
+	if _, m := sw.Current(); m != "advisor-model" {
+		t.Errorf("lookup ADVISOR ra %q, mong advisor-model", m)
+	}
+	if p, n, explicit := ms.CurrentSelection("Writer"); !explicit || n != "writer-model" {
+		t.Errorf("CurrentSelection(Writer) = %q/%q explicit=%v", p, n, explicit)
+	}
+}
+
+// TestResolveRoleTargetNguyenTu — object + metadata đọc cùng một snapshot.
+func TestResolveRoleTargetNguyenTu(t *testing.T) {
+	ms, err := NewModelSet(advisorTestConfig(true))
+	if err != nil {
+		t.Fatalf("NewModelSet: %v", err)
+	}
+	tgt := ms.ResolveRoleTarget("advisor", nil)
+	if !tgt.Explicit || tgt.Provider != "openrouter" || tgt.Name != "advisor-model" {
+		t.Errorf("target sai: %+v", tgt)
+	}
+	if tgt.Model == nil {
+		t.Error("target.Model nil")
+	}
+	tgt2 := ms.ResolveRoleTarget("khong-co-role-nay", nil)
+	if tgt2.Explicit {
+		t.Error("role lạ phải Explicit=false (fallback default)")
+	}
+}
+
 // E. Có advisor role → ForRoleWithFailover trả đúng model advisor, không phải default.
 func TestAdvisorRoleDungModelRieng(t *testing.T) {
 	ms, err := NewModelSet(advisorTestConfig(true))

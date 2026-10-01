@@ -118,6 +118,32 @@ func TestPaletteHienTenTheoLocale(t *testing.T) {
 	}
 }
 
+// TestPaletteUsageTheoLocale — Usage trong palette phải theo locale, không phải
+// chuỗi raw. Từng có regression: tên đã localized (/阅读) nhưng usage vẫn
+// tiếng Việt ("/read [số chương]").
+func TestPaletteUsageTheoLocale(t *testing.T) {
+	r := commandRegistryInstance()
+	byName := func(items []commandPaletteItem, want string) commandPaletteItem {
+		for _, it := range items {
+			if it.Name == want {
+				return it
+			}
+		}
+		return commandPaletteItem{}
+	}
+	zh := byName(r.PaletteItemsIn("zh"), "阅读")
+	if zh.Name == "" {
+		t.Fatal("palette zh thiếu /阅读")
+	}
+	if zh.Usage != "/read [章节]" {
+		t.Errorf("palette zh usage = %q, mong usage tiếng Trung", zh.Usage)
+	}
+	en := byName(r.PaletteItemsIn("en"), "read")
+	if en.Usage != "/read [chapter]" {
+		t.Errorf("palette en usage = %q, mong usage tiếng Anh", en.Usage)
+	}
+}
+
 func TestResolveSubcommandXuyenNgonNgu(t *testing.T) {
 	for _, in := range []string{"hỏi", "HỎI", "ask", "ASK", "问"} {
 		mode, ok := resolveSubcommand(in, spAskTable)

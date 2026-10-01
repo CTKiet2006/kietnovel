@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"time"
@@ -34,8 +35,8 @@ func (h *Host) AskStoryPartner(ctx context.Context, req sp.Request) (sp.Result, 
 	}
 	defer h.finishStoryPartnerCall(gen, cancel)
 
-	model := h.resolveAdvisor()
-	prov, name, _ := h.models.CurrentSelection("advisor")
+	target := h.resolveAdvisor()
+	model, prov, name := target.Model, target.Provider, target.Name
 
 	svc := sp.NewService(sp.Deps{
 		Store:     h.store,
@@ -54,23 +55,33 @@ func (h *Host) AskStoryPartner(ctx context.Context, req sp.Request) (sp.Result, 
 		RecordUsage: func(u agentcore.Usage) {
 			// Sidecar, KHÔNG phải Record thường: tiền advisor không được cộng
 			// vào overall, không gọi onCost, không abort Engine.
-			h.usage.RecordSidecar("advisor", u, u.Provider, u.Model)
+			// Task theo từng request (gen tăng đơn điệu): mỗi lượt hỏi là một
+			// prompt lineage mới, detector không được so B với baseline của A.
+			h.usage.RecordSidecar("advisor", fmt.Sprintf("sp:%d", gen), u, u.Provider, u.Model)
+		},
+		OnMissingUsage: func() {
+			h.usage.flagMissingUsage("advisor")
 		},
 		AuditDir: filepath.Join(h.store.Dir(), "logs", "sp"),
 	})
 	return svc.Ask(spCtx, req)
 }
 
-// resolveAdvisor lấy advisor model qua failover thật.
+// resolveAdvisor lấy advisor model + identity trong một snapshot nguyên tử.
+// Production đi đường ResolveRoleTarget (một RLock duy nhất cho cả object lẫn
+// metadata), nên /model advisor đổi đúng giữa chừng cũng không làm object và
+// metadata lệch nhau.
 //
 // resolveAdvisorModel là seam để test inject fake model (không gọi mạng).
-// Production luôn nil → đi đúng đường ForRoleWithFailover, không retry riêng,
-// failover chỉ log theo cơ chế hiện tại.
-func (h *Host) resolveAdvisor() agentcore.ChatModel {
+// Đường test đọc identity rời qua CurrentSelection — chấp nhận được vì test
+// đơn luồng, không có mutation đồng thời.
+func (h *Host) resolveAdvisor() bootstrap.RoleTarget {
 	if h.resolveAdvisorModel != nil {
-		return h.resolveAdvisorModel()
+		m := h.resolveAdvisorModel()
+		p, n, _ := h.models.CurrentSelection("advisor")
+		return bootstrap.RoleTarget{Model: m, Provider: p, Name: n, Explicit: true}
 	}
-	return h.models.ForRoleWithFailover("advisor", func(ev bootstrap.FailoverEvent) {
+	return h.models.ResolveRoleTarget("advisor", func(ev bootstrap.FailoverEvent) {
 		slog.Warn("Chuyển provider cho advisor", "module", "storypartner",
 			"reason", ev.Reason,
 			"from", ev.FromProvider+"/"+ev.FromModel,

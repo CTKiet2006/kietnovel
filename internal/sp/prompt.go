@@ -112,14 +112,45 @@ const systemPrompt = systemPromptVi
 
 // RenderPrompt dựng prompt đầy đủ từ snapshot + câu hỏi + ngôn ngữ trả lời.
 // Không cần LLM. Ngôn ngữ lấy từ request (đã capture lúc bắt đầu), không đọc
-// global trong lúc chạy.
+// global trong lúc chạy. Header user cũng localized theo: system prompt đã dịch
+// mà header còn tiếng Việt thì model vẫn hiểu (smoke đã chứng minh), nhưng i18n
+// nửa vời khó lý giải với user đọc log.
 func RenderPrompt(snap StorySnapshot, question, lang string) (system, user string) {
+	code := requestLangCode(lang)
+	var stateHeader, questionHeader, capturedWord string
+	switch code {
+	case "en":
+		stateHeader = "STORY STATE"
+		capturedWord = "captured at"
+		questionHeader = "WRITER'S QUESTION"
+	case "zh":
+		stateHeader = "STORY STATE"
+		capturedWord = "记录于"
+		questionHeader = "写作者的问题"
+	default:
+		stateHeader = "STORY STATE"
+		capturedWord = "ghi nhận lúc"
+		questionHeader = "CÂU HỎI CỦA NGƯỜI VIẾT"
+	}
 	var b strings.Builder
-	b.WriteString("STORY STATE (snapshot " + snap.ProgressDigest + ", ghi nhận lúc " +
+	b.WriteString(stateHeader + " (snapshot " + snap.ProgressDigest + ", " + capturedWord + " " +
 		snap.CapturedAt.Format("2006-01-02 15:04:05") + ")\n\n")
 	for _, blk := range snap.Blocks {
 		fmt.Fprintf(&b, "[%s]\n%s\n\n", blk.ID, strings.TrimSpace(blk.Content))
 	}
-	b.WriteString("CÂU HỎI CỦA NGƯỜI VIẾT\n" + strings.TrimSpace(question))
+	b.WriteString(questionHeader + "\n" + strings.TrimSpace(question))
 	return systemPromptFor(lang), b.String()
+}
+
+// requestLangCode chuẩn hoá mã ngôn ngữ trả lời. Đặt cạnh RenderPrompt để
+// service.go và prompt.go dùng chung một quy tắc, khỏi lệch nhau.
+func requestLangCode(lang string) string {
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "en":
+		return "en"
+	case "zh":
+		return "zh"
+	default:
+		return "vi"
+	}
 }

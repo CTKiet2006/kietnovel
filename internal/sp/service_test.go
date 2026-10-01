@@ -3,6 +3,7 @@ package sp
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -508,6 +509,43 @@ func TestIdentityUsageNil(t *testing.T) {
 		t.Errorf("Result sai: %q/%q", res.Provider, res.Model)
 	}
 }
+
+// TestMissingUsageCoDiagnostic — model trả lời nhưng Usage nil thì hook
+// OnMissingUsage phải chạy (host bật flagMissingUsage). Không thì usage = 0
+// mà im lặng, tưởng request miễn phí.
+func TestMissingUsageCoDiagnostic(t *testing.T) {
+	st := newTestStore(t)
+	called := 0
+	svc := NewService(Deps{
+		Store:    st,
+		Model:    &fakeAdvisorModel{answer: "x", noUsage: true},
+		Provider: "openrouter", ModelName: "advisor-model",
+		OnMissingUsage: func() { called++ },
+		AuditDir:       t.TempDir(),
+	})
+	if _, err := svc.Ask(context.Background(), Request{Mode: ModeAsk, Question: "Ai?"}); err != nil {
+		t.Fatal(err)
+	}
+	if called != 1 {
+		t.Errorf("OnMissingUsage gọi %d lần, mong 1", called)
+	}
+
+	// Có usage thì hook không chạy.
+	called = 0
+	svc2 := NewService(Deps{
+		Store:    st,
+		Model:    &fakeAdvisorModel{answer: "x", usage: agentcore.Usage{Input: 1, Output: 1}},
+		Provider: "openrouter", ModelName: "advisor-model",
+		OnMissingUsage: func() { called++ },
+		AuditDir:       t.TempDir(),
+	})
+	if _, err := svc2.Ask(context.Background(), Request{Mode: ModeAsk, Question: "Ai?"}); err != nil {
+		t.Fatal(err)
+	}
+	if called != 0 {
+		t.Errorf("có usage mà hook vẫn chạy %d lần", called)
+	}
+}
 func TestIdentityGiuResolveKhiKhongCoNguon(t *testing.T) {
 	st := newTestStore(t)
 	svc := NewService(Deps{
@@ -523,6 +561,73 @@ func TestIdentityGiuResolveKhiKhongCoNguon(t *testing.T) {
 	}
 	if res.Provider != "openrouter" || res.Model != "advisor-model" {
 		t.Errorf("phải giữ resolve, được %q/%q", res.Provider, res.Model)
+	}
+}
+
+// TestAuditGhiCaLoiVaCancel — trước fix, hỏi hỏng hoặc Esc thì không có audit
+// record nào ("hỏi lúc 20:35 mà sao không thấy log"). Giờ mọi đường về sau khi
+// request bắt đầu đều ghi status/error.
+func TestAuditGhiCaLoiVaCancel(t *testing.T) {
+	readEntries := func(dir string) []map[string]any {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(dir, "sp.jsonl"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []map[string]any
+		for _, ln := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			var e map[string]any
+			if err := json.Unmarshal([]byte(ln), &e); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, e)
+		}
+		return out
+	}
+
+	// Lỗi provider.
+	dirErr := t.TempDir()
+	svcErr := NewService(Deps{
+		Store:    newTestStore(t),
+		Model:    &fakeAdvisorModel{err: errors.New("provider sập")},
+		AuditDir: dirErr,
+	})
+	if _, err := svcErr.Ask(context.Background(), Request{Mode: ModeAsk, Question: "Hỏi?"}); err == nil {
+		t.Fatal("phải lỗi")
+	}
+	entries := readEntries(dirErr)
+	if len(entries) != 1 || entries[0]["status"] != "error" {
+		t.Fatalf("audit lỗi sai: %+v", entries)
+	}
+	if !strings.Contains(entries[0]["error"].(string), "provider sập") {
+		t.Errorf("audit thiếu message lỗi: %+v", entries[0])
+	}
+	if entries[0]["question"] != "Hỏi?" {
+		t.Errorf("audit lỗi phải giữ question để tra: %+v", entries[0])
+	}
+
+	// Cancel giữa flight.
+	dirCancel := t.TempDir()
+	block := make(chan struct{})
+	svcCancel := NewService(Deps{
+		Store:    newTestStore(t),
+		Model:    &fakeAdvisorModel{answer: "x", blockUntil: block},
+		AuditDir: dirCancel,
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := svcCancel.Ask(ctx, Request{Mode: ModeAsk, Question: "Đợi?"})
+		done <- err
+	}()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	if err := <-done; !errors.Is(err, context.Canceled) {
+		t.Fatalf("phải Canceled, được %v", err)
+	}
+	entries = readEntries(dirCancel)
+	if len(entries) != 1 || entries[0]["status"] != "canceled" {
+		t.Fatalf("audit cancel sai: %+v", entries)
 	}
 }
 

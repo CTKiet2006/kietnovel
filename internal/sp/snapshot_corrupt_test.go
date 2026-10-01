@@ -94,12 +94,25 @@ func TestPromptBaLocaleTagsKhongDoi(t *testing.T) {
 	if !strings.Contains(sys, "Bạn là Story Partner") {
 		t.Error("lang rỗng phải về vi")
 	}
-	// User prompt giống nhau mọi locale (story content không đổi theo UI).
+	// Header user localized theo request lang (system đã dịch mà header còn Việt
+	// là i18n nửa vời), nhưng block dữ kiện phải giống hệt mọi locale.
 	blocks := []ContextBlock{{ID: "progress", Kind: "progress", Content: "x"}}
 	_, uVi := RenderPrompt(StorySnapshot{Blocks: blocks}, "Q?", "vi")
 	_, uEn := RenderPrompt(StorySnapshot{Blocks: blocks}, "Q?", "en")
-	if uVi != uEn {
-		t.Error("user prompt phải giống nhau mọi locale")
+	_, uZh := RenderPrompt(StorySnapshot{Blocks: blocks}, "Q?", "zh")
+	if !strings.Contains(uVi, "CÂU HỎI CỦA NGƯỜI VIẾT") {
+		t.Error("user vi thiếu header Việt")
+	}
+	if !strings.Contains(uEn, "WRITER'S QUESTION") {
+		t.Error("user en thiếu header Anh")
+	}
+	if !strings.Contains(uZh, "写作者的问题") {
+		t.Error("user zh thiếu header Trung")
+	}
+	for _, u := range []string{uVi, uEn, uZh} {
+		if !strings.Contains(u, "[progress]\nx") {
+			t.Errorf("block dữ kiện phải giống hệt mọi locale: %q", u)
+		}
 	}
 }
 

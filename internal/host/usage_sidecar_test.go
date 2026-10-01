@@ -28,7 +28,7 @@ func TestRecordSidecarKhongTriggerAbort(t *testing.T) {
 	base := len(onCostCalls)
 
 	// Advisor đốt thêm — dù cost lớn tới đâu cũng không được gọi onCost thêm.
-	tr.RecordSidecar("advisor", agentcore.Usage{Input: 100000, Output: 50000}, "p", "m")
+	tr.RecordSidecar("advisor", "sp:9", agentcore.Usage{Input: 100000, Output: 50000}, "p", "m")
 	if len(onCostCalls) != base {
 		t.Fatalf("RecordSidecar gọi onCost %d lần — Engine có thể bị abort vì /sp", len(onCostCalls)-base)
 	}
@@ -38,7 +38,7 @@ func TestRecordSidecarKhongTriggerAbort(t *testing.T) {
 // Tiền thật đã đốt thì perAgent["advisor"] phải có.
 func TestRecordSidecarVanGhiNhanTien(t *testing.T) {
 	tr := NewUsageTracker(nil, nil)
-	tr.RecordSidecar("advisor", agentcore.Usage{Input: 1000, Output: 200}, "p", "m")
+	tr.RecordSidecar("advisor", "sp:9", agentcore.Usage{Input: 1000, Output: 200}, "p", "m")
 
 	tr.mu.Lock()
 	per := tr.perAgent["advisor"]
@@ -56,11 +56,12 @@ func TestRecordSidecarVanGhiNhanTien(t *testing.T) {
 // tăng, nhưng overall.CacheBreaks đứng yên. Test cũ chỉ assert Totals/onCost.
 func TestRecordSidecarKhongBanOverallCacheBreaks(t *testing.T) {
 	tr := NewUsageTracker(nil, nil)
-	// Lần 1 đặt baseline: prefix 10000, hit 9000.
-	tr.RecordSidecar("advisor", agentcore.Usage{Input: 10000, Output: 10, CacheRead: 9000}, "p", "m")
+	// Lần 1 đặt baseline: prefix 10000, hit 9000. Cùng task = cùng lineage nên
+	// lần 2 so với baseline lần 1.
+	tr.RecordSidecar("advisor", "sp:7", agentcore.Usage{Input: 10000, Output: 10, CacheRead: 9000}, "p", "m")
 	// Lần 2: prefix không co (10000), hit rơi về 0 → đủ điều kiện break
 	// (>5% và >=2000 tokens).
-	tr.RecordSidecar("advisor", agentcore.Usage{Input: 10000, Output: 10, CacheRead: 0}, "p", "m")
+	tr.RecordSidecar("advisor", "sp:7", agentcore.Usage{Input: 10000, Output: 10, CacheRead: 0}, "p", "m")
 
 	tr.mu.Lock()
 	overallBreaks := tr.overall.CacheBreaks
@@ -95,5 +96,24 @@ func TestRecordThuongVanTangOverallCacheBreaks(t *testing.T) {
 }
 func TestRecordSidecarNilAnToan(t *testing.T) {
 	var tr *UsageTracker
-	tr.RecordSidecar("advisor", agentcore.Usage{Input: 1}, "", "")
+	tr.RecordSidecar("advisor", "sp:9", agentcore.Usage{Input: 1}, "", "")
+}
+
+// TestSidecarLineageMoiMoiRequest — mỗi /sp request là một prompt lineage mới
+// (snapshot/question khác nhau, model có thể đổi). Hai request khác task thì lần
+// 2 chỉ đặt baseline mới, KHÔNG so với baseline của request trước — nếu không,
+// detector báo "đứt cache" oan cho một lineage hoàn toàn mới.
+func TestSidecarLineageMoiMoiRequest(t *testing.T) {
+	tr := NewUsageTracker(nil, nil)
+	tr.RecordSidecar("advisor", "sp:1", agentcore.Usage{Input: 10000, Output: 10, CacheRead: 9000}, "p", "m")
+	tr.RecordSidecar("advisor", "sp:2", agentcore.Usage{Input: 10000, Output: 10, CacheRead: 0}, "p", "m")
+
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	if tr.overall.CacheBreaks != 0 {
+		t.Errorf("overall.CacheBreaks = %d", tr.overall.CacheBreaks)
+	}
+	if per := tr.perAgent["advisor"]; per == nil || per.CacheBreaks != 0 {
+		t.Errorf("lineage khác nhau không được tính break: %+v", per)
+	}
 }

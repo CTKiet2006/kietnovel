@@ -22,10 +22,16 @@ var auditMu sync.Mutex
 // biết chính xác lúc đó advisor đã nhìn thấy dữ kiện gì. Không có digest thì
 // audit chỉ là nhật ký kể chuyện, không truy được nguyên nhân.
 type auditEntry struct {
-	At             time.Time     `json:"at"`
-	Mode           string        `json:"mode"`
-	Question       string        `json:"question"`
-	Language       string        `json:"language"`
+	At       time.Time `json:"at"`
+	Mode     string    `json:"mode"`
+	Question string    `json:"question"`
+	Language string    `json:"language"`
+	// Status là success|error|canceled. Audit ghi cả request hỏng/bị hủy để
+	// debug được "hỏi lúc 20:35 mà sao không thấy log" — entry hỏng vẫn có
+	// digest/question để truy. Lỗi validate (mode sai, câu hỏi rỗng) và thiếu
+	// Deps cấu hình thì không audit: request chưa bắt đầu, ghi chỉ thêm nhiễu.
+	Status         string        `json:"status"`
+	Error          string        `json:"error,omitempty"`
 	SnapshotDigest string        `json:"snapshot_digest"`
 	Chapter        int           `json:"chapter"`
 	Provider       string        `json:"provider"`

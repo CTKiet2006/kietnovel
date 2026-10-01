@@ -212,12 +212,14 @@ func mergeConfig(base, overlay Config) Config {
 		}
 	}
 
-	// Roles: key của overlay đè key cùng tên của base
+	// Roles: key của overlay đè key cùng tên của base. Key chuẩn hoá một lần ở
+	// đây để "Writer" trong file project không tạo entry song song với "writer".
 	if len(overlay.Roles) > 0 {
 		if base.Roles == nil {
 			base.Roles = make(map[string]RoleConfig)
 		}
 		for k, v := range overlay.Roles {
+			k = NormRole(k)
 			existing := base.Roles[k]
 			if v.Provider != "" {
 				existing.Provider = v.Provider
@@ -274,7 +276,7 @@ func CloneConfig(cfg Config) Config {
 	clone.Roles = make(map[string]RoleConfig, len(cfg.Roles))
 	for role, rc := range cfg.Roles {
 		rc.Fallbacks = append([]ModelRef(nil), rc.Fallbacks...)
-		clone.Roles[role] = rc
+		clone.Roles[NormRole(role)] = rc
 	}
 	clone.Notify.Events = append([]string(nil), cfg.Notify.Events...)
 	return clone

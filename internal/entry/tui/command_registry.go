@@ -52,7 +52,7 @@ func (r commandRegistry) PaletteItemsIn(lang string) []commandPaletteItem {
 		items = append(items, commandPaletteItem{
 			Name:        spec.DisplayName(lang),
 			Aliases:     aliases,
-			Usage:       spec.Usage,
+			Usage:       spec.UsageText(lang),
 			Description: spec.Description,
 			AutoExecute: spec.AutoExecute,
 		})
