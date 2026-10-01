@@ -471,6 +471,13 @@ func (m *failoverModel) GenerateStream(ctx context.Context, messages []agentcore
 		source, resp, err := m.startAttempt(ctx, current, messages, tools, opts...)
 		if err != nil {
 			if !fallbackUsed {
+				// Như Generate: cancel đi trước fallback. Lỗi bọc string không
+				// qua được errors.Is nên phải check ctx trực tiếp, nếu không
+				// stream đã chết vẫn thử fallback oan.
+				if ctx.Err() != nil {
+					out <- agentcore.StreamEvent{Type: agentcore.StreamEventError, Err: ctx.Err()}
+					return
+				}
 				if next, reason, ok := m.pickFallback(current, err, requestsJSONSchema(opts)); ok {
 					fallbackUsed = true
 					m.reportFailover(current, next, reason, err)

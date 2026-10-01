@@ -21,6 +21,12 @@ type Deps struct {
 	// Provider/ModelName để ghi audit và accounting.
 	Provider  string
 	ModelName string
+	// ResolveIdentity trả provider/model THỰC TẾ của attempt thành công gần nhất
+	// (ví dụ LastTarget của failoverModel). Service gọi khi Usage không có
+	// identity — để Result, accounting và audit cùng dùng một identity, thay vì
+	// Result đúng còn audit/accounting ghi nhầm primary.
+	// Nil thì bỏ qua (giữ resolve ban đầu).
+	ResolveIdentity func() (provider, name string)
 	// RecordUsage ghi accounting sidecar. BẮT BUỘC là đường không trigger abort
 	// Engine (RecordSidecar của UsageTracker), không phải Record thường.
 	RecordUsage func(u agentcore.Usage)
@@ -90,19 +96,32 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 		Model:          s.deps.ModelName,
 	}
 	if resp != nil && resp.Message.Usage != nil {
-		u := resp.Message.Usage
+		u := *resp.Message.Usage
 		res.InputTokens, res.OutputTokens = u.Input, u.Output
 		res.CacheRead, res.CacheWrite = u.CacheRead, u.CacheWrite
-		// Identity: ưu tiên provider/model thật do usage báo (sau failover có
-		// thể khác model đã resolve). Không có thì giữ resolve ban đầu.
+		// Thứ tự ưu tiên identity: Usage thật > attempt thực tế > resolve ban đầu.
+		// Usage có provider/model (sau failover vẫn là fallback) thì dùng ngay.
 		if strings.TrimSpace(u.Provider) != "" {
 			res.Provider = u.Provider
 		}
 		if strings.TrimSpace(u.Model) != "" {
 			res.Model = u.Model
 		}
+		// Usage thiếu identity (bằng resolve ban đầu) thì hỏi attempt thực tế:
+		// failover chạy fallback mà Usage rỗng thì đây là nguồn duy nhất đúng.
+		// Rỗng nữa thì giữ resolve, không đoán.
+		if res.Provider == s.deps.Provider && res.Model == s.deps.ModelName &&
+			s.deps.ResolveIdentity != nil {
+			if p, n := s.deps.ResolveIdentity(); p != "" && n != "" {
+				res.Provider, res.Model = p, n
+			}
+		}
+		// Điền identity cuối vào usage trước khi accounting: cùng một identity
+		// cho Result, accounting và audit — không để audit ghi primary trong khi
+		// request chạy fallback.
+		u.Provider, u.Model = res.Provider, res.Model
 		if s.deps.RecordUsage != nil {
-			s.deps.RecordUsage(*u)
+			s.deps.RecordUsage(u)
 		}
 	}
 	writeAudit(s.deps.AuditDir, auditEntry{

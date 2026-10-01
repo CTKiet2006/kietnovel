@@ -42,6 +42,15 @@ func (h *Host) AskStoryPartner(ctx context.Context, req sp.Request) (sp.Result, 
 		Model:     model,
 		Provider:  prov,
 		ModelName: name,
+		// ResolveIdentity đọc attempt thực tế từ failoverModel. Service dùng khi
+		// Usage thiếu identity — để Result, accounting và audit cùng một identity,
+		// thay vì Host sửa Result sau khi audit đã ghi xong.
+		ResolveIdentity: func() (string, string) {
+			if lt, ok := model.(interface{ LastTarget() (string, string) }); ok {
+				return lt.LastTarget()
+			}
+			return "", ""
+		},
 		RecordUsage: func(u agentcore.Usage) {
 			// Sidecar, KHÔNG phải Record thường: tiền advisor không được cộng
 			// vào overall, không gọi onCost, không abort Engine.
@@ -49,22 +58,7 @@ func (h *Host) AskStoryPartner(ctx context.Context, req sp.Request) (sp.Result, 
 		},
 		AuditDir: filepath.Join(h.store.Dir(), "logs", "sp"),
 	})
-	res, err := svc.Ask(spCtx, req)
-	if err != nil {
-		return sp.Result{}, err
-	}
-	// Identity tầng cuối: service đã ưu tiên usage thật. Nếu usage không có
-	// identity (res vẫn là resolve ban đầu) mà model thực tế là failover đã chạy
-	// fallback, thì lấy target thật qua seam LastTarget — không audit nhầm
-	// primary cho request chạy fallback. Rỗng thì giữ nguyên, không đoán.
-	if res.Provider == prov && res.Model == name {
-		if lt, ok := model.(interface{ LastTarget() (string, string) }); ok {
-			if p, n := lt.LastTarget(); p != "" && n != "" {
-				res.Provider, res.Model = p, n
-			}
-		}
-	}
-	return res, nil
+	return svc.Ask(spCtx, req)
 }
 
 // resolveAdvisor lấy advisor model qua failover thật.

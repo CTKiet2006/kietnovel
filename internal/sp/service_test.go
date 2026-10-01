@@ -396,6 +396,74 @@ func TestServiceLoiBocVanVeCanceled(t *testing.T) {
 		t.Fatal("Ask treo sau cancel")
 	}
 }
+
+// TestIdentityDungChungChoResultUsageAudit — case review chỉ ra:
+// primary -> 429, fallback chạy, Usage rỗng identity.
+// Trước fix: Result đúng fallback (Host sửa sau), nhưng audit đã ghi primary và
+// accounting cũng nhận identity rỗng → perModel sai.
+// Sau fix: ResolveIdentity trong Service, cả ba cùng fallback.
+func TestIdentityDungChungChoResultUsageAudit(t *testing.T) {
+	st := newTestStore(t)
+	fake := &fakeAdvisorModel{
+		answer: "[FACT progress] ok",
+		// Usage KHÔNG có provider/model — đúng tình huống review nêu.
+		usage: agentcore.Usage{Input: 50, Output: 10},
+	}
+	var recorded []agentcore.Usage
+	auditDir := t.TempDir()
+	svc := NewService(Deps{
+		Store: st, Model: fake,
+		Provider: "openrouter", ModelName: "advisor-model",
+		// Giả lập failover đã chạy fallback (LastTarget của failoverModel thật).
+		ResolveIdentity: func() (string, string) { return "openrouter", "fallback-model" },
+		RecordUsage:     func(u agentcore.Usage) { recorded = append(recorded, u) },
+		AuditDir:        auditDir,
+	})
+	res, err := svc.Ask(context.Background(), Request{Mode: ModeAsk, Question: "Ai?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Provider != "openrouter" || res.Model != "fallback-model" {
+		t.Errorf("Result sai: %q/%q", res.Provider, res.Model)
+	}
+	if len(recorded) != 1 {
+		t.Fatalf("recorded %d lần", len(recorded))
+	}
+	if recorded[0].Provider != "openrouter" || recorded[0].Model != "fallback-model" {
+		t.Errorf("accounting sai: %+v", recorded[0])
+	}
+	data, err := os.ReadFile(filepath.Join(auditDir, "sp.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "fallback-model") {
+		t.Errorf("audit không ghi fallback: %s", data)
+	}
+	if strings.Contains(string(data), "advisor-model") {
+		t.Errorf("audit lọt primary: %s", data)
+	}
+}
+
+// TestIdentityGiuResolveKhiKhongCoNguon — Usage rỗng + ResolveIdentity rỗng →
+// giữ resolve ban đầu, không đoán.
+func TestIdentityGiuResolveKhiKhongCoNguon(t *testing.T) {
+	st := newTestStore(t)
+	svc := NewService(Deps{
+		Store:    st,
+		Model:    &fakeAdvisorModel{answer: "x", usage: agentcore.Usage{Input: 1, Output: 1}},
+		Provider: "openrouter", ModelName: "advisor-model",
+		ResolveIdentity: func() (string, string) { return "", "" },
+		AuditDir:        t.TempDir(),
+	})
+	res, err := svc.Ask(context.Background(), Request{Mode: ModeAsk, Question: "Ai?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Provider != "openrouter" || res.Model != "advisor-model" {
+		t.Errorf("phải giữ resolve, được %q/%q", res.Provider, res.Model)
+	}
+}
+
 func TestServiceCancelTraVe(t *testing.T) {
 	st := newTestStore(t)
 	fake := &fakeAdvisorModel{answer: "x", blockUntil: make(chan struct{})}

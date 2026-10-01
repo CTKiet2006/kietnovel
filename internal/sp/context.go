@@ -3,6 +3,7 @@ package sp
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -88,19 +89,29 @@ func buildOnce(st *storepkg.Store) (snap StorySnapshot, anchorA, anchorB string,
 	// Vị trí hiện tại: phase, chương, tập/cung.
 	add(ContextBlock{ID: "progress", Kind: "progress", Content: renderProgress(progA)})
 
-	// Sách: tiêu đề + tóm tắt.
-	if book, err := st.Book.Load(); err == nil && book != nil {
+	// Sách: tiêu đề + tóm tắt. Load trả (nil, nil) khi chưa có file;
+	// mọi error khác là hỏng thật (JSON lỗi, I/O) → trả lỗi thay vì im lặng
+	// bỏ qua, nếu không snapshot thiếu dữ kiện mà tưởng là chưa có.
+	book, err := st.Book.Load()
+	if err != nil {
+		return StorySnapshot{}, "", "", false, fmt.Errorf("đọc book: %w", err)
+	}
+	if book != nil {
 		add(ContextBlock{ID: "book", Kind: "book",
 			Content: strings.TrimSpace(book.Title) + "\n" + strings.TrimSpace(book.Synopsis)})
 	}
 
-	// Tiền đề.
-	if premise, err := st.Outline.LoadPremise(); err == nil {
-		add(ContextBlock{ID: "premise", Kind: "premise", Content: premise})
+	// Tiền đề. LoadPremise hấp thụ missing thành ("", nil); err còn lại là hỏng.
+	premise, err := st.Outline.LoadPremise()
+	if err != nil {
+		return StorySnapshot{}, "", "", false, fmt.Errorf("đọc premise: %w", err)
 	}
+	add(ContextBlock{ID: "premise", Kind: "premise", Content: premise})
 
 	// Dàn ý chương hiện tại + vài chương quanh nó. progA không nil ở đây
 	// (nil đã return ở trên), không cần kiểm tra lại.
+	// ErrOutlineChapterNotFound (chương chưa có dàn ý) thì bỏ qua — đó là thiếu
+	// thật, không phải hỏng. Lỗi khác (outline.json hỏng) thì trả lỗi.
 	cur := progA.CurrentChapter
 	if cur <= 0 {
 		cur = progA.LatestCompleted() + 1
@@ -109,7 +120,14 @@ func buildOnce(st *storepkg.Store) (snap StorySnapshot, anchorA, anchorB string,
 		if ch <= 0 {
 			continue
 		}
-		if entry, err := st.Outline.GetChapterOutline(ch); err == nil && entry != nil {
+		entry, err := st.Outline.GetChapterOutline(ch)
+		if err != nil {
+			if errors.Is(err, storepkg.ErrOutlineChapterNotFound) {
+				continue
+			}
+			return StorySnapshot{}, "", "", false, fmt.Errorf("đọc dàn ý chương %d: %w", ch, err)
+		}
+		if entry != nil {
 			add(ContextBlock{
 				ID:      fmt.Sprintf("outline:chapter:%d", ch),
 				Kind:    "outline",
@@ -118,25 +136,34 @@ func buildOnce(st *storepkg.Store) (snap StorySnapshot, anchorA, anchorB string,
 		}
 	}
 
-	// Tóm tắt các chương gần nhất đã chốt.
+	// Tóm tắt các chương gần nhất đã chốt. LoadSummary hấp thụ missing từng
+	// chương; err còn lại (summaries hỏng) thì trả lỗi.
 	latest := progA.LatestCompleted()
-	if sums, err := st.Summaries.LoadRecentSummaries(latest, 3); err == nil {
-		for _, s := range sums {
-			add(ContextBlock{
-				ID:      fmt.Sprintf("summary:chapter:%d", s.Chapter),
-				Kind:    "summary",
-				Content: fmt.Sprintf("Chương %d (%s): %s\nSự kiện: %s", s.Chapter, s.Title, s.Summary, strings.Join(s.KeyEvents, "; ")),
-			})
-		}
+	sums, err := st.Summaries.LoadRecentSummaries(latest, 3)
+	if err != nil {
+		return StorySnapshot{}, "", "", false, fmt.Errorf("đọc summaries: %w", err)
+	}
+	for _, s := range sums {
+		add(ContextBlock{
+			ID:      fmt.Sprintf("summary:chapter:%d", s.Chapter),
+			Kind:    "summary",
+			Content: fmt.Sprintf("Chương %d (%s): %s\nSự kiện: %s", s.Chapter, s.Title, s.Summary, strings.Join(s.KeyEvents, "; ")),
+		})
 	}
 
-	// Trạng thái nhân vật.
-	if chars, err := st.Characters.Load(); err == nil {
-		add(ContextBlock{ID: "characters", Kind: "character", Content: renderCharacters(chars)})
+	// Trạng thái nhân vật. Missing → (nil, nil) bỏ qua; hỏng → lỗi.
+	chars, err := st.Characters.Load()
+	if err != nil {
+		return StorySnapshot{}, "", "", false, fmt.Errorf("đọc characters: %w", err)
 	}
+	add(ContextBlock{ID: "characters", Kind: "character", Content: renderCharacters(chars)})
 
 	// Quy tắc thế giới: chỉ lấy phần đang hiệu lực, không lấy lịch sử sửa.
-	if rules, err := st.World.LoadWorldRules(); err == nil {
+	rules, err := st.World.LoadWorldRules()
+	if err != nil {
+		return StorySnapshot{}, "", "", false, fmt.Errorf("đọc world rules: %w", err)
+	}
+	{
 		var lines []string
 		for _, r := range rules {
 			lines = append(lines, fmt.Sprintf("- [%s] %s (giới hạn: %s)", r.Category, r.Rule, r.Boundary))
@@ -145,12 +172,18 @@ func buildOnce(st *storepkg.Store) (snap StorySnapshot, anchorA, anchorB string,
 	}
 
 	// Foreshadow đang mở (planted/advanced, chưa resolved).
-	if ledger, err := st.World.LoadForeshadowLedger(); err == nil {
-		add(ContextBlock{ID: "foreshadow:active", Kind: "foreshadow", Content: renderForeshadow(ledger)})
+	ledger, err := st.World.LoadForeshadowLedger()
+	if err != nil {
+		return StorySnapshot{}, "", "", false, fmt.Errorf("đọc foreshadow: %w", err)
 	}
+	add(ContextBlock{ID: "foreshadow:active", Kind: "foreshadow", Content: renderForeshadow(ledger)})
 
 	// Timeline gần nhất.
-	if tl, err := st.World.LoadRecentTimeline(progA.LatestCompleted(), 10); err == nil {
+	tl, err := st.World.LoadRecentTimeline(progA.LatestCompleted(), 10)
+	if err != nil {
+		return StorySnapshot{}, "", "", false, fmt.Errorf("đọc timeline: %w", err)
+	}
+	{
 		var lines []string
 		for _, e := range tl {
 			lines = append(lines, fmt.Sprintf("C%d [%s]: %s", e.Chapter, e.Time, e.Event))
@@ -159,7 +192,11 @@ func buildOnce(st *storepkg.Store) (snap StorySnapshot, anchorA, anchorB string,
 	}
 
 	// Review gần nhất còn treo: chỉ lấy issue chưa xong, không lấy điểm số.
-	if rev, err := st.Signals.LoadLastReviewSignal(); err == nil && rev != nil && len(rev.Issues) > 0 {
+	rev, err := st.Signals.LoadLastReviewSignal()
+	if err != nil {
+		return StorySnapshot{}, "", "", false, fmt.Errorf("đọc review signal: %w", err)
+	}
+	if rev != nil && len(rev.Issues) > 0 {
 		var lines []string
 		for _, is := range rev.Issues {
 			lines = append(lines, fmt.Sprintf("- [%s/%s] %s", is.Severity, is.Type, is.Description))
