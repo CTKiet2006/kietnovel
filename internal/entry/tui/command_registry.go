@@ -1,7 +1,13 @@
 package tui
 
-import "strings"
+import (
+	"strings"
 
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
+)
+
+// commandRegistry tra cứu lệnh theo tên. Tên chuẩn (Name) là tiếng Anh và cũng
+// là ID nội bộ khi ID trống — runtime chỉ xử lý ID, không xử lý ngôn ngữ.
 type commandRegistry struct {
 	specs []slashCommandSpec
 }
@@ -34,11 +40,18 @@ func (r commandRegistry) Find(name string) (slashCommandSpec, bool) {
 }
 
 func (r commandRegistry) PaletteItems() []commandPaletteItem {
+	return r.PaletteItemsIn(i18n.Language())
+}
+
+func (r commandRegistry) PaletteItemsIn(lang string) []commandPaletteItem {
 	var items []commandPaletteItem
 	for _, spec := range r.Visible() {
+		// Name hiển thị theo locale; Aliases giữ tên chuẩn + alias cũ để gõ
+		// kiểu nào cũng khớp (người đổi UI không mất lệnh quen thuộc).
+		aliases := append([]string{spec.Name}, spec.Aliases...)
 		items = append(items, commandPaletteItem{
-			Name:        spec.Name,
-			Aliases:     append([]string(nil), spec.Aliases...),
+			Name:        spec.DisplayName(lang),
+			Aliases:     aliases,
 			Usage:       spec.Usage,
 			Description: spec.Description,
 			AutoExecute: spec.AutoExecute,
