@@ -542,4 +542,12 @@ var enCatalog = map[string]string{
 	"Nhưng phần đang chạy dở sẽ bị dừng. Enter hoặc gõ y để chuyển, Esc để ở lại.": "But the running part will be stopped. Press Enter or y to switch, Esc to stay.",
 	"  Enter/y Chuyển · Esc Ở lại": "  Enter/y Switch · Esc Stay",
 	"  y Chuyển · Esc Ở lại":       "  y Switch · Esc Stay",
+
+	"Hỏi Story Partner mà không dừng máy đang viết":                              "Ask Story Partner without stopping the writing engine",
+	"Chưa mở sách nào để hỏi.":                                                   "No story open to ask.",
+	"Dùng: /sp [hỏi] <câu hỏi> — hỏi Story Partner mà không dừng máy đang viết.": "Usage: /sp [ask] <question> — ask Story Partner without stopping the writing engine.",
+	"Story Partner":          "Story Partner",
+	"  Cuộn: ↑↓ · Đóng: Esc": "  Scroll: ↑↓ · Close: Esc",
+	"Hỏi: ":                  "Q: ",
+	"Story Partner đang nghĩ… (máy viết bên dưới vẫn chạy)": "Story Partner is thinking… (the writing engine below keeps running)",
 }

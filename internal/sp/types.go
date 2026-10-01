@@ -14,6 +14,11 @@ const (
 type Request struct {
 	Mode     Mode
 	Question string
+	// Language là ngôn ngữ advisor TRẢ LỜI (vi/en/zh). Capture lúc request bắt
+	// đầu — user đổi UI giữa chừng thì request đang chạy vẫn đúng ngôn ngữ cũ.
+	// Service KHÔNG tự đọc global UI state trong lúc chạy.
+	// Rỗng thì rơi về vi. Không liên quan ngôn ngữ truyện đang viết.
+	Language string
 }
 
 // ContextBlock là một khối dữ kiện trong snapshot. Mỗi block có stable source
@@ -59,8 +64,11 @@ type Result struct {
 	Answer         string
 	SnapshotDigest string
 	CapturedAt     time.Time
-	Provider       string
-	Model          string
+	// Chapter là số chương đang viết lúc chụp snapshot (từ progress). UI hiện
+	// để người đọc biết câu trả lời gắn với thời điểm nào của truyện.
+	Chapter  int
+	Provider string
+	Model    string
 	// InputTokens/OutputTokens để audit và accounting, không cần struct Usage
 	// đầy đủ của agentcore ở tầng này.
 	InputTokens  int

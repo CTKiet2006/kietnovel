@@ -88,6 +88,9 @@ func (m Model) handleOverlayKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		// Màn chào chặn mọi phím khác: đang hỏi thì không cho gõ lệnh.
 		out, cmd, _ := m.handleWelcomeKey(msg)
 		return out, cmd, true
+	case m.spState != nil:
+		// Modal /sp chặn phím khác (trừ phím viewport): đang hỏi thì không gõ lệnh.
+		return m.handleSPKey(msg)
 	case m.modelSwitch != nil:
 		return m.handleBlockingModalKey(msg, m.handleModelSwitchKey)
 	case m.report != nil:
@@ -518,6 +521,11 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		m.refreshStateViewport()
 		return m, tickSnapshot(m.runtime), true
+	case spResultMsg:
+		// Stale (Esc đã đóng modal, hoặc request mới đã mở) thì bỏ. Modal hiện
+		// tại chỉ nhận đúng reqID của nó.
+		next, cmd := m.handleSPResultMsg(msg)
+		return next, cmd, true
 	case doneMsg:
 		m.snapshot.IsRunning = false
 		m.refreshEventViewport()

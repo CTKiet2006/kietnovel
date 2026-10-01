@@ -68,7 +68,7 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 		return Result{}, err
 	}
 
-	system, user := RenderPrompt(snap, req.Question)
+	system, user := RenderPrompt(snap, req.Question, requestLanguage(req))
 	msgs := []agentcore.Message{
 		{Role: agentcore.RoleSystem, Content: textBlocks(system)},
 		{Role: agentcore.RoleUser, Content: textBlocks(user)},
@@ -92,6 +92,7 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 		Answer:         messageText(resp),
 		SnapshotDigest: snap.ProgressDigest,
 		CapturedAt:     snap.CapturedAt,
+		Chapter:        snap.Chapter,
 		Provider:       s.deps.Provider,
 		Model:          s.deps.ModelName,
 	}
@@ -128,6 +129,7 @@ func (s *Service) Ask(ctx context.Context, req Request) (Result, error) {
 		At:             start,
 		Mode:           string(req.Mode),
 		Question:       req.Question,
+		Language:       requestLanguage(req),
 		SnapshotDigest: snap.ProgressDigest,
 		Chapter:        snap.Chapter,
 		Provider:       res.Provider,
@@ -148,6 +150,19 @@ func validate(req Request) error {
 		return errors.New("sp: câu hỏi rỗng")
 	}
 	return nil
+}
+
+// requestLanguage chuẩn hoá ngôn ngữ trả lời: rỗng hoặc lạ thì về vi.
+// Không đọc global UI state ở đây — caller capture từ trước.
+func requestLanguage(req Request) string {
+	switch strings.ToLower(strings.TrimSpace(req.Language)) {
+	case "en":
+		return "en"
+	case "zh":
+		return "zh"
+	default:
+		return "vi"
+	}
 }
 
 func textBlocks(s string) []agentcore.ContentBlock {

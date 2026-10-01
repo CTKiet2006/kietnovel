@@ -246,7 +246,7 @@ func TestSnapshotKhongChuaDraftDangViet(t *testing.T) {
 
 // 6. prompt contract chứa các rule fact/inference/unknown + read-only.
 func TestPromptContractDuRule(t *testing.T) {
-	sys, _ := RenderPrompt(StorySnapshot{Blocks: []ContextBlock{{ID: "progress", Kind: "progress", Content: "x"}}}, "hỏi gì?")
+	sys, _ := RenderPrompt(StorySnapshot{Blocks: []ContextBlock{{ID: "progress", Kind: "progress", Content: "x"}}}, "hỏi gì?", "vi")
 	for _, must := range []string{
 		"[FACT]", "[INFERENCE]", "[OPTION]", "[UNKNOWN]",
 		"Không tạo canon", "Không sửa truyện", "gọi tool", "quyết định thay",
@@ -263,7 +263,7 @@ func TestRenderPromptGiuSourceID(t *testing.T) {
 	snap := StorySnapshot{ProgressDigest: "abc", Blocks: []ContextBlock{
 		{ID: "outline:chapter:5", Kind: "outline", Content: "nội dung"},
 	}}
-	_, user := RenderPrompt(snap, "Ngọc nên làm gì?")
+	_, user := RenderPrompt(snap, "Ngọc nên làm gì?", "vi")
 	if !strings.Contains(user, "[outline:chapter:5]") {
 		t.Error("user prompt mất source ID")
 	}

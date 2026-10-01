@@ -72,6 +72,8 @@ type Model struct {
 	bookLang           *bookLanguageState // hỏi ngôn ngữ sáng tác lần viết đầu tiên với truyện chưa khoá
 	welcome            *welcomeState      // màn chào: hỏi viết tiếp / truyện khác / thoát, thay vì tự chạy engine
 	welcomeSeen        bool               // đã qua màn chào (hoặc không cần), tránh hiện lại mỗi snapshot
+	spState            *storyPartnerState // modal /sp hỏi: overlay, Engine bên dưới vẫn chạy
+	spSeq              uint64             // request ID tăng dần cho /sp, bỏ result cũ (stale)
 	simulator          *simulationState
 	simSeq             int
 	compItems          []commandPaletteItem
@@ -680,6 +682,10 @@ func (m Model) View() string {
 	// Màn chào vẽ trên cùng: lúc nó hiện thì chưa có gì khác để xem.
 	if m.welcome != nil {
 		return m.welcome.view(m.width, m.height)
+	}
+	// Modal /sp vẽ sau cùng: nó là overlay mới nhất, đè lên mọi khung khác.
+	if m.spState != nil {
+		return m.spState.view(m.width, m.height)
 	}
 	if m.report != nil {
 		return renderReportModal(m.width, m.height, m.report)

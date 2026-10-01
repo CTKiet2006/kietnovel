@@ -541,4 +541,12 @@ var zhCatalog = map[string]string{
 	"Nhưng phần đang chạy dở sẽ bị dừng. Enter hoặc gõ y để chuyển, Esc để ở lại.": "但正在运行的部分将被停止。按 Enter 或 y 切换，按 Esc 留下。",
 	"  Enter/y Chuyển · Esc Ở lại": "  Enter/y 切换 · Esc 留下",
 	"  y Chuyển · Esc Ở lại":       "  y 切换 · Esc 留下",
+
+	"Hỏi Story Partner mà không dừng máy đang viết":                              "无需停止写作引擎即可询问 Story Partner",
+	"Chưa mở sách nào để hỏi.":                                                   "没有打开的可询问的故事。",
+	"Dùng: /sp [hỏi] <câu hỏi> — hỏi Story Partner mà không dừng máy đang viết.": "用法：/sp [问] <问题>——无需停止写作引擎即可询问 Story Partner。",
+	"Story Partner":          "Story Partner",
+	"  Cuộn: ↑↓ · Đóng: Esc": "  滚动：↑↓ · 关闭：Esc",
+	"Hỏi: ":                  "问：",
+	"Story Partner đang nghĩ… (máy viết bên dưới vẫn chạy)": "Story Partner 思考中……（下方的写作引擎继续运行）",
 }
