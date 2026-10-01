@@ -140,6 +140,50 @@ func TestResolveSubcommandBangRong(t *testing.T) {
 	}
 }
 
+// lookupSubcommand đi qua catalog theo commandID — key là ID chuẩn, không phải
+// tiếng Việt. /sp hỏi/ask/问 đều về ask của story_partner.
+func TestLookupSubcommandTheoCommandID(t *testing.T) {
+	for _, in := range []string{"hỏi", "ask", "问"} {
+		mode, ok := lookupSubcommand("story_partner", in)
+		if !ok || mode != "ask" {
+			t.Errorf("lookupSubcommand(story_partner, %q) = %q,%v", in, mode, ok)
+		}
+	}
+	// Command không có trong catalog → không khớp gì, không panic.
+	if _, ok := lookupSubcommand("read", "hỏi"); ok {
+		t.Error("read không có subcommand catalog")
+	}
+	if _, ok := lookupSubcommand("khong-co", "hỏi"); ok {
+		t.Error("command lạ phải không khớp")
+	}
+	// Từ lạ → false để caller mặc định ask (người dùng khỏi nhớ từ).
+	if _, ok := lookupSubcommand("story_partner", "Ngọc có nên tha bà Bảy không?"); ok {
+		t.Error("câu hỏi thẳng phải không khớp subcommand nào")
+	}
+}
+
+// MatchLocale: EN/en-US về en, zh-CN về zh, lạ về vi.
+func TestMatchLocaleChuanHoa(t *testing.T) {
+	cases := map[string]string{
+		"vi": "vi", "VI": "vi", "": "vi", "xx": "vi",
+		"en": "en", "EN": "en", "en-US": "en", "en-GB": "en",
+		"zh": "zh", "ZH": "zh", "zh-CN": "zh", "zh-TW": "zh",
+	}
+	for in, want := range cases {
+		if got := i18n.MatchLocale(in); got != want {
+			t.Errorf("MatchLocale(%q) = %q, mong %q", in, got, want)
+		}
+	}
+}
+
+// DisplayName chịu được tag thô ("EN") nhờ chuẩn hoá trong.
+func TestDisplayNameChiuTagTho(t *testing.T) {
+	spec, _ := commandRegistryInstance().Find("read")
+	if got := spec.DisplayName("EN"); got != "read" {
+		t.Errorf("EN: %q", got)
+	}
+}
+
 // i18n.Language đang là gì thì PaletteItems() mặc định cũng hiện đúng locale đó.
 func TestPaletteMacDinhTheoUILang(t *testing.T) {
 	defer i18n.SetLanguage(i18n.LangVietnamese)

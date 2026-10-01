@@ -17,6 +17,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"golang.org/x/text/language"
 )
 
 // Mã ngôn ngữ hỗ trợ.
@@ -25,6 +27,69 @@ const (
 	LangEnglish    = "en"
 	LangChinese    = "zh"
 )
+
+// supportedLocale là thứ tự ưu tiên cho Matcher: vi trước vì là fallback mặc định.
+var supportedLocale = []language.Tag{
+	language.Vietnamese,
+	language.English,
+	language.Chinese,
+}
+
+var localeMatcher = language.NewMatcher(supportedLocale)
+
+// tagToCode đổi language.Tag về mã nội bộ. So base language chứ không so tag
+// nguyên văn: Matcher trả tag mở rộng vùng ("en-u-rg-gbzzzz") chứ không trả đúng
+// "en", nên so nguyên tag sẽ rơi default oan.
+func tagToCode(t language.Tag) string {
+	base, _ := t.Base()
+	switch base.String() {
+	case "en":
+		return LangEnglish
+	case "zh":
+		return LangChinese
+	default:
+		return LangVietnamese
+	}
+}
+
+// MatchLocale chuẩn hoá bất kỳ tag nào (en, EN, en-US, zh-CN, ...) về mã nội bộ.
+// Thay switch thủ công: "en-US" trước đây rơi về vi oan, giờ về en đúng.
+// Tag hỏng hoặc ngôn ngữ không hỗ trợ ("xx", "fr") thì về vi — an toàn cho
+// SetLanguage và config vì luôn có giá trị hợp lệ.
+func MatchLocale(tag string) string {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return LangVietnamese
+	}
+	parsed, err := language.Parse(tag)
+	if err != nil {
+		// Tag hỏng hoàn toàn ("xx", "123") thì rơi về mặc định, không lỗi.
+		return LangVietnamese
+	}
+	matched, _, _ := localeMatcher.Match(parsed)
+	return tagToCode(matched)
+}
+
+// SupportedCode trả mã nội bộ chỉ khi base language được hỗ trợ (vi/en/zh).
+// Khác MatchLocale: tag lạ ("fr", "ja") trả ("", false) thay vì rơi về vi.
+// Dùng cho tra cứu theo locale (tên lệnh hiển thị): locale không hỗ trợ thì
+// không có tên, phải rơi về tên chuẩn chứ không lấy tên tiếng Việt oan.
+func SupportedCode(tag string) (string, bool) {
+	parsed, err := language.Parse(strings.TrimSpace(tag))
+	if err != nil {
+		return "", false
+	}
+	base, _ := parsed.Base()
+	switch base.String() {
+	case "vi":
+		return LangVietnamese, true
+	case "en":
+		return LangEnglish, true
+	case "zh":
+		return LangChinese, true
+	}
+	return "", false
+}
 
 var (
 	mu      sync.RWMutex
@@ -37,19 +102,13 @@ var catalog = map[string]map[string]string{
 	LangChinese: zhCatalog,
 }
 
-// SetLanguage đặt ngôn ngữ hiện tại. Mã lạ hoặc rỗng rơi về tiếng Việt.
+// SetLanguage đặt ngôn ngữ hiện tại. Chuẩn hoá qua Matcher nên "EN", "en-US",
+// "zh-CN" đều về đúng mã; mã lạ hoặc rỗng rơi về tiếng Việt.
 // Gọi một lần lúc khởi động, trước khi dựng TUI.
 func SetLanguage(lang string) {
 	mu.Lock()
 	defer mu.Unlock()
-	switch strings.ToLower(strings.TrimSpace(lang)) {
-	case LangEnglish:
-		current = LangEnglish
-	case LangChinese:
-		current = LangChinese
-	default:
-		current = LangVietnamese
-	}
+	current = MatchLocale(lang)
 }
 
 // Language trả về mã ngôn ngữ đang dùng.

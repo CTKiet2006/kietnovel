@@ -43,9 +43,16 @@ func (s slashCommandSpec) CommandID() string {
 }
 
 // DisplayName trả tên hiển thị theo UI language. Không có thì rơi về Name.
+// Lang lạ ("EN", "en-US") được chuẩn hoá trước nên vẫn khớp; ngôn ngữ không hỗ
+// trợ ("fr") thì không có tên — về Name chứ không lấy tên locale khác oan.
 func (s slashCommandSpec) DisplayName(lang string) string {
 	if names, ok := s.Names[lang]; ok && len(names) > 0 {
 		return names[0]
+	}
+	if code, ok := i18n.SupportedCode(lang); ok {
+		if names, ok := s.Names[code]; ok && len(names) > 0 {
+			return names[0]
+		}
 	}
 	return s.Name
 }
@@ -88,15 +95,8 @@ func (s slashCommandSpec) matches(name string) bool {
 }
 
 // resolveSubcommand chuẩn hoá từ subcommand (từ đầu tiên sau tên lệnh) về mode
-// chuẩn, xuyên ngôn ngữ.
-//
-// table: mode chuẩn → các từ được chấp nhận ở mọi ngôn ngữ, ví dụ
-//
-//	{"ask": {"hỏi", "ask", "问"}}
-//
-// "/sp hỏi", "/sp ask", "/sp 问" đều về "ask". Logic lệnh sau đó không biết gì
-// về tiếng Việt nữa. Không khớp thì trả ("", false) — caller tự quyết (với /sp:
-// coi như câu hỏi, mặc định ask).
+// chuẩn, xuyên ngôn ngữ. Logic lệnh sau đó không biết gì về tiếng Việt nữa.
+// Không khớp thì trả ("", false) — caller tự quyết.
 func resolveSubcommand(arg string, table map[string][]string) (string, bool) {
 	arg = strings.TrimSpace(arg)
 	if arg == "" {
@@ -110,6 +110,29 @@ func resolveSubcommand(arg string, table map[string][]string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// subcommandCatalog: commandID → subcommandID → các từ được chấp nhận ở mọi
+// ngôn ngữ. Key là ID chuẩn ("story_partner" → "ask"), KHÔNG phải tiếng Việt —
+// logic lệnh không bao giờ thấy tiếng nào cả.
+//
+// Phase 3 (/sp) dùng bảng này: "/sp hỏi", "/sp ask", "/sp 问" đều về ask.
+// Định nghĩa trước để parser ổn định, khỏi migrate lần hai.
+var subcommandCatalog = map[string]map[string][]string{
+	"story_partner": {
+		"ask": {"hỏi", "ask", "问"},
+	},
+}
+
+// lookupSubcommand resolve (commandID, từ đầu tiên) về subcommandID.
+// Không khớp thì ("", false) — caller tự quyết (với /sp: coi như câu hỏi,
+// mặc định ask nên người dùng khỏi nhớ từ hỏi/ask/问).
+func lookupSubcommand(commandID, arg string) (string, bool) {
+	modes, ok := subcommandCatalog[commandID]
+	if !ok {
+		return "", false
+	}
+	return resolveSubcommand(arg, modes)
 }
 
 func commandRegistryInstance() commandRegistry {

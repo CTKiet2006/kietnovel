@@ -1,6 +1,6 @@
 module github.com/CTKiet2006/kietnovel
 
-go 1.25.5
+go 1.26.0
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0
@@ -11,8 +11,8 @@ require (
 	github.com/muesli/termenv v0.16.0
 	github.com/voocel/agentcore v1.8.3
 	github.com/voocel/litellm v1.8.10
-	golang.org/x/mod v0.40.0
-	golang.org/x/text v0.41.0
+	golang.org/x/mod v0.41.0
+	golang.org/x/text v0.42.0
 )
 
 require (
