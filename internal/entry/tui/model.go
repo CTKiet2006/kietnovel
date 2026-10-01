@@ -755,13 +755,20 @@ func (m Model) View() string {
 	}
 	// Khung phải vừa đúng terminal, cả hai chiều.
 	//
-	// Cao quá terminal: terminal cuộn, con trỏ thật lệch khỏi dòng khung vẽ ra.
-	// Thấp hơn terminal: terminal giữ con trỏ ở dưới khung, gõ vào thì ký tự
-	// hiện ở dòng trống phía dưới chứ không phải trong ô nhập. Cả hai đều cho
-	// cảm giác chữ "bay" khỏi chỗ đang gõ.
+	// Cao quá terminal: terminal cuộn, con trỏ thật lệch khỏi dòng khung vẽ ra,
+	// để lại ô chữ cũ (stale cells) ở các dòng đáy. Thấp hơn terminal: terminal
+	// giữ con trỏ ở dưới khung, gõ vào thì ký tự hiện ở dòng trống phía dưới
+	// chứ không phải trong ô nhập. Cả hai đều cho cảm giác chữ "bay" khỏi chỗ gõ.
 	//
 	// Kẹp ở đây, sau khi các popup đã phủ, vì popup cũng có thể tự cao hơn.
+	// Cắt đáy (clipToHeight) chỉ là lưới an toàn cuối: thân khung đã tự cắt
+	// trước nên tới đây thừa nghĩa là có chỗ đo sai — giấu một dòng còn hơn vỡ
+	// màn hình. padToHeight giữ nguyên semantics chỉ-đệm vì các khối con
+	// (cocreate...) dựa vào đó để không mất nội dung cuộn.
 	if m.height > 0 {
+		if lipgloss.Height(view) > m.height {
+			view = clipToHeight(view, m.height)
+		}
 		view = padToHeight(view, m.height)
 	}
 	return view
