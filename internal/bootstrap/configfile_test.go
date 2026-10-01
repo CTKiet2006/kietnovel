@@ -337,3 +337,65 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+// TestNormalizeRolesVaCham — P1: "Writer" + "writer" cùng lúc là cấu hình mơ hồ
+// (entry thắng phụ thuộc thứ tự duyệt map, nondeterministic) nên phải lỗi rõ
+// nêu cả hai key, không đoán.
+func TestNormalizeRolesVaCham(t *testing.T) {
+	cfg := Config{
+		Provider: "openrouter", ModelName: "m",
+		Providers: map[string]ProviderConfig{"openrouter": {APIKey: "sk-test-123456"}},
+		Roles: map[string]RoleConfig{
+			"Writer": {Provider: "openrouter", Model: "w1"},
+			"writer": {Provider: "openrouter", Model: "w2"},
+		},
+	}
+	err := cfg.NormalizeRoles()
+	if err == nil || !errors.Is(err, errs.ErrConfig) {
+		t.Fatalf("va chạm key phải ErrConfig, được: %v", err)
+	}
+}
+
+// TestNormalizeRolesChuanHoa — key lẻ ("Writer") về canonical, reasoning resolve đúng.
+func TestNormalizeRolesChuanHoa(t *testing.T) {
+	cfg := Config{
+		Provider: "openrouter", ModelName: "m",
+		Providers: map[string]ProviderConfig{"openrouter": {APIKey: "sk-test-123456"}},
+		Roles: map[string]RoleConfig{
+			"Writer": {Provider: "openrouter", Model: "w1", ReasoningEffort: "high"},
+		},
+	}
+	if err := cfg.NormalizeRoles(); err != nil {
+		t.Fatalf("key lẻ không được lỗi: %v", err)
+	}
+	if _, ok := cfg.Roles["Writer"]; ok {
+		t.Error("key thô 'Writer' phải biến mất sau chuẩn hoá")
+	}
+	rc, ok := cfg.Roles["writer"]
+	if !ok || rc.Model != "w1" {
+		t.Fatalf("thiếu entry canonical 'writer': %+v", cfg.Roles)
+	}
+	if got := cfg.ResolveReasoningEffort("writer"); got != "high" {
+		t.Errorf("reasoning writer = %q, mong high", got)
+	}
+	if got := cfg.ResolveReasoningEffort("WRITER"); got != "high" {
+		t.Errorf("reasoning WRITER = %q, mong high (lookup phòng thủ)", got)
+	}
+}
+
+// TestValidateBaseChuanHoaRoles — ValidateBase là choke point: đi ra map phải canonical.
+func TestValidateBaseChuanHoaRoles(t *testing.T) {
+	cfg := Config{
+		Provider: "openrouter", ModelName: "m",
+		Providers: map[string]ProviderConfig{"openrouter": {APIKey: "sk-test-123456"}},
+		Roles: map[string]RoleConfig{
+			"Advisor": {Provider: "openrouter", Model: "a1"},
+		},
+	}
+	if err := cfg.ValidateBase(); err != nil {
+		t.Fatalf("ValidateBase: %v", err)
+	}
+	if _, ok := cfg.Roles["advisor"]; !ok {
+		t.Errorf("sau ValidateBase phải có key canonical: %+v", cfg.Roles)
+	}
+}
