@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CTKiet2006/kietnovel/internal/host"
 	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"github.com/CTKiet2006/kietnovel/internal/sp"
 	tea "github.com/charmbracelet/bubbletea"
@@ -46,6 +47,58 @@ func TestParseSPKhongQuestion(t *testing.T) {
 	}
 }
 
+// P4.1: /sp soi|inspect|检查 → inspect, không cần question, text thừa được lờ.
+func TestParseSPSoi(t *testing.T) {
+	for _, args := range [][]string{
+		{"soi"}, {"inspect"}, {"检查"},
+		{"SOI"}, {"Inspect"},
+		{"soi", "chương", "5"}, // text thừa: lờ đi có chủ ý, vẫn inspect
+	} {
+		mode, q, ok := parseSPArgs(args)
+		if !ok || mode != "inspect" || q != "" {
+			t.Errorf("parseSPArgs(%v) = %q,%q,%v", args, mode, q, ok)
+		}
+	}
+}
+
+// P4.1: /sp gợi ý|suggest|建议 → suggest. "gợi ý" là cụm đa từ — parser cũ chỉ
+// đọc từ đầu ("gợi") sẽ lặng lẽ rơi thành ask. Test này khóa bug đó.
+func TestParseSPGoiY(t *testing.T) {
+	for _, args := range [][]string{
+		{"gợi", "ý"}, {"suggest"}, {"建议"},
+		{"GỢI", "Ý"}, {"Suggest"},
+		{"gợi", "ý", "thêm"}, // text thừa: lờ đi
+	} {
+		mode, q, ok := parseSPArgs(args)
+		if !ok || mode != "suggest" || q != "" {
+			t.Errorf("parseSPArgs(%v) = %q,%q,%v", args, mode, q, ok)
+		}
+	}
+}
+
+// P4.1: từ subcommand không được trùng nhau giữa các mode — trùng là match
+// nondeterministic (map iteration). Test này chặn ngay lúc thêm từ mới.
+func TestSubcommandWordsDisjoint(t *testing.T) {
+	modes, ok := subcommandCatalog["story_partner"]
+	if !ok {
+		t.Fatal("thiếu catalog story_partner")
+	}
+	seen := map[string]string{}
+	for mode, words := range modes {
+		for _, w := range words {
+			key := strings.ToLower(strings.TrimSpace(w))
+			if owner, dup := seen[key]; dup {
+				t.Errorf("từ %q trùng giữa mode %q và %q", w, owner, mode)
+			} else {
+				seen[key] = mode
+			}
+		}
+	}
+	if len(seen) == 0 {
+		t.Error("catalog rỗng")
+	}
+}
+
 // runSPCommand với runtime nil → báo lỗi, không panic, không mở modal.
 func TestRunSPKhongRuntime(t *testing.T) {
 	m := newTestModel(120, 30)
@@ -60,7 +113,7 @@ func TestRunSPKhongRuntime(t *testing.T) {
 // 15-17. Modal: loading → result điền answer + metadata + viewport.
 func TestSPModalResult(t *testing.T) {
 	m := newTestModel(120, 30)
-	m.spState = newStoryPartnerState(120, 30, 7, "Hỏi?", "vi")
+	m.spState = newStoryPartnerState(120, 30, 7, "ask", "Hỏi?", "vi")
 	if !m.spState.loading {
 		t.Error("mới mở phải loading")
 	}
@@ -94,7 +147,7 @@ func TestSPModalResult(t *testing.T) {
 // 18. Error state: giữ modal, hiện lỗi, không retry tự động.
 func TestSPModalError(t *testing.T) {
 	m := newTestModel(120, 30)
-	m.spState = newStoryPartnerState(120, 30, 7, "Hỏi?", "vi")
+	m.spState = newStoryPartnerState(120, 30, 7, "ask", "Hỏi?", "vi")
 	out, _ := m.handleSPResultMsg(spResultMsg{reqID: 7, err: errors.New("provider boom")})
 	got := out.(Model)
 	if got.spState == nil {
@@ -112,7 +165,7 @@ func TestSPModalError(t *testing.T) {
 // Trước fix, Ctrl+C rơi vào viewport (bị nuốt), mở /sp rồi không thoát nhanh được.
 func TestSPCtrlCTheoLuatChung(t *testing.T) {
 	m := newTestModel(120, 30)
-	m.spState = newStoryPartnerState(120, 30, 1, "Hỏi?", "vi")
+	m.spState = newStoryPartnerState(120, 30, 1, "ask", "Hỏi?", "vi")
 
 	out, cmd, handled := m.handleSPKey(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if !handled {
@@ -136,7 +189,7 @@ func TestSPCtrlCTheoLuatChung(t *testing.T) {
 // Phím thường khác phải reset quitPending (không để Ctrl+C cũ treo rồi Quit oan).
 func TestSPPhimThuongResetQuit(t *testing.T) {
 	m := newTestModel(120, 30)
-	m.spState = newStoryPartnerState(120, 30, 1, "Hỏi?", "vi")
+	m.spState = newStoryPartnerState(120, 30, 1, "ask", "Hỏi?", "vi")
 	m.quitPending = true
 	out, _, _ := m.handleSPKey(tea.KeyMsg{Type: tea.KeyUp})
 	if out.(Model).quitPending {
@@ -145,7 +198,7 @@ func TestSPPhimThuongResetQuit(t *testing.T) {
 }
 func TestSPEscDongNgay(t *testing.T) {
 	m := newTestModel(120, 30)
-	m.spState = newStoryPartnerState(120, 30, 7, "Hỏi?", "vi")
+	m.spState = newStoryPartnerState(120, 30, 7, "ask", "Hỏi?", "vi")
 	out, _, handled := m.handleSPKey(tea.KeyMsg{Type: tea.KeyEsc})
 	if !handled {
 		t.Fatal("modal phải chặn Esc")
@@ -155,10 +208,52 @@ func TestSPEscDongNgay(t *testing.T) {
 	}
 }
 
+// P4: runSPCommand mở modal đúng mode (runtime giả — cmd trả về chưa chạy nên
+// Host rỗng không sao, chỉ cần qua guard nil).
+func TestRunSPMoModalDungMode(t *testing.T) {
+	for _, c := range []struct {
+		args           []string
+		mode, question string
+	}{
+		{[]string{"hỏi", "X?"}, "ask", "X?"},
+		{[]string{"soi"}, "inspect", ""},
+		{[]string{"gợi", "ý"}, "suggest", ""},
+		{[]string{"X?"}, "ask", "X?"},
+	} {
+		m := newTestModel(120, 30)
+		m.runtime = &host.Host{}
+		out, cmd := runSPCommand(m, c.args)
+		got := out.(Model)
+		if got.spState == nil {
+			t.Fatalf("%v: không mở modal", c.args)
+		}
+		if got.spState.mode != c.mode || got.spState.question != c.question {
+			t.Errorf("%v: mode=%q question=%q", c.args, got.spState.mode, got.spState.question)
+		}
+		if cmd == nil {
+			t.Errorf("%v: thiếu cmd gọi Host", c.args)
+		}
+	}
+}
+
+// P4: modal soi/gợi ý hiện label theo mode, không phải "Hỏi: " trống.
+func TestSPModalLabelTheoMode(t *testing.T) {
+	for _, c := range []struct{ mode, question, want string }{
+		{"ask", "Q?", "Hỏi: Q?"},
+		{"inspect", "", "Soi: "},
+		{"suggest", "", "Gợi ý: "},
+	} {
+		s := newStoryPartnerState(120, 30, 1, c.mode, c.question, "vi")
+		if got := s.view(120, 30); !strings.Contains(got, c.want) {
+			t.Errorf("mode %s view thiếu %q", c.mode, c.want)
+		}
+	}
+}
+
 // 21. Stale result (reqID khác / modal đã đóng) bị bỏ.
 func TestSPStaleResultBo(t *testing.T) {
 	m := newTestModel(120, 30)
-	m.spState = newStoryPartnerState(120, 30, 9, "Mới?", "vi")
+	m.spState = newStoryPartnerState(120, 30, 9, "ask", "Mới?", "vi")
 	out, _ := m.handleSPResultMsg(spResultMsg{reqID: 7, result: sp.Result{Answer: "cũ"}})
 	got := out.(Model)
 	if got.spState.answer != "" || !got.spState.loading {
@@ -177,9 +272,9 @@ func TestSPStaleResultBo(t *testing.T) {
 func TestSPRequestMoiSupersede(t *testing.T) {
 	m := newTestModel(120, 30)
 	m.spSeq = 7
-	m.spState = newStoryPartnerState(120, 30, 7, "Cũ?", "vi")
+	m.spState = newStoryPartnerState(120, 30, 7, "ask", "Cũ?", "vi")
 	m.spSeq++
-	m.spState = newStoryPartnerState(120, 30, m.spSeq, "Mới?", "vi")
+	m.spState = newStoryPartnerState(120, 30, m.spSeq, "ask", "Mới?", "vi")
 	if m.spState.reqID != 8 || m.spState.question != "Mới?" {
 		t.Errorf("modal phải là request mới: %+v", m.spState)
 	}
@@ -199,7 +294,7 @@ func TestSPCaptureUILang(t *testing.T) {
 	}
 	// Capture điểm gọi: runSPCommand đọc i18n.Language() lúc mở modal.
 	// Ở đây kiểm tra state giữ đúng lang được truyền.
-	s := newStoryPartnerState(120, 30, 1, "Q?", i18n.Language())
+	s := newStoryPartnerState(120, 30, 1, "ask", "Q?", i18n.Language())
 	if s.lang != "zh" {
 		t.Errorf("lang = %q, mong zh", s.lang)
 	}

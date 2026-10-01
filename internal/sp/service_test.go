@@ -317,14 +317,80 @@ func TestServiceTraResultDung(t *testing.T) {
 	}
 }
 
-// Câu hỏi rỗng và mode lạ phải bị từ chối trước khi chạm Store/model.
+// Câu hỏi rỗng (ask) và mode lạ phải bị từ chối trước khi chạm Store/model.
+// soi/gợi ý không cần question (tự xác định context từ story state).
 func TestServiceValidateTruoc(t *testing.T) {
 	svc := NewService(Deps{})
 	if _, err := svc.Ask(context.Background(), Request{Mode: ModeAsk}); err == nil {
-		t.Error("câu hỏi rỗng phải lỗi")
+		t.Error("ask rỗng phải lỗi")
 	}
-	if _, err := svc.Ask(context.Background(), Request{Mode: "soi", Question: "x"}); err == nil {
-		t.Error("mode soi chưa làm ở phase 1, phải từ chối rõ")
+	if _, err := svc.Ask(context.Background(), Request{Mode: "x-la"}); err == nil {
+		t.Error("mode lạ phải từ chối rõ")
+	}
+}
+
+// P4: cả 3 mode được service chấp nhận; soi/gợi ý không cần question.
+func TestServiceChapNhanBaMode(t *testing.T) {
+	st := newTestStore(t)
+	for _, req := range []Request{
+		{Mode: ModeAsk, Question: "Hỏi?"},
+		{Mode: ModeInspect},
+		{Mode: ModeSuggest},
+	} {
+		svc := NewService(Deps{
+			Store:    st,
+			Model:    &fakeAdvisorModel{answer: "ok", usage: agentcore.Usage{Input: 1, Output: 1}},
+			AuditDir: t.TempDir(),
+		})
+		res, err := svc.Ask(context.Background(), req)
+		if err != nil {
+			t.Errorf("%s lỗi: %v", req.Mode, err)
+			continue
+		}
+		if res.Answer != "ok" {
+			t.Errorf("%s answer sai", req.Mode)
+		}
+	}
+}
+
+// P4: audit ghi mode + context metrics (chars/blocks/truncated), digest giữ nguyên ý nghĩa.
+func TestServiceAuditGhiContextMetrics(t *testing.T) {
+	st := newTestStore(t)
+	dir := t.TempDir()
+	svc := NewService(Deps{
+		Store:    st,
+		Model:    &fakeAdvisorModel{answer: "ok", usage: agentcore.Usage{Input: 10, Output: 5}},
+		AuditDir: dir,
+	})
+	res, err := svc.Ask(context.Background(), Request{Mode: ModeInspect})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.SnapshotDigest == "" {
+		t.Error("thiếu digest")
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "sp.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var e map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(data))), &e); err != nil {
+		t.Fatal(err)
+	}
+	if e["mode"] != "inspect" {
+		t.Errorf("mode=%v", e["mode"])
+	}
+	if _, ok := e["context_chars"]; !ok {
+		t.Error("thiếu context_chars")
+	}
+	if _, ok := e["context_blocks"]; !ok {
+		t.Error("thiếu context_blocks")
+	}
+	if _, ok := e["context_truncated"]; !ok {
+		t.Error("thiếu context_truncated")
+	}
+	if _, ok := e["snapshot_digest"]; !ok {
+		t.Error("thiếu snapshot_digest")
 	}
 }
 

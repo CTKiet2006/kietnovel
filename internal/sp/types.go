@@ -2,12 +2,13 @@ package sp
 
 import "time"
 
-// Mode là chế độ hỏi của Story Partner. Phase 1 chỉ có Ask; Soi và GoiY là
-// prompt + contract khác trên cùng nền, làm sau.
+// Mode là chế độ hỏi của Story Partner.
 type Mode string
 
 const (
-	ModeAsk Mode = "ask"
+	ModeAsk     Mode = "ask"
+	ModeInspect Mode = "inspect"
+	ModeSuggest Mode = "suggest"
 )
 
 // Request là một câu hỏi gửi tới advisor.
