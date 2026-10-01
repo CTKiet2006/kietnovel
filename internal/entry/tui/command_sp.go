@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/CTKiet2006/kietnovel/internal/host"
@@ -141,21 +142,30 @@ func matchSubcommandPrefix(commandID, text string) (string, string, bool) {
 }
 
 // wordEndOffset trả byte offset ngay sau từ thứ n (1-indexed) trong text.
-// Text đã trim nên từ đầu tiên bắt đầu ở 0.
+// Text đã trim nên từ đầu tiên bắt đầu ở 0. Dùng unicode.IsSpace để khớp đúng
+// định nghĩa "từ" của strings.Fields (cả Unicode space như NBSP) — nếu không,
+// text chứa NBSP sẽ lệch offset và lookup trượt oan.
 func wordEndOffset(text string, n int) int {
 	i, count := 0, 0
 	for i < len(text) {
 		// Bỏ whitespace.
-		for i < len(text) && (text[i] == ' ' || text[i] == '\t' || text[i] == '\n') {
-			i++
+		for i < len(text) {
+			r, size := utf8.DecodeRuneInString(text[i:])
+			if !unicode.IsSpace(r) {
+				break
+			}
+			i += size
 		}
 		if i >= len(text) {
 			break
 		}
-		// Qua một từ (đoạn non-whitespace).
-		for i < len(text) && text[i] != ' ' && text[i] != '\t' && text[i] != '\n' {
-			// Nhảy qua cả rune UTF-8 để không chẻ đôi ký tự có dấu.
-			_, size := utf8.DecodeRuneInString(text[i:])
+		// Qua một từ (đoạn non-whitespace), nhảy theo rune để không chẻ đôi
+		// ký tự có dấu.
+		for i < len(text) {
+			r, size := utf8.DecodeRuneInString(text[i:])
+			if unicode.IsSpace(r) {
+				break
+			}
 			i += size
 		}
 		count++

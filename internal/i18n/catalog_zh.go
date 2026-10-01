@@ -585,6 +585,8 @@ var zhCatalog = map[string]string{
 	"Truyện này đang mở rồi.":                               "本故事已打开。",
 	"Truyện %q đang mở rồi — chọn truyện khác để chuyển.":   "故事%q已打开——请选择其他故事切换。",
 	"Không mở được truyện: %v":                              "无法打开故事：%v",
+	"Chưa mở truyện nào để chuyển đi.":                     "没有打开的可切换的故事。",
+	"Xem chi tiết trong last-error.log.":                   "详情见 last-error.log。",
 	"Đã chuyển sang truyện %q.":                             "已切换到故事%q。",
 	"Chuyển truyện — xác nhận":                              "切换故事——确认",
 	"CHUYỂN TRUYỆN — CÓ VIỆC ĐANG DỞ":                       "切换故事——有未完成的工作",

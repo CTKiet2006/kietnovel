@@ -93,7 +93,13 @@ func baseOf(dir string) string {
 
 // askSwitch là bước giữa của luồng chuyển truyện: chỉ hỏi khi truyện đang mở còn
 // việc dở. Không có việc dở thì chuyển thẳng, hỏi luôn chỉ làm mất công.
+// runtime nil (đường khởi động lạ) thì báo lỗi thay vì panic nil pointer.
 func (m Model) askSwitch(dir, name string) (Model, tea.Cmd) {
+	if m.runtime == nil {
+		m.booksErr = i18n.T("Chưa mở truyện nào để chuyển đi.")
+		m.textarea.Focus()
+		return m, nil
+	}
 	if sameDir(m.runtime.Dir(), dir) {
 		out, _ := renderBooksNotice(m, i18n.Tf("Truyện %q đang mở rồi.", name))
 		return out.(Model), nil
@@ -128,6 +134,9 @@ func (m Model) enterSwitchConfirm(dir, name, why string) Model {
 }
 
 // doSwitch thực hiện chuyển và báo kết quả.
+// Thất bại thì MỞ LẠI modal /books kèm lỗi trong booksErr (thấy ngay trong
+// khung, không chìm trong luồng sự kiện) và refocus ô nhập — trước đây trả về
+// model cũ vẫn blurred khiến toàn bộ bàn phím chết mà màn hình trông bình thường.
 func (m Model) doSwitch(dir string) (Model, tea.Cmd) {
 	next, cmd, err := m.switchBook(dir)
 	if err != nil {
@@ -135,8 +144,17 @@ func (m Model) doSwitch(dir string) (Model, tea.Cmd) {
 		if errors.Is(err, errAlreadyOpen) {
 			msg = i18n.T("Truyện này đang mở rồi.")
 		}
-		out, _ := renderBooksNotice(m, msg)
-		return out.(Model), nil
+		if m.books == nil {
+			m.books = newBooksState(m.width, m.height, booksList)
+			if m.runtime != nil {
+				if books, err := m.runtime.Books(); err == nil {
+					m.books.list = books
+				}
+			}
+		}
+		m.booksErr = msg + " " + i18n.T("Xem chi tiết trong last-error.log.")
+		m.textarea.Focus()
+		return m, nil
 	}
 	// Báo trước rồi mới vẽ, để dòng sự kiện không bị Modal che mất.
 	next.applyEvent(host.Event{

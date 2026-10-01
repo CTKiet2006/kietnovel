@@ -586,6 +586,8 @@ var enCatalog = map[string]string{
 	"Truyện này đang mở rồi.":                               "This story is already open.",
 	"Truyện %q đang mở rồi — chọn truyện khác để chuyển.":   "Story %q is already open — choose another story to switch.",
 	"Không mở được truyện: %v":                              "Cannot open story: %v",
+	"Chưa mở truyện nào để chuyển đi.":                     "No open story to switch from.",
+	"Xem chi tiết trong last-error.log.":                   "See last-error.log for details.",
 	"Đã chuyển sang truyện %q.":                             "Switched to story %q.",
 	"Chuyển truyện — xác nhận":                              "Switch story — confirm",
 	"CHUYỂN TRUYỆN — CÓ VIỆC ĐANG DỞ":                       "SWITCH STORY — UNFINISHED WORK",

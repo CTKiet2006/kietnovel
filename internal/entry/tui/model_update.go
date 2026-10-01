@@ -464,7 +464,9 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			if msg.err != nil {
 				m.err = msg.err
 			}
-			return m, tea.Batch(fetchSnapshot(m.runtime), enableMouse), true
+			// Ô nhập BLUR từ màn chào/khung hỏi ngôn ngữ: phải Focus lại ở đây,
+			// nếu không bàn phím chết toàn bộ (textarea nuốt mọi phím khi blurred).
+			return m, tea.Batch(fetchSnapshot(m.runtime), enableMouse, m.textarea.Focus()), true
 		}
 		// Sách đã xong: rơi vào bàn viết trạng thái xong (enterRunning mở chuột rồi đổi sang modeDone), không rơi về trang chào —
 		// trang chào không nhắc gì tới sách cũ, user tưởng mất sách; /reopen, /export, nhập sửa đều ở bàn viết.
@@ -483,7 +485,7 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 			enableMouse := m.enterRunning()
 			m.resizeTextarea()
 			m.textarea.Placeholder = defaultSteerPlaceholder()
-			return m, tea.Batch(fetchSnapshot(m.runtime), enableMouse), true
+			return m, tea.Batch(fetchSnapshot(m.runtime), enableMouse, m.textarea.Focus()), true
 		}
 		if msg.err != nil {
 			m.err = msg.err
@@ -840,7 +842,9 @@ func (m Model) handleStartResultMsg(msg startResultMsg) (tea.Model, tea.Cmd) {
 			m.textarea.Placeholder = placeholderForNewMode(m.startupMode)
 			return m, tea.Batch(fetchSnapshot(m.runtime), m.textarea.Focus())
 		}
-		return m, fetchSnapshot(m.runtime)
+		// Đường lỗi chung: ô nhập có thể đang blurred từ modal vừa đóng,
+		// Focus lại để bàn phím không chết im sau lỗi.
+		return m, tea.Batch(fetchSnapshot(m.runtime), m.textarea.Focus())
 	}
 	m.starting = false
 

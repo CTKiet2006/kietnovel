@@ -87,9 +87,11 @@ func (m Model) confirmBookLanguage(lang string) (tea.Model, tea.Cmd) {
 	})
 	m.refreshEventViewport()
 	// Chạy tiếp yêu cầu gõ dở, thay vì bắt người dùng gõ lại.
+	// Focus lại ô nhập: khung hỏi đã Blur, engine chạy xong mà không Focus thì
+	// bàn phím chết (textarea nuốt phím khi blurred).
 	if prompt != "" {
 		m.textarea.Reset()
-		return m, startRuntime(m.runtime, prompt)
+		return m, tea.Batch(startRuntime(m.runtime, prompt), m.textarea.Focus())
 	}
 	return m, m.textarea.Focus()
 }
