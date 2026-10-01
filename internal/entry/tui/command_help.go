@@ -38,12 +38,17 @@ func renderHelpText(width int) string {
 		if i > 0 {
 			b.WriteString("\n")
 		}
-		b.WriteString(nameStyle.Render("/" + spec.Name))
-		if len(spec.Aliases) > 0 {
-			b.WriteString(usageStyle.Render("  alias: /" + strings.Join(spec.Aliases, " /")))
+		lang := i18n.Language()
+		b.WriteString(nameStyle.Render("/" + spec.DisplayName(lang)))
+		aliases := append([]string(nil), spec.Aliases...)
+		if spec.Name != spec.DisplayName(lang) {
+			aliases = append([]string{spec.Name}, aliases...)
+		}
+		if len(aliases) > 0 {
+			b.WriteString(usageStyle.Render("  alias: /" + strings.Join(aliases, " /")))
 		}
 		b.WriteString("\n")
-		b.WriteString(usageStyle.Render(i18n.T("Cách dùng: ") + spec.Usage))
+		b.WriteString(usageStyle.Render(i18n.T("Cách dùng: ") + spec.UsageText(lang)))
 		b.WriteString("\n")
 		b.WriteString(descStyle.Render(wrapText(spec.Description, width)))
 		b.WriteString("\n")

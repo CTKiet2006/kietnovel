@@ -23,9 +23,12 @@ type slashCommandSpec struct {
 	// Names là tên hiển thị theo UI language: {"vi": {"đọc"}, "zh": {"阅读"}}.
 	// Parser khớp MỌI tên trong mọi ngôn ngữ (đổi UI không mất lệnh cũ),
 	// còn palette/help hiện tên của đúng ngôn ngữ đang dùng.
-	Names       map[string][]string
-	Group       string
-	Usage       string
+	Names map[string][]string
+	Group string
+	Usage string
+	// UsageByLang là cách dùng theo locale, key "vi"/"en"/"zh". Trống thì dùng
+	// Usage (chuỗi chuẩn). Help hiển thị bản đúng locale thay vì chuỗi raw.
+	UsageByLang map[string]string
 	Description string
 	AutoExecute bool
 	Hidden      bool
@@ -55,6 +58,19 @@ func (s slashCommandSpec) DisplayName(lang string) string {
 		}
 	}
 	return s.Name
+}
+
+// UsageText trả cách dùng theo UI language. Không có thì rơi về Usage.
+func (s slashCommandSpec) UsageText(lang string) string {
+	if u, ok := s.UsageByLang[lang]; ok && u != "" {
+		return u
+	}
+	if code, ok := i18n.SupportedCode(lang); ok {
+		if u, ok := s.UsageByLang[code]; ok && u != "" {
+			return u
+		}
+	}
+	return s.Usage
 }
 
 type slashCommand struct {
@@ -138,8 +154,17 @@ func lookupSubcommand(commandID, arg string) (string, bool) {
 func commandRegistryInstance() commandRegistry {
 	return newCommandRegistry([]slashCommandSpec{
 		{
-			Name:        "help",
-			ID:          "help",
+			Name: "help",
+			ID:   "help",
+			Names: map[string][]string{
+				"vi": {"giúp"},
+				"zh": {"帮助"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/help",
+				"en": "/help",
+				"zh": "/help",
+			},
 			Group:       "system",
 			Usage:       "/help",
 			Description: i18n.T("Xem danh sách lệnh"),
@@ -151,8 +176,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "model",
-			ID:          "model",
+			Name: "model",
+			ID:   "model",
+			Names: map[string][]string{
+				"vi": {"môhình"},
+				"zh": {"模型"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/model [vai-trò]",
+				"en": "/model [role]",
+				"zh": "/model [角色]",
+			},
 			Group:       "system",
 			Usage:       "/model [role]",
 			Description: i18n.T("Đổi model và mức suy luận của từng vai trò"),
@@ -175,8 +209,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "config",
-			ID:          "config",
+			Name: "config",
+			ID:   "config",
+			Names: map[string][]string{
+				"vi": {"cấuhình"},
+				"zh": {"配置"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/config",
+				"en": "/config",
+				"zh": "/config",
+			},
 			Group:       "system",
 			Usage:       "/config",
 			Description: i18n.T("Thêm/sửa Provider, model và context window"),
@@ -193,8 +236,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "diag",
-			ID:          "diag",
+			Name: "diag",
+			ID:   "diag",
+			Names: map[string][]string{
+				"vi": {"chẩnđoán"},
+				"zh": {"诊断"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/diag",
+				"en": "/diag",
+				"zh": "/diag",
+			},
 			Group:       "analysis",
 			Usage:       "/diag",
 			Description: i18n.T("Chẩn đoán sức khỏe truyện đang viết"),
@@ -207,8 +259,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "review",
-			ID:          "review",
+			Name: "review",
+			ID:   "review",
+			Names: map[string][]string{
+				"vi": {"duyệt"},
+				"zh": {"审核"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/review on|off",
+				"en": "/review on|off",
+				"zh": "/review on|off",
+			},
 			Group:       "writing",
 			Usage:       "/review on|off",
 			Description: i18n.T("Bật/tắt duyệt từng chương"),
@@ -231,8 +292,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "next",
-			ID:          "next",
+			Name: "next",
+			ID:   "next",
+			Names: map[string][]string{
+				"vi": {"tiếp"},
+				"zh": {"继续"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/next",
+				"en": "/next",
+				"zh": "/next",
+			},
 			Group:       "writing",
 			Usage:       "/next",
 			Description: i18n.T("Duyệt để viết chương tiếp theo"),
@@ -253,8 +323,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "start",
-			ID:          "start",
+			Name: "start",
+			ID:   "start",
+			Names: map[string][]string{
+				"vi": {"bắtđầu"},
+				"zh": {"开始"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/start <đường-dẫn>",
+				"en": "/start <path>",
+				"zh": "/start <路径>",
+			},
 			Group:       "writing",
 			Usage:       "/start <path>",
 			Description: i18n.T("Tạo truyện mới từ file thiết lập/dàn ý"),
@@ -276,8 +355,12 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "import",
-			ID:          "import",
+			Name: "import",
+			ID:   "import",
+			Names: map[string][]string{
+				"vi": {"nhập"},
+				"zh": {"导入"},
+			},
 			Group:       "writing",
 			Usage:       i18n.T("/import <path> [--yes] [--story=open|closed] [--continue] [--guide=<hướng dẫn cắt chương>]"),
 			Description: i18n.T("Nhập truyện ngoài vào để viết tiếp (không tham số thì tiếp tục lần nhập dở; --guide chỉnh cách cắt chương bằng ngôn ngữ tự nhiên)"),
@@ -299,8 +382,12 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "reopen",
-			ID:          "reopen",
+			Name: "reopen",
+			ID:   "reopen",
+			Names: map[string][]string{
+				"vi": {"mởlại"},
+				"zh": {"重开"},
+			},
 			Group:       "writing",
 			Usage:       i18n.T("/reopen [hướng viết tiếp]"),
 			Description: i18n.T("Mở lại truyện đã hoàn thành để viết tiếp"),
@@ -317,8 +404,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "cocreate",
-			ID:          "cocreate",
+			Name: "cocreate",
+			ID:   "cocreate",
+			Names: map[string][]string{
+				"vi": {"đồngsángtác"},
+				"zh": {"协作"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/cocreate",
+				"en": "/cocreate",
+				"zh": "/cocreate",
+			},
 			Aliases:     []string{"plan"},
 			Group:       "writing",
 			Usage:       "/cocreate",
@@ -346,8 +442,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "simulate",
-			ID:          "simulate",
+			Name: "simulate",
+			ID:   "simulate",
+			Names: map[string][]string{
+				"vi": {"môphỏng"},
+				"zh": {"模拟"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/simulate",
+				"en": "/simulate",
+				"zh": "/simulate",
+			},
 			Group:       "writing",
 			Usage:       "/simulate",
 			Description: i18n.T("Đọc ./simulate để tạo/cập nhật hồ sơ văn phong"),
@@ -368,8 +473,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "importsim",
-			ID:          "importsim",
+			Name: "importsim",
+			ID:   "importsim",
+			Names: map[string][]string{
+				"vi": {"nhậpvănphong"},
+				"zh": {"导风格"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/importsim <profile.json>",
+				"en": "/importsim <profile.json>",
+				"zh": "/importsim <profile.json>",
+			},
 			Group:       "writing",
 			Usage:       "/importsim <profile.json>",
 			Description: i18n.T("Nhập hồ sơ văn phong có sẵn từ file json"),
@@ -390,8 +504,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "sync",
-			ID:          "sync",
+			Name: "sync",
+			ID:   "sync",
+			Names: map[string][]string{
+				"vi": {"đồngbộ"},
+				"zh": {"同步"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/sync [--check]",
+				"en": "/sync [--check]",
+				"zh": "/sync [--check]",
+			},
 			Group:       "writing",
 			Usage:       "/sync [--check]",
 			Description: i18n.T("Kiểm tra/nhận các chương bạn sửa tay"),
@@ -414,8 +537,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "export",
-			ID:          "export",
+			Name: "export",
+			ID:   "export",
+			Names: map[string][]string{
+				"vi": {"xuất"},
+				"zh": {"导出"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/export [đường-dẫn] [from=N] [to=M] [--overwrite]",
+				"en": "/export [path] [from=N] [to=M] [--overwrite]",
+				"zh": "/export [路径] [from=N] [to=M] [--overwrite]",
+			},
 			Group:       "writing",
 			Usage:       "/export [path] [from=N] [to=M] [--overwrite]",
 			Description: i18n.T("Xuất các chương đã xong ra TXT/EPUB"),
@@ -437,9 +569,14 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "read",
-			Aliases:     []string{"doc"},
-			ID:          "read",
+			Name:    "read",
+			Aliases: []string{"doc"},
+			ID:      "read",
+			UsageByLang: map[string]string{
+				"vi": "/read [số chương]",
+				"en": "/read [chapter]",
+				"zh": "/read [章节]",
+			},
 			Names:       map[string][]string{"vi": {"đọc"}, "zh": {"阅读"}},
 			Group:       "writing",
 			Usage:       "/read [số chương]",
@@ -454,9 +591,14 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "books",
-			Aliases:     []string{"truyen"},
-			ID:          "books",
+			Name:    "books",
+			Aliases: []string{"truyen"},
+			ID:      "books",
+			UsageByLang: map[string]string{
+				"vi": "/books",
+				"en": "/books",
+				"zh": "/books",
+			},
 			Names:       map[string][]string{"vi": {"truyện"}, "zh": {"书库"}},
 			Group:       "writing",
 			Usage:       "/books",
@@ -467,8 +609,17 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "new",
-			ID:          "new",
+			Name: "new",
+			ID:   "new",
+			Names: map[string][]string{
+				"vi": {"mới"},
+				"zh": {"新建"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/new [tên truyện]",
+				"en": "/new [title]",
+				"zh": "/new [标题]",
+			},
 			Group:       "writing",
 			Usage:       "/new [tên truyện]",
 			Description: i18n.T("Tạo thư mục truyện mới trong output/"),
@@ -483,9 +634,18 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "delete",
-			Aliases:     []string{"rm"},
-			ID:          "delete",
+			Name:    "delete",
+			Aliases: []string{"rm"},
+			ID:      "delete",
+			Names: map[string][]string{
+				"vi": {"xóa"},
+				"zh": {"删除"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/delete [tên truyện]",
+				"en": "/delete [title]",
+				"zh": "/delete [标题]",
+			},
 			Group:       "writing",
 			Usage:       "/delete [tên truyện]",
 			Description: i18n.T("Xoá truyện — có bước xác nhận, không khôi phục được"),
@@ -512,9 +672,14 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
-			Name:        "language",
-			Aliases:     []string{"lang", "ngonngu"},
-			ID:          "language",
+			Name:    "language",
+			Aliases: []string{"lang", "ngonngu"},
+			ID:      "language",
+			UsageByLang: map[string]string{
+				"vi": "/language [ui|write] [vi|en|zh]",
+				"en": "/language [ui|write] [vi|en|zh]",
+				"zh": "/language [ui|write] [vi|en|zh]",
+			},
 			Names:       map[string][]string{"vi": {"ngônngữ"}, "zh": {"语言"}},
 			Group:       "system",
 			Usage:       "/language [ui|write] [vi|en|zh]",
@@ -525,8 +690,13 @@ func commandRegistryInstance() commandRegistry {
 		{
 			// /sp giữ NGUYÊN mọi locale (C1): nó là identifier/brand name, chỉ
 			// localize subcommand (hỏi/ask/问 → ask qua subcommandCatalog).
-			Name:        "sp",
-			ID:          "sp",
+			Name: "sp",
+			ID:   "sp",
+			UsageByLang: map[string]string{
+				"vi": "/sp [hỏi] <câu hỏi>",
+				"en": "/sp [ask] <question>",
+				"zh": "/sp [问] <问题>",
+			},
 			Group:       "writing",
 			Usage:       "/sp [hỏi] <câu hỏi>",
 			Description: i18n.T("Hỏi Story Partner mà không dừng máy đang viết"),

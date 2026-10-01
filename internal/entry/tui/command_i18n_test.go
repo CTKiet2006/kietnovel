@@ -76,9 +76,10 @@ func TestDisplayNameTheoLocale(t *testing.T) {
 	if got := spec.DisplayName("fr"); got != "read" {
 		t.Errorf("ngôn ngữ lạ phải rơi về Name: %q", got)
 	}
-	// Lệnh không có Names thì mọi locale đều là Name.
+	// Lệnh new giờ có tên locale vi=[mới]: DisplayName(vi) phải là tên đó,
+	// không phải Name.
 	plain, _ := r.Find("new")
-	if got := plain.DisplayName("vi"); got != "new" {
+	if got := plain.DisplayName("vi"); got != "mới" {
 		t.Errorf("new/vi: %q", got)
 	}
 }
@@ -231,7 +232,51 @@ func TestCommandIDuyNhat(t *testing.T) {
 	}
 }
 
-// B4: đổi UI language thì tên hiển thị đổi ngay trong session, không restart.
+// Help phải render tên + cách dùng theo đúng locale hiện tại, không phải chuỗi raw.
+// Trước fix, Help luôn hiện "/read" và Usage tiếng Việt ở mọi language.
+func TestHelpTheoLocale(t *testing.T) {
+	defer i18n.SetLanguage(i18n.LangVietnamese)
+
+	i18n.SetLanguage(i18n.LangChinese)
+	zh := renderHelpText(100)
+	for _, must := range []string{"/阅读", "/书库", "/语言", "/sp [问]"} {
+		if !strings.Contains(zh, must) {
+			t.Errorf("help zh thiếu %q", must)
+		}
+	}
+	if strings.Contains(zh, "/đọc") {
+		t.Error("help zh không được lẫn tên vi")
+	}
+
+	i18n.SetLanguage(i18n.LangEnglish)
+	en := renderHelpText(100)
+	for _, must := range []string{"/read", "/sp [ask] <question>"} {
+		if !strings.Contains(en, must) {
+			t.Errorf("help en thiếu %q", must)
+		}
+	}
+
+	i18n.SetLanguage(i18n.LangVietnamese)
+	vi := renderHelpText(100)
+	for _, must := range []string{"/đọc", "/truyện", "/sp [hỏi] <câu hỏi>"} {
+		if !strings.Contains(vi, must) {
+			t.Errorf("help vi thiếu %q", must)
+		}
+	}
+}
+
+// UsageText rơi về Usage khi locale không có bản riêng.
+func TestUsageTextFallback(t *testing.T) {
+	r := commandRegistryInstance()
+	spec, _ := r.Find("sp")
+	if got := spec.UsageText("fr"); got != "/sp [hỏi] <câu hỏi>" {
+		t.Errorf("fr phải về Usage chuẩn: %q", got)
+	}
+	if got := spec.UsageText("EN"); got != "/sp [ask] <question>" {
+		t.Errorf("EN phải chuẩn hoá về en: %q", got)
+	}
+}
+
 // retranslate() dựng lại compItems từ PaletteItems() (đọc i18n.Language hiện
 // tại) nên cơ chế đã đúng — test khóa hành vi đó.
 func TestDoiUIThiTenHienThiDoiNgay(t *testing.T) {

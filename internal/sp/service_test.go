@@ -31,6 +31,8 @@ type fakeAdvisorModel struct {
 	sawTools      bool
 	blockUntil    chan struct{}
 	wrapCancelErr bool
+	// noUsage: trả Usage nil — mô phỏng provider không báo usage.
+	noUsage bool
 }
 
 func (m *fakeAdvisorModel) numCalls() int {
@@ -53,6 +55,7 @@ func (m *fakeAdvisorModel) Generate(ctx context.Context, msgs []agentcore.Messag
 	}
 	blockUntil, wrapCancelErr := m.blockUntil, m.wrapCancelErr
 	fakeErr, answer, usage := m.err, m.answer, m.usage
+	fakeNoUsage := m.noUsage
 	m.mu.Unlock()
 	_ = msgs
 	if blockUntil != nil {
@@ -71,11 +74,15 @@ func (m *fakeAdvisorModel) Generate(ctx context.Context, msgs []agentcore.Messag
 	if fakeErr != nil {
 		return nil, fakeErr
 	}
-	return &agentcore.LLMResponse{Message: agentcore.Message{
+	msg := agentcore.Message{
 		Role:    agentcore.RoleAssistant,
 		Content: []agentcore.ContentBlock{{Type: agentcore.ContentText, Text: answer}},
-		Usage:   &usage,
-	}}, nil
+	}
+	if !fakeNoUsage {
+		u := usage
+		msg.Usage = &u
+	}
+	return &agentcore.LLMResponse{Message: msg}, nil
 }
 
 func (m *fakeAdvisorModel) GenerateStream(ctx context.Context, _ []agentcore.Message, _ []agentcore.ToolSpec, _ ...agentcore.CallOption) (<-chan agentcore.StreamEvent, error) {
@@ -444,8 +451,63 @@ func TestIdentityDungChungChoResultUsageAudit(t *testing.T) {
 	}
 }
 
-// TestIdentityGiuResolveKhiKhongCoNguon — Usage rỗng + ResolveIdentity rỗng →
-// giữ resolve ban đầu, không đoán.
+// TestIdentityLuaThieu truong hop review chi ra:
+// Usage.Provider="fallback" nhung Usage.Model="" (thieu mot field).
+// Truoc fix: gate "ca hai trung primary" cho qua vi Model rong != Model resolve?
+// Khong — gate cu so res (da overlay Provider) voi deps: Provider da thanh
+// fallback nen gate false, khong hoi LastTarget cho Model → Model giu resolve
+// (sai neu fallback ten khac). Sau fix: actual truoc (fallback/fallback-model),
+// Usage de tung field.
+func TestIdentityLuaThieu(t *testing.T) {
+	st := newTestStore(t)
+	var recorded []agentcore.Usage
+	auditDir := t.TempDir()
+	svc := NewService(Deps{
+		Store: st,
+		Model: &fakeAdvisorModel{
+			answer: "x",
+			usage:  agentcore.Usage{Input: 5, Output: 1, Provider: "fallback-prov"},
+		},
+		Provider: "openrouter", ModelName: "advisor-model",
+		ResolveIdentity: func() (string, string) { return "fallback-prov", "fallback-model" },
+		RecordUsage:     func(u agentcore.Usage) { recorded = append(recorded, u) },
+		AuditDir:        auditDir,
+	})
+	res, err := svc.Ask(context.Background(), Request{Mode: ModeAsk, Question: "Ai?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Provider != "fallback-prov" || res.Model != "fallback-model" {
+		t.Errorf("Result sai: %q/%q", res.Provider, res.Model)
+	}
+	if recorded[0].Provider != "fallback-prov" || recorded[0].Model != "fallback-model" {
+		t.Errorf("accounting sai: %+v", recorded[0])
+	}
+	data, _ := os.ReadFile(filepath.Join(auditDir, "sp.jsonl"))
+	if !strings.Contains(string(data), "fallback-model") {
+		t.Errorf("audit sai: %s", data)
+	}
+}
+
+// TestIdentityUsageNil — Usage nil hoan toan: actual attempt van phai len Result
+// va audit (accounting khong co gi de ghi).
+func TestIdentityUsageNil(t *testing.T) {
+	st := newTestStore(t)
+	svc := NewService(Deps{
+		Store:    st,
+		Model:    &fakeAdvisorModel{answer: "x", noUsage: true},
+		Provider: "openrouter", ModelName: "advisor-model",
+		ResolveIdentity: func() (string, string) { return "fallback-prov", "fallback-model" },
+		AuditDir:        t.TempDir(),
+	})
+	res, err := svc.Ask(context.Background(), Request{Mode: ModeAsk, Question: "Ai?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Provider != "fallback-prov" || res.Model != "fallback-model" {
+		t.Errorf("Result sai: %q/%q", res.Provider, res.Model)
+	}
+}
 func TestIdentityGiuResolveKhiKhongCoNguon(t *testing.T) {
 	st := newTestStore(t)
 	svc := NewService(Deps{

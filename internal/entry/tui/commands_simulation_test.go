@@ -38,8 +38,15 @@ func TestSimulationCommandsAreBlockedWhileRunning(t *testing.T) {
 
 func hasPaletteItem(items []commandPaletteItem, name string) bool {
 	for _, item := range items {
+		// Palette hiện tên theo locale (Name có thể là "duyệt" thay vì "review"),
+		// nên khớp cả tên chuẩn nằm trong Aliases.
 		if item.Name == name {
 			return true
+		}
+		for _, a := range item.Aliases {
+			if a == name {
+				return true
+			}
 		}
 	}
 	return false
