@@ -108,7 +108,41 @@ func TestSPModalError(t *testing.T) {
 	}
 }
 
-// 19-20. Esc đóng modal ngay (kể cả đang loading).
+// Ctrl+C trong modal /sp phải theo luật chung: lần 1 gác, lần 2 thoát.
+// Trước fix, Ctrl+C rơi vào viewport (bị nuốt), mở /sp rồi không thoát nhanh được.
+func TestSPCtrlCTheoLuatChung(t *testing.T) {
+	m := newTestModel(120, 30)
+	m.spState = newStoryPartnerState(120, 30, 1, "Hỏi?", "vi")
+
+	out, cmd, handled := m.handleSPKey(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if !handled {
+		t.Fatal("modal phải chặn Ctrl+C")
+	}
+	if cmd == nil {
+		t.Error("lần 1 phải hẹn giờ reset quitPending")
+	}
+	if out.(Model).spState == nil {
+		t.Error("lần 1 không được đóng modal")
+	}
+	// Lần 2 liên tiếp → Quit.
+	m2 := out.(Model)
+	m2.quitPending = true
+	_, cmd2, _ := m2.handleSPKey(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd2 == nil {
+		t.Fatal("lần 2 phải có cmd")
+	}
+}
+
+// Phím thường khác phải reset quitPending (không để Ctrl+C cũ treo rồi Quit oan).
+func TestSPPhimThuongResetQuit(t *testing.T) {
+	m := newTestModel(120, 30)
+	m.spState = newStoryPartnerState(120, 30, 1, "Hỏi?", "vi")
+	m.quitPending = true
+	out, _, _ := m.handleSPKey(tea.KeyMsg{Type: tea.KeyUp})
+	if out.(Model).quitPending {
+		t.Error("phím thường phải reset quitPending")
+	}
+}
 func TestSPEscDongNgay(t *testing.T) {
 	m := newTestModel(120, 30)
 	m.spState = newStoryPartnerState(120, 30, 7, "Hỏi?", "vi")

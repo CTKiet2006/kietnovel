@@ -549,4 +549,5 @@ var zhCatalog = map[string]string{
 	"  Cuộn: ↑↓ · Đóng: Esc": "  滚动：↑↓ · 关闭：Esc",
 	"Hỏi: ":                  "问：",
 	"Story Partner đang nghĩ… (máy viết bên dưới vẫn chạy)": "Story Partner 思考中……（下方的写作引擎继续运行）",
+	" · chương %d": " · 第%d章",
 }
