@@ -1,0 +1,156 @@
+package tui
+
+import (
+	"testing"
+
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
+)
+
+// Bảng subcommand cho /sp (Phase 3 dùng). Định nghĩa ở đây để chứng minh
+// resolveSubcommand xuyên ngôn ngữ trước khi lệnh tồn tại.
+var spAskTable = map[string][]string{
+	"ask": {"hỏi", "ask", "问"},
+}
+
+func TestCommandIDBatBien(t *testing.T) {
+	r := commandRegistryInstance()
+	for _, spec := range r.specs {
+		if spec.CommandID() == "" {
+			t.Errorf("spec %+v thiếu ID", spec.Name)
+		}
+	}
+	// read/books/language/new/delete phải có ID tường minh (không rơi về Name).
+	for _, want := range []string{"read", "books", "language", "new", "delete"} {
+		spec, ok := r.Find(want)
+		if !ok {
+			t.Fatalf("không tìm thấy %q", want)
+		}
+		if spec.CommandID() != want {
+			t.Errorf("CommandID = %q, mong %q", spec.CommandID(), want)
+		}
+	}
+}
+
+func TestMatchDaNgonNgu(t *testing.T) {
+	r := commandRegistryInstance()
+	cases := []struct{ input, wantID string }{
+		{"read", "read"},
+		{"đọc", "read"},
+		{"阅读", "read"},
+		{"doc", "read"}, // alias cũ không dấu vẫn chạy
+		{"books", "books"},
+		{"truyện", "books"},
+		{"书库", "books"},
+		{"truyen", "books"}, // alias cũ vẫn chạy
+		{"language", "language"},
+		{"ngônngữ", "language"},
+		{"语言", "language"},
+		{"ngonngu", "language"}, // alias cũ vẫn chạy
+		{"lang", "language"},
+	}
+	for _, c := range cases {
+		spec, ok := r.Find(c.input)
+		if !ok {
+			t.Errorf("Find(%q) không thấy", c.input)
+			continue
+		}
+		if spec.CommandID() != c.wantID {
+			t.Errorf("Find(%q) = %q, mong %q", c.input, spec.CommandID(), c.wantID)
+		}
+	}
+}
+
+func TestDisplayNameTheoLocale(t *testing.T) {
+	r := commandRegistryInstance()
+	spec, _ := r.Find("read")
+	if got := spec.DisplayName("vi"); got != "đọc" {
+		t.Errorf("vi: %q", got)
+	}
+	if got := spec.DisplayName("zh"); got != "阅读" {
+		t.Errorf("zh: %q", got)
+	}
+	if got := spec.DisplayName("en"); got != "read" {
+		t.Errorf("en phải rơi về Name: %q", got)
+	}
+	if got := spec.DisplayName("fr"); got != "read" {
+		t.Errorf("ngôn ngữ lạ phải rơi về Name: %q", got)
+	}
+	// Lệnh không có Names thì mọi locale đều là Name.
+	plain, _ := r.Find("new")
+	if got := plain.DisplayName("vi"); got != "new" {
+		t.Errorf("new/vi: %q", got)
+	}
+}
+
+func TestPaletteHienTenTheoLocale(t *testing.T) {
+	r := commandRegistryInstance()
+	byName := func(items []commandPaletteItem, want string) commandPaletteItem {
+		for _, it := range items {
+			if it.Name == want {
+				return it
+			}
+		}
+		return commandPaletteItem{}
+	}
+	vi := byName(r.PaletteItemsIn("vi"), "đọc")
+	if vi.Name == "" {
+		t.Fatal("palette vi thiếu /đọc")
+	}
+	// Gõ tên chuẩn vẫn khớp dù palette hiện tên locale.
+	found := false
+	for _, a := range vi.Aliases {
+		if a == "read" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("palette vi phải giữ tên chuẩn trong Aliases: %v", vi.Aliases)
+	}
+	zh := byName(r.PaletteItemsIn("zh"), "阅读")
+	if zh.Name == "" {
+		t.Fatal("palette zh thiếu /阅读")
+	}
+	en := byName(r.PaletteItemsIn("en"), "read")
+	if en.Name == "" {
+		t.Fatal("palette en thiếu /read")
+	}
+}
+
+func TestResolveSubcommandXuyenNgonNgu(t *testing.T) {
+	for _, in := range []string{"hỏi", "HỎI", "ask", "ASK", "问"} {
+		mode, ok := resolveSubcommand(in, spAskTable)
+		if !ok || mode != "ask" {
+			t.Errorf("resolveSubcommand(%q) = %q,%v — phải về ask", in, mode, ok)
+		}
+	}
+	// Từ lạ và rỗng không phải mode nào.
+	for _, in := range []string{"", "   ", "soi", "gợi ý", "delete"} {
+		if mode, ok := resolveSubcommand(in, spAskTable); ok {
+			t.Errorf("resolveSubcommand(%q) = %q — phải không khớp", in, mode)
+		}
+	}
+}
+
+func TestResolveSubcommandBangRong(t *testing.T) {
+	if _, ok := resolveSubcommand("hỏi", nil); ok {
+		t.Error("bảng rỗng phải không khớp gì")
+	}
+	if _, ok := resolveSubcommand("hỏi", map[string][]string{}); ok {
+		t.Error("bảng rỗng phải không khớp gì")
+	}
+}
+
+// i18n.Language đang là gì thì PaletteItems() mặc định cũng hiện đúng locale đó.
+func TestPaletteMacDinhTheoUILang(t *testing.T) {
+	defer i18n.SetLanguage(i18n.LangVietnamese)
+	i18n.SetLanguage(i18n.LangVietnamese)
+	found := false
+	for _, it := range commandRegistryInstance().PaletteItems() {
+		if it.Name == "đọc" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("UI vi mà palette không hiện /đọc")
+	}
+}

@@ -15,8 +15,15 @@ import (
 )
 
 type slashCommandSpec struct {
-	Name        string
-	Aliases     []string
+	Name    string
+	Aliases []string
+	// ID là tên nội bộ bất biến của lệnh. Runtime chỉ xử lý ID.
+	// Trống thì lấy Name (mọi lệnh hiện tại đều dùng tên tiếng Anh làm ID).
+	ID string
+	// Names là tên hiển thị theo UI language: {"vi": {"đọc"}, "zh": {"阅读"}}.
+	// Parser khớp MỌI tên trong mọi ngôn ngữ (đổi UI không mất lệnh cũ),
+	// còn palette/help hiện tên của đúng ngôn ngữ đang dùng.
+	Names       map[string][]string
 	Group       string
 	Usage       string
 	Description string
@@ -24,6 +31,23 @@ type slashCommandSpec struct {
 	Hidden      bool
 	NeedsIdle   bool
 	Run         func(m Model, args []string) (tea.Model, tea.Cmd)
+}
+
+// CommandID trả ID nội bộ của lệnh. Mọi logic runtime phải dùng ID, không dùng
+// Name/Aliases — tên hiển thị đổi theo locale nhưng ID thì không.
+func (s slashCommandSpec) CommandID() string {
+	if s.ID != "" {
+		return s.ID
+	}
+	return s.Name
+}
+
+// DisplayName trả tên hiển thị theo UI language. Không có thì rơi về Name.
+func (s slashCommandSpec) DisplayName(lang string) string {
+	if names, ok := s.Names[lang]; ok && len(names) > 0 {
+		return names[0]
+	}
+	return s.Name
 }
 
 type slashCommand struct {
@@ -52,7 +76,40 @@ func (s slashCommandSpec) matches(name string) bool {
 			return true
 		}
 	}
+	// Khớp tên mọi ngôn ngữ: người đổi UI vẫn gõ được tên cũ.
+	for _, names := range s.Names {
+		for _, n := range names {
+			if strings.EqualFold(n, name) {
+				return true
+			}
+		}
+	}
 	return false
+}
+
+// resolveSubcommand chuẩn hoá từ subcommand (từ đầu tiên sau tên lệnh) về mode
+// chuẩn, xuyên ngôn ngữ.
+//
+// table: mode chuẩn → các từ được chấp nhận ở mọi ngôn ngữ, ví dụ
+//
+//	{"ask": {"hỏi", "ask", "问"}}
+//
+// "/sp hỏi", "/sp ask", "/sp 问" đều về "ask". Logic lệnh sau đó không biết gì
+// về tiếng Việt nữa. Không khớp thì trả ("", false) — caller tự quyết (với /sp:
+// coi như câu hỏi, mặc định ask).
+func resolveSubcommand(arg string, table map[string][]string) (string, bool) {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return "", false
+	}
+	for mode, words := range table {
+		for _, w := range words {
+			if strings.EqualFold(w, arg) {
+				return mode, true
+			}
+		}
+	}
+	return "", false
 }
 
 func commandRegistryInstance() commandRegistry {
@@ -345,6 +402,8 @@ func commandRegistryInstance() commandRegistry {
 		{
 			Name:        "read",
 			Aliases:     []string{"doc"},
+			ID:          "read",
+			Names:       map[string][]string{"vi": {"đọc"}, "zh": {"阅读"}},
 			Group:       "writing",
 			Usage:       "/read [số chương]",
 			Description: i18n.T("Đọc các chương đã lưu ngay trong TUI"),
@@ -360,6 +419,8 @@ func commandRegistryInstance() commandRegistry {
 		{
 			Name:        "books",
 			Aliases:     []string{"truyen"},
+			ID:          "books",
+			Names:       map[string][]string{"vi": {"truyện"}, "zh": {"书库"}},
 			Group:       "writing",
 			Usage:       "/books",
 			Description: i18n.T("Xem danh sách truyện, tạo mới hoặc xoá"),
@@ -370,6 +431,7 @@ func commandRegistryInstance() commandRegistry {
 		},
 		{
 			Name:        "new",
+			ID:          "new",
 			Group:       "writing",
 			Usage:       "/new [tên truyện]",
 			Description: i18n.T("Tạo thư mục truyện mới trong output/"),
@@ -386,6 +448,7 @@ func commandRegistryInstance() commandRegistry {
 		{
 			Name:        "delete",
 			Aliases:     []string{"rm"},
+			ID:          "delete",
 			Group:       "writing",
 			Usage:       "/delete [tên truyện]",
 			Description: i18n.T("Xoá truyện — có bước xác nhận, không khôi phục được"),
@@ -414,6 +477,8 @@ func commandRegistryInstance() commandRegistry {
 		{
 			Name:        "language",
 			Aliases:     []string{"lang", "ngonngu"},
+			ID:          "language",
+			Names:       map[string][]string{"vi": {"ngônngữ"}, "zh": {"语言"}},
 			Group:       "system",
 			Usage:       "/language [ui|write] [vi|en|zh]",
 			Description: i18n.T("Ngôn ngữ giao diện (ui) và ngôn ngữ sáng tác (write) — tách riêng"),
