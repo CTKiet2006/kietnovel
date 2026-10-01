@@ -550,4 +550,5 @@ var enCatalog = map[string]string{
 	"  Cuộn: ↑↓ · Đóng: Esc": "  Scroll: ↑↓ · Close: Esc",
 	"Hỏi: ":                  "Q: ",
 	"Story Partner đang nghĩ… (máy viết bên dưới vẫn chạy)": "Story Partner is thinking… (the writing engine below keeps running)",
+	" · chương %d": " · ch. %d",
 }

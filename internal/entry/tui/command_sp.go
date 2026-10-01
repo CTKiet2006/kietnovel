@@ -148,12 +148,25 @@ func (m Model) handleSPKey(msg tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	switch msg.Type {
 	case tea.KeyEsc:
 		// Esc: hủy request rồi đóng modal NGAY, không đợi model.
+		m.quitPending = false
 		if m.runtime != nil {
 			m.runtime.CancelStoryPartner()
 		}
 		m.spState = nil
 		return m, m.textarea.Focus(), true
+	case tea.KeyCtrlC:
+		// Thoát 2 lần như mọi modal khác (handleBlockingModalKey): không có
+		// nhánh này thì mở /sp rồi bấm Ctrl+C không tác dụng, phải Esc trước.
+		if m.quitPending {
+			return m, tea.Quit, true
+		}
+		m.quitPending = true
+		return m, tea.Tick(time.Second, func(time.Time) tea.Msg { return quitResetMsg{} }), true
+	case tea.KeyCtrlR:
+		next, cmd := m.toggleMouseReporting()
+		return next, cmd, true
 	}
+	m.quitPending = false
 	// Viewport cuộn bằng phím thường của viewport.
 	var cmd tea.Cmd
 	m.spState.viewport, cmd = m.spState.viewport.Update(msg)
@@ -180,7 +193,7 @@ func (s *storyPartnerState) view(w, h int) string {
 		meta := fmt.Sprintf("digest %s · %s %s",
 			shortDigest(s.digest), s.provider, s.model)
 		if s.chapter > 0 {
-			meta += fmt.Sprintf(" · chương %d", s.chapter)
+			meta += i18n.Tf(" · chương %d", s.chapter)
 		}
 		b = append(b, dim.Render(meta))
 	}
