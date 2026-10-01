@@ -51,7 +51,48 @@ func TestRecordSidecarVanGhiNhanTien(t *testing.T) {
 	}
 }
 
-// TestRecordSidecarNilAnToan — tracker nil không được panic (đường audit gọi).
+// TestRecordSidecarKhongBanOverallCacheBreaks — isolation phải trọn vẹn:
+// sidecar gây đứt cache (hit giảm mạnh, prefix không co) thì perAgent advisor
+// tăng, nhưng overall.CacheBreaks đứng yên. Test cũ chỉ assert Totals/onCost.
+func TestRecordSidecarKhongBanOverallCacheBreaks(t *testing.T) {
+	tr := NewUsageTracker(nil, nil)
+	// Lần 1 đặt baseline: prefix 10000, hit 9000.
+	tr.RecordSidecar("advisor", agentcore.Usage{Input: 10000, Output: 10, CacheRead: 9000}, "p", "m")
+	// Lần 2: prefix không co (10000), hit rơi về 0 → đủ điều kiện break
+	// (>5% và >=2000 tokens).
+	tr.RecordSidecar("advisor", agentcore.Usage{Input: 10000, Output: 10, CacheRead: 0}, "p", "m")
+
+	tr.mu.Lock()
+	overallBreaks := tr.overall.CacheBreaks
+	per := tr.perAgent["advisor"]
+	tr.mu.Unlock()
+	if overallBreaks != 0 {
+		t.Errorf("overall.CacheBreaks = %d — sidecar làm bẩn số liệu Engine", overallBreaks)
+	}
+	if per == nil || per.CacheBreaks != 1 {
+		t.Errorf("perAgent[advisor].CacheBreaks phải = 1, được %+v", per)
+	}
+}
+
+// TestRecordThuongVanTangOverallCacheBreaks — đối chứng: đường thường vẫn phải
+// tăng overall như cũ, refactor tách sidecar không được làm mất hành vi này.
+func TestRecordThuongVanTangOverallCacheBreaks(t *testing.T) {
+	tr := NewUsageTracker(nil, nil)
+	msg := func(in, read int) agentcore.Message {
+		return agentcore.Message{
+			Role:    agentcore.RoleAssistant,
+			Content: []agentcore.ContentBlock{{Type: agentcore.ContentText, Text: "x"}},
+			Usage:   &agentcore.Usage{Input: in, Output: 10, CacheRead: read},
+		}
+	}
+	tr.Record("writer", "draft", msg(10000, 9000))
+	tr.Record("writer", "draft", msg(10000, 0))
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	if tr.overall.CacheBreaks != 1 {
+		t.Errorf("overall.CacheBreaks = %d, mong 1", tr.overall.CacheBreaks)
+	}
+}
 func TestRecordSidecarNilAnToan(t *testing.T) {
 	var tr *UsageTracker
 	tr.RecordSidecar("advisor", agentcore.Usage{Input: 1}, "", "")

@@ -1,6 +1,13 @@
 package bootstrap
 
-import "testing"
+import (
+	"context"
+	"errors"
+	"sync/atomic"
+	"testing"
+
+	"github.com/voocel/agentcore"
+)
 
 func advisorTestConfig(withAdvisor bool) Config {
 	cfg := Config{
@@ -49,9 +56,62 @@ func TestAdvisorRoleVangFallbackDefault(t *testing.T) {
 	}
 }
 
-// F. Fallback tường minh: advisor primary hỏng lúc gọi thì failoverModel chuyển
-// sang fallback và báo reporter. Ở đây chỉ kiểm tra cấu hình fallback được dựng
-// (gọi thật cần mạng, không làm trong unit test).
+// TestFailoverKhongThuKhiDaCancel — cancel đi trước fallback.
+//
+// Lỗi provider có thể bọc context.Canceled dưới dạng string mà errors.Is không
+// bắt được ("provider client: context canceled"). Không có guard ctx.Err() thì
+// failover thử fallback cho một request đã chết — đốt thêm tiền oan.
+func TestFailoverKhongThuKhiDaCancel(t *testing.T) {
+	var fallbackCalls int32
+	primary := &failoverFake{err: errors.New("provider client: context canceled")}
+	fallback := &failoverFake{answer: "fallback-ok", calls: &fallbackCalls}
+
+	ms, err := NewModelSet(advisorTestConfig(true))
+	if err != nil {
+		t.Fatalf("NewModelSet: %v", err)
+	}
+	// Thay primary/fallback bằng fake: cùng package nên gán trực tiếp.
+	ms.models["advisor"] = NewSwappableModel("openrouter", "advisor-model", primary, nil)
+	ms.fallbacks["advisor"] = []modelTarget{{provider: "openrouter", name: "fallback-model", model: fallback}}
+
+	got := ms.ForRoleWithFailover("advisor", nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // request đã chết trước khi gọi
+	_, err = got.Generate(ctx, nil, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("phải context.Canceled, được %v", err)
+	}
+	if atomic.LoadInt32(&fallbackCalls) != 0 {
+		t.Errorf("fallback bị gọi %d lần cho request đã chết", fallbackCalls)
+	}
+}
+
+type failoverFake struct {
+	answer string
+	err    error
+	calls  *int32
+}
+
+func (m *failoverFake) Generate(_ context.Context, _ []agentcore.Message, _ []agentcore.ToolSpec, _ ...agentcore.CallOption) (*agentcore.LLMResponse, error) {
+	if m.calls != nil {
+		atomic.AddInt32(m.calls, 1)
+	}
+	if m.err != nil {
+		return nil, m.err
+	}
+	return &agentcore.LLMResponse{Message: agentcore.Message{
+		Role:    agentcore.RoleAssistant,
+		Content: []agentcore.ContentBlock{{Type: agentcore.ContentText, Text: m.answer}},
+	}}, nil
+}
+
+func (m *failoverFake) GenerateStream(ctx context.Context, _ []agentcore.Message, _ []agentcore.ToolSpec, _ ...agentcore.CallOption) (<-chan agentcore.StreamEvent, error) {
+	ch := make(chan agentcore.StreamEvent)
+	close(ch)
+	return ch, ctx.Err()
+}
+
+func (m *failoverFake) SupportsTools() bool { return false }
 func TestAdvisorFallbackDuocDung(t *testing.T) {
 	cfg := advisorTestConfig(true)
 	cfg.Roles["advisor"] = RoleConfig{

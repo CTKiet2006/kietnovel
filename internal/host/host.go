@@ -78,13 +78,18 @@ type Host struct {
 
 	interMu sync.Mutex // Định đoạn can thiệp tuần tự FIFO (mỗi thời điểm tối đa một lần tư vấn đang chờ)
 
-	// spMu/spCancel/spGen là sidecar của Story Partner (/sp hỏi): mỗi thời điểm một
-	// advisor request, request mới hủy request cũ. Tách khỏi mu/interMu/exclusive
+	// spMu/spCancel/spGen/spWG là sidecar của Story Partner (/sp hỏi): mỗi thời điểm
+	// một advisor request, request mới hủy request cũ. Tách khỏi mu/interMu/exclusive
 	// vì cancel ở đây không bao giờ động vào Engine hay lifecycle.
 	// spGen để finish chỉ dọn đúng lượt mình (func không so sánh được).
+	// spWG để Close đợi /sp kết thúc trước khi persist usage và thả lease.
 	spMu     sync.Mutex
 	spCancel context.CancelFunc
 	spGen    int
+	spWG     sync.WaitGroup
+	// spClosed chặn request mới sau khi Close bắt đầu. Check và Add nguyên tử
+	// dưới spMu nên không có Add nào lọt qua sau Wait.
+	spClosed bool
 	// resolveAdvisorModel là seam test: inject fake advisor model để không gọi
 	// mạng. Production luôn nil → resolveAdvisor đi ForRoleWithFailover thật.
 	resolveAdvisorModel func() agentcore.ChatModel
@@ -1020,6 +1025,18 @@ func (h *Host) Close() {
 		h.engine.abort()
 		h.engine.wait()
 		h.asyncWG.Wait()
+
+		// Story Partner: hủy request đang chạy rồi đợi nó kết thúc TRƯỚC khi
+		// persist usage và thả lease. Nếu không, /sp trả về sau SaveNow() thì
+		// tiền advisor cộng vào bộ nhớ nhưng không còn auto-save loop để flush,
+		// và audit có thể ghi sau khi lease đã thả.
+		// spClosed set dưới spMu trước khi Wait: request mới sau điểm này bị
+		// từ chối ngay trong start (nguyên tử với Add, không lọt).
+		h.spMu.Lock()
+		h.spClosed = true
+		h.spMu.Unlock()
+		h.CancelStoryPartner()
+		h.spWG.Wait()
 
 		if h.usageCancel != nil {
 			h.usageCancel()

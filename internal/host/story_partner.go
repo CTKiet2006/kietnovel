@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"path/filepath"
 	"time"
@@ -27,7 +28,10 @@ const storyPartnerTimeout = 2 * time.Minute
 // qua context riêng của sidecar; ctx của caller vẫn được tôn trọng (cancel từ
 // phía nào cũng về context.Canceled).
 func (h *Host) AskStoryPartner(ctx context.Context, req sp.Request) (sp.Result, error) {
-	gen, spCtx, cancel := h.startStoryPartnerCall(ctx)
+	gen, spCtx, cancel, err := h.startStoryPartnerCall(ctx)
+	if err != nil {
+		return sp.Result{}, err
+	}
 	defer h.finishStoryPartnerCall(gen, cancel)
 
 	model := h.resolveAdvisor()
@@ -45,7 +49,22 @@ func (h *Host) AskStoryPartner(ctx context.Context, req sp.Request) (sp.Result, 
 		},
 		AuditDir: filepath.Join(h.store.Dir(), "logs", "sp"),
 	})
-	return svc.Ask(spCtx, req)
+	res, err := svc.Ask(spCtx, req)
+	if err != nil {
+		return sp.Result{}, err
+	}
+	// Identity tầng cuối: service đã ưu tiên usage thật. Nếu usage không có
+	// identity (res vẫn là resolve ban đầu) mà model thực tế là failover đã chạy
+	// fallback, thì lấy target thật qua seam LastTarget — không audit nhầm
+	// primary cho request chạy fallback. Rỗng thì giữ nguyên, không đoán.
+	if res.Provider == prov && res.Model == name {
+		if lt, ok := model.(interface{ LastTarget() (string, string) }); ok {
+			if p, n := lt.LastTarget(); p != "" && n != "" {
+				res.Provider, res.Model = p, n
+			}
+		}
+	}
+	return res, nil
 }
 
 // resolveAdvisor lấy advisor model qua failover thật.
@@ -76,16 +95,23 @@ func (h *Host) CancelStoryPartner() {
 	}
 }
 
-func (h *Host) startStoryPartnerCall(ctx context.Context) (int, context.Context, context.CancelFunc) {
+func (h *Host) startStoryPartnerCall(ctx context.Context) (int, context.Context, context.CancelFunc, error) {
 	h.spMu.Lock()
 	defer h.spMu.Unlock()
+	// Kiểm closing và Add phải nguyên tử dưới cùng spMu: nếu check ở mutex khác
+	// với Add thì Close có thể lọt vào giữa — Wait đã qua mà Add mới tới, request
+	// chạy sau khi usage đã persist và lease đã thả.
+	if h.spClosed {
+		return 0, nil, nil, errors.New("sp: host đang đóng, không nhận request mới")
+	}
 	if h.spCancel != nil {
 		h.spCancel()
 	}
 	spCtx, cancel := context.WithTimeout(ctx, storyPartnerTimeout)
 	h.spCancel = cancel
 	h.spGen++
-	return h.spGen, spCtx, cancel
+	h.spWG.Add(1)
+	return h.spGen, spCtx, cancel, nil
 }
 
 // finishStoryPartnerCall dọn lượt mình: gọi cancel để giải phóng timer của
@@ -100,4 +126,5 @@ func (h *Host) finishStoryPartnerCall(gen int, cancel context.CancelFunc) {
 	if h.spGen == gen {
 		h.spCancel = nil
 	}
+	h.spWG.Done()
 }

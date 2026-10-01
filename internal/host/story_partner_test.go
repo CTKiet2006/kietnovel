@@ -107,6 +107,7 @@ func newSPTestHost(t *testing.T, fake *fakeSPModel) (*Host, string) {
 		store:    st,
 		models:   ms,
 		usage:    NewUsageTracker(nil, nil),
+		engine:   &engine{},
 		events:   make(chan Event, 16),
 		streamCh: make(chan string, 16),
 		done:     make(chan struct{}),
@@ -203,7 +204,64 @@ func TestSPHostRequestMoiHuyCu(t *testing.T) {
 	}
 }
 
-// D. Sidecar budget: cost lớn, overall không đổi, onCost không gọi, không abort.
+// P1. Close thật khi /sp đang block → request nhận context.Canceled,
+// Close không treo, usage kịp persist trước khi thả lease.
+func TestSPHostCloseHuyRequestDangChay(t *testing.T) {
+	fake := &fakeSPModel{answer: "x", block: make(chan struct{}), blockFirstOnly: true}
+	h, _ := newSPTestHost(t, fake)
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, err := h.AskStoryPartner(context.Background(), spReq("Đợi?"))
+		errCh <- err
+	}()
+	deadline := time.Now().Add(10 * time.Second)
+	for fake.numCalls() == 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if fake.numCalls() == 0 {
+		t.Fatal("request không vào tới Generate")
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	done := make(chan struct{})
+	go func() {
+		h.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(15 * time.Second):
+		t.Fatal("Close treo khi /sp đang chạy")
+	}
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("request phải Canceled, được %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("request treo sau Close")
+	}
+}
+
+// P1b. Ask sau khi Close thật → lỗi rõ ràng, không panic, không gọi model.
+func TestSPHostAskSauCloseLoiRo(t *testing.T) {
+	fake := &fakeSPModel{answer: "x"}
+	h, _ := newSPTestHost(t, fake)
+	h.Close()
+
+	_, err := h.AskStoryPartner(context.Background(), spReq("Muộn?"))
+	if err == nil {
+		t.Fatal("phải lỗi khi host đã đóng")
+	}
+	if !strings.Contains(err.Error(), "đang đóng") {
+		t.Errorf("lỗi phải nói rõ host đang đóng: %v", err)
+	}
+	if fake.numCalls() != 0 {
+		t.Error("không được gọi model sau khi đóng")
+	}
+}
+
 func TestSPHostSidecarBudgetKhongAbort(t *testing.T) {
 	fake := &fakeSPModel{
 		answer: "ok",

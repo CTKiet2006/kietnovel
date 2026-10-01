@@ -405,21 +405,57 @@ type failoverModel struct {
 	primary *SwappableModel
 	set     *ModelSet
 	report  FailoverReporter
+	// lastMu/lastTarget ghi lại target của attempt THÀNH CÔNG gần nhất (primary
+	// hay fallback). Để caller (audit /sp) biết request thực tế chạy model nào
+	// khi Usage không có identity — Info() chỉ trả primary nên không dùng được.
+	lastMu     sync.Mutex
+	lastTarget modelTarget
 }
+
+// LastTarget trả provider/model của attempt thành công gần nhất.
+// Rỗng khi chưa có attempt nào thành công.
 
 func (m *failoverModel) Generate(ctx context.Context, messages []agentcore.Message, tools []agentcore.ToolSpec, opts ...agentcore.CallOption) (*agentcore.LLMResponse, error) {
 	current := m.currentTarget()
 	resp, err := current.model.Generate(ctx, messages, tools, opts...)
 	if err == nil {
+		m.setLastTarget(current)
 		return resp, nil
 	}
 
+	// Cancel đi trước fallback: lỗi provider có thể bọc context.Canceled dưới
+	// dạng string ("provider client: context canceled") mà errors.Is không bắt
+	// được. Thử fallback lúc này là đốt thêm một request cho lượt đã chết.
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	next, reason, ok := m.pickFallback(current, err, requestsJSONSchema(opts))
 	if !ok {
 		return nil, err
 	}
 	m.reportFailover(current, next, reason, err)
-	return next.model.Generate(ctx, messages, tools, opts...)
+	resp, err = next.model.Generate(ctx, messages, tools, opts...)
+	if err == nil {
+		m.setLastTarget(next)
+	}
+	return resp, err
+}
+
+// setLastTarget ghi target thành công. Mutex riêng vì Generate có thể chạy
+// concurrent qua cùng failoverModel (single-flight ở tầng Host là policy, không
+// phải đảm bảo của tầng này).
+func (m *failoverModel) setLastTarget(t modelTarget) {
+	m.lastMu.Lock()
+	defer m.lastMu.Unlock()
+	m.lastTarget = t
+}
+
+// LastTarget trả provider/model của attempt thành công gần nhất.
+// Rỗng khi chưa có attempt nào thành công — caller giữ identity cũ, không đoán.
+func (m *failoverModel) LastTarget() (provider, name string) {
+	m.lastMu.Lock()
+	defer m.lastMu.Unlock()
+	return m.lastTarget.provider, m.lastTarget.name
 }
 
 func (m *failoverModel) GenerateStream(ctx context.Context, messages []agentcore.Message, tools []agentcore.ToolSpec, opts ...agentcore.CallOption) (<-chan agentcore.StreamEvent, error) {

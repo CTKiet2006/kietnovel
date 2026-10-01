@@ -20,29 +20,46 @@ import (
 
 // fakeAdvisorModel là ChatModel giả cho test: trả lời theo kịch bản, ghi lại
 // những gì service gửi để assert "không tools, không mutation".
+// Mọi field đọc/ghi qua mutex vì Generate chạy goroutine khác với goroutine
+// poll trong test — đọc trực tiếp là data race dưới -race.
 type fakeAdvisorModel struct {
-	answer   string
-	usage    agentcore.Usage
-	err      error
-	calls    int
-	sawTools bool
-	// blockUntil cho phép giữ Generate để test cancel.
-	blockUntil chan struct{}
-	// wrapCancelErr: khi ctx hủy giữa lúc chờ, trả lỗi provider bọc ngoài thay
-	// vì ctx.Err() nguyên bản — mô phỏng model thật.
+	mu            sync.Mutex
+	answer        string
+	usage         agentcore.Usage
+	err           error
+	calls         int
+	sawTools      bool
+	blockUntil    chan struct{}
 	wrapCancelErr bool
 }
 
+func (m *fakeAdvisorModel) numCalls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.calls
+}
+
+func (m *fakeAdvisorModel) sawToolsLocked() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sawTools
+}
+
 func (m *fakeAdvisorModel) Generate(ctx context.Context, msgs []agentcore.Message, tools []agentcore.ToolSpec, _ ...agentcore.CallOption) (*agentcore.LLMResponse, error) {
+	m.mu.Lock()
 	m.calls++
 	if len(tools) > 0 {
 		m.sawTools = true
 	}
-	if m.blockUntil != nil {
+	blockUntil, wrapCancelErr := m.blockUntil, m.wrapCancelErr
+	fakeErr, answer, usage := m.err, m.answer, m.usage
+	m.mu.Unlock()
+	_ = msgs
+	if blockUntil != nil {
 		select {
-		case <-m.blockUntil:
+		case <-blockUntil:
 		case <-ctx.Done():
-			if m.wrapCancelErr {
+			if wrapCancelErr {
 				return nil, errors.New("provider client: " + ctx.Err().Error())
 			}
 			return nil, ctx.Err()
@@ -51,13 +68,13 @@ func (m *fakeAdvisorModel) Generate(ctx context.Context, msgs []agentcore.Messag
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if m.err != nil {
-		return nil, m.err
+	if fakeErr != nil {
+		return nil, fakeErr
 	}
 	return &agentcore.LLMResponse{Message: agentcore.Message{
 		Role:    agentcore.RoleAssistant,
-		Content: []agentcore.ContentBlock{{Type: agentcore.ContentText, Text: m.answer}},
-		Usage:   &m.usage,
+		Content: []agentcore.ContentBlock{{Type: agentcore.ContentText, Text: answer}},
+		Usage:   &usage,
 	}}, nil
 }
 
@@ -284,10 +301,10 @@ func TestServiceTraResultDung(t *testing.T) {
 	if len(recorded) != 1 {
 		t.Fatalf("accounting phải ghi đúng 1 lần, được %d", len(recorded))
 	}
-	if fake.calls != 1 {
-		t.Errorf("phải gọi model đúng 1 lần, được %d", fake.calls)
+	if fake.numCalls() != 1 {
+		t.Errorf("phải gọi model đúng 1 lần, được %d", fake.numCalls())
 	}
-	if fake.sawTools {
+	if fake.sawToolsLocked() {
 		t.Error("advisor không được kèm tools")
 	}
 }
@@ -366,7 +383,7 @@ func TestServiceLoiBocVanVeCanceled(t *testing.T) {
 	}()
 	// Đợi fake vào tới Generate rồi hủy giữa flight.
 	deadline := time.Now().Add(10 * time.Second)
-	for fake.calls == 0 && time.Now().Before(deadline) {
+	for fake.numCalls() == 0 && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	cancel()
