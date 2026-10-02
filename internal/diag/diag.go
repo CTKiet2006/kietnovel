@@ -1,9 +1,9 @@
 package diag
 
 import (
-	"fmt"
 	"sort"
 
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
@@ -62,8 +62,8 @@ func Analyze(s *store.Store) Report {
 			Confidence: ConfHigh,
 			AutoLevel:  AutoNone,
 			Target:     "runtime.flow",
-			Title:      fmt.Sprintf("工件加载失败: %s", e),
-			Suggestion: "文件可能损坏或权限不足，相关诊断规则的结果可能不完整。",
+			Title:      i18n.Tf("Nạp dữ liệu thất bại: %s", e),
+			Suggestion: i18n.T("File có thể hỏng hoặc thiếu quyền, nên kết quả của các quy tắc chẩn đoán liên quan có thể không đầy đủ."),
 		})
 	}
 	for _, rule := range allRules {

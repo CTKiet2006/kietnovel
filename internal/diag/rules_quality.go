@@ -5,6 +5,8 @@ import (
 	"math"
 	"sort"
 	"strings"
+
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 )
 
 // ChronicLowDimension detects a review dimension that stays low across many chapters.
@@ -39,9 +41,9 @@ func ChronicLowDimension(snap *Snapshot) []Finding {
 			Confidence: ConfMedium,
 			AutoLevel:  AutoNone,
 			Target:     "prompt.writer",
-			Title:      fmt.Sprintf("维度 [%s] 持续低分 (均值 %.0f)", name, avg),
-			Evidence:   fmt.Sprintf("共 %d 次评审，均分 %.1f", count, avg),
-			Suggestion: fmt.Sprintf("检查 Writer prompt 中关于 %s 的指引是否清晰，或 Editor prompt 的 %s 评分标准是否合理。", name, name),
+			Title:      i18n.Tf("Chiều [%s] điểm thấp kéo dài (trung bình %.0f)", name, avg),
+			Evidence:   i18n.Tf("Tổng %d lần đánh giá, điểm trung bình %.1f", count, avg),
+			Suggestion: i18n.Tf("Kiểm tra hướng dẫn về %s trong prompt Writer có rõ không, hoặc tiêu chuẩn chấm %s trong prompt Editor có hợp lý không.", name, name),
 		})
 	}
 	return findings
@@ -76,9 +78,9 @@ func ContractMissPattern(snap *Snapshot) []Finding {
 		Confidence: ConfMedium,
 		AutoLevel:  AutoNone,
 		Target:     "prompt.writer",
-		Title:      fmt.Sprintf("合同履约率低 (%.0f%% 未达成)", rate*100),
-		Evidence:   fmt.Sprintf("未达成: [%s]，共 %d/%d", strings.Join(missedChapters, ", "), missed, total),
-		Suggestion: "Writer 可能未读 contract，或 contract required_beats 过于激进。检查 plan_chapter 和 writer.md 的配合。",
+		Title:      i18n.Tf("Tỉ lệ thực hiện hợp đồng thấp (%.0f%% chưa đạt)", rate*100),
+		Evidence:   i18n.Tf("Chưa đạt: [%s], tổng %d/%d", strings.Join(missedChapters, ", "), missed, total),
+		Suggestion: i18n.T("Có thể Writer chưa đọc contract, hoặc contract.required_beats quá khắt khe. Kiểm tra sự phối hợp giữa plan_chapter và writer.md."),
 	}}
 }
 
@@ -122,9 +124,9 @@ func HookWeakChain(snap *Snapshot) []Finding {
 		Confidence: ConfMedium,
 		AutoLevel:  AutoNone,
 		Target:     "prompt.writer",
-		Title:      fmt.Sprintf("章末钩子连续偏弱（连续 %d 章）", len(weakChain)),
+		Title:      i18n.Tf("Móc cuối chương liên tục yếu (liên tiếp %d chương)", len(weakChain)),
 		Evidence:   strings.Join(parts, ", "),
-		Suggestion: "检查 writer.md 中 hook_goal 的执行是否清晰，必要时在 plan_chapter 中明确本章追读欲望，并校准 Editor 对 hook 的举证标准。",
+		Suggestion: i18n.T("Kiểm tra việc thực hiện hook_goal trong writer.md có rõ không, cần thì nêu rõ ham muốn đọc tiếp của chương trong plan_chapter, và hiệu chỉnh tiêu chuẩn nêu bằng chứng cho hook của Editor."),
 	}}
 }
 
@@ -143,7 +145,7 @@ func PayoffMissPattern(snap *Snapshot) []Finding {
 		total++
 		if review.ContractStatus == "partial" || review.ContractStatus == "missed" {
 			missed++
-			details = append(details, fmt.Sprintf("ch%d(%d项 payoff)", ch, len(plan.Contract.PayoffPoints)))
+			details = append(details, i18n.Tf("ch%d(%d payoff)", ch, len(plan.Contract.PayoffPoints)))
 		}
 	}
 	if total < 2 {
@@ -161,9 +163,9 @@ func PayoffMissPattern(snap *Snapshot) []Finding {
 		Confidence: ConfMedium,
 		AutoLevel:  AutoNone,
 		Target:     "prompt.writer",
-		Title:      fmt.Sprintf("爽点/情节点兑现率偏低 (%.0f%% 未达成)", rate*100),
-		Evidence:   fmt.Sprintf("未兑现章节: [%s]，共 %d/%d", strings.Join(details, ", "), missed, total),
-		Suggestion: "检查 plan_chapter 的 payoff_points 是否过多或过空，确保 Writer 在正文里明确兑现，而不是只做铺垫。",
+		Title:      i18n.Tf("Tỉ lệ hoàn thành điểm tình tiết hơi thấp (%.0f%% chưa đạt)", rate*100),
+		Evidence:   i18n.Tf("Chưa hoàn thành ở các chương: [%s], tổng %d/%d", strings.Join(details, ", "), missed, total),
+		Suggestion: i18n.T("Kiểm tra payoff_points của plan_chapter có quá nhiều hoặc quá rỗng không, đảm bảo Writer hoàn thành rõ ràng trong văn bản chứ không chỉ bày đặt."),
 	}}
 }
 
@@ -194,9 +196,9 @@ func ExcessiveRewrites(snap *Snapshot) []Finding {
 		Confidence: ConfMedium,
 		AutoLevel:  AutoNone,
 		Target:     "prompt.editor",
-		Title:      fmt.Sprintf("改写率过高 (%d/%d = %.0f%%)", rewrites, total, rate*100),
-		Evidence:   fmt.Sprintf("共 %d 次评审，%d 次 rewrite", total, rewrites),
-		Suggestion: "Writer 持续产出低于 Editor 阈值的内容。检查 Writer prompt 的质量标准是否与 Editor 的评审标准对齐。",
+		Title:      i18n.Tf("Tỉ lệ viết lại quá cao (%d/%d = %.0f%%)", rewrites, total, rate*100),
+		Evidence:   i18n.Tf("Tổng %d lần đánh giá, %d lần rewrite", total, rewrites),
+		Suggestion: i18n.T("Writer liên tục cho ra nội dung dưới ngưỡng của Editor. Kiểm tra tiêu chuẩn chất lượng trong prompt Writer đã khớp với tiêu chuẩn duyệt của Editor chưa."),
 	}}
 }
 
@@ -220,9 +222,9 @@ func WordCountAnomaly(snap *Snapshot) []Finding {
 	for ch, w := range wc {
 		ratio := float64(w) / avg
 		if ratio < ThresholdWordShortRatio {
-			anomalies = append(anomalies, fmt.Sprintf("ch%d(%d字,%.0f%%)", ch, w, ratio*100))
+			anomalies = append(anomalies, i18n.Tf("ch%d(%d chữ, %.0f%%)", ch, w, ratio*100))
 		} else if ratio > ThresholdWordLongRatio {
-			anomalies = append(anomalies, fmt.Sprintf("ch%d(%d字,%.0f%%)", ch, w, ratio*100))
+			anomalies = append(anomalies, i18n.Tf("ch%d(%d chữ, %.0f%%)", ch, w, ratio*100))
 		}
 	}
 	if len(anomalies) == 0 {
@@ -235,9 +237,9 @@ func WordCountAnomaly(snap *Snapshot) []Finding {
 		Confidence: ConfLow,
 		AutoLevel:  AutoNone,
 		Target:     "context.window",
-		Title:      fmt.Sprintf("章节字数异常 (均值 %d 字)", int(math.Round(avg))),
+		Title:      i18n.Tf("Số chữ của chương bất thường (trung bình %d chữ)", int(math.Round(avg))),
 		Evidence:   strings.Join(anomalies, "; "),
-		Suggestion: "极短章节可能是输出截断（token 限制），极长章节可能消耗过多上下文窗口。检查模型 max_tokens 配置。",
+		Suggestion: i18n.T("Chương quá ngắn có thể là output bị cắt (giới hạn token), chương quá dài có thể nuốt cửa sổ ngữ cảnh. Kiểm tra cấu hình max_tokens của model."),
 	}}
 }
 

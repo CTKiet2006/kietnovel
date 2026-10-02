@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"github.com/CTKiet2006/kietnovel/internal/store"
 	"github.com/voocel/agentcore"
 )
@@ -235,7 +236,7 @@ func captureLog(dir string, rc *RuntimeCapture) {
 	if !ok {
 		return
 	}
-	rc.Sources = append(rc.Sources, "logs/"+filepath.Base(path)+" (尾部)")
+	rc.Sources = append(rc.Sources, "logs/"+filepath.Base(path)+i18n.T(" (phần cuối)"))
 
 	sc := bufio.NewScanner(bytes.NewReader(tail))
 	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)

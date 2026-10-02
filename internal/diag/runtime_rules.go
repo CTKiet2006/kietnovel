@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
@@ -54,12 +55,12 @@ func repeatedErrors(rc *RuntimeCapture) []Finding {
 		switch {
 		case strings.Contains(r.Sig, " · err: "):
 			rule = "RepeatedToolError"
-			title = "工具反复报同一错误"
-			sugg = "近端同一工具反复返回同一错误，多为模型参数不合规或工具契约不符；查 agentcore 工具校验 / prompt 参数约定（参见 #34）。"
+			title = i18n.T("Công cụ báo lỗi giống nhau lặp lại")
+			sugg = i18n.T("Cùng một công cụ gần đây trả về cùng một lỗi, thường do tham số của model không hợp lệ hoặc hợp đồng công cụ lệch; kiểm tra xác thực tool của agentcore và quy ước tham số trong prompt (xem #34).")
 		case strings.Contains(r.Sig, "(args invalid)"):
 			rule = "ArgsInvalidLoop"
-			title = "参数反复无法解析"
-			sugg = "模型发来的参数无法解析却不断重试；看 agentcore 是否对该类型做了宽松强转（参见 #34）。"
+			title = i18n.T("Tham số lặp lại không phân tích được")
+			sugg = i18n.T("Tham số model gửi sang không phân tích được mà vẫn thử lại; xem agentcore có ép kiểu lỏng cho loại đó không (xem #34).")
 		default:
 			continue // continue // an ordinary tool repeat produces no Finding
 		}
@@ -98,9 +99,9 @@ func stuckStep(rc *RuntimeCapture) []Finding {
 		Confidence: ConfHigh,
 		AutoLevel:  AutoNone,
 		Target:     "runtime.flow",
-		Title:      "checkpoint 停滞在同一 step",
-		Evidence:   fmt.Sprintf("连续停在 `%s` ×%d", rc.StuckStep, rc.StuckCount),
-		Suggestion: "同一 step 反复写入而不推进；结合上面的重复签名定位是哪个子代理卡住。",
+		Title:      i18n.T("Checkpoint đứng ở cùng một step"),
+		Evidence:   i18n.Tf("Liên tục dừng ở `%s` ×%d", rc.StuckStep, rc.StuckCount),
+		Suggestion: i18n.T("Cùng một step bị ghi lặp mà không tiến; kết hợp với chữ ký lặp ở trên để xác định sub-agent nào bị kẹt."),
 	}}
 }
 
@@ -117,8 +118,8 @@ func streamIdleStorm(rc *RuntimeCapture) []Finding {
 		Confidence: ConfHigh,
 		AutoLevel:  AutoNone,
 		Target:     "runtime.provider",
-		Title:      "流式中断频发（stream_idle）",
+		Title:      i18n.T("Luồng bị ngắt thường xuyên (stream_idle)"),
 		Evidence:   fmt.Sprintf("stream_idle ×%d", n),
-		Suggestion: "上游长时间不吐 token 被 watchdog 误杀；慢思考模型调大 streamIdleTimeout，或排查 provider 连接稳定性（参见 #32）。",
+		Suggestion: i18n.T("Phía trên lâu không trả token nên watchdog giết nhầm; với model suy nghĩ chậm hãy tăng streamIdleTimeout, hoặc kiểm tra độ ổn định kết nối của provider (xem #32)."),
 	}}
 }
