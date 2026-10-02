@@ -2,6 +2,7 @@ package host
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -155,6 +156,11 @@ func (h *Host) DeleteBook(dir string) error {
 	return os.RemoveAll(res.Dir)
 }
 
+// ErrBookExists báo thư mục truyện đã tồn tại. Tách riêng để phía gọi
+// (đặt tên ngẫu nhiên) phân biệt "trùng tên, thử tên khác" với lỗi thật
+// bằng errors.Is thay vì so chuỗi thông báo.
+var ErrBookExists = errors.New("truyện đã tồn tại")
+
 // NewBookDir tạo thư mục truyện mới trong <base>/output/<name> và trả về đường dẫn.
 // Không tạo sẵn meta/: store sẽ khởi tạo đúng cấu trúc khi mở.
 func (h *Host) NewBookDir(name string) (string, error) {
@@ -171,7 +177,7 @@ func (h *Host) NewBookDir(name string) (string, error) {
 	}
 	dir := filepath.Join(outputBase(h), "output", name)
 	if _, err := os.Stat(dir); err == nil {
-		return "", fmt.Errorf("đã có truyện tên %q trong output/", name)
+		return "", fmt.Errorf("%w: đã có truyện tên %q trong output/", ErrBookExists, name)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err

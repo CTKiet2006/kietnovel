@@ -2,7 +2,9 @@ package tui
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -186,9 +188,27 @@ func (s *booksState) renderNewDraft() string {
 			b.WriteString(ok.Render(i18n.T("Tên hiển thị giữ nguyên như bạn gõ, có dấu cũng được.")))
 		}
 	} else {
-		b.WriteString(dim.Render(i18n.T("Gõ ít nhất một chữ cái hoặc số.")))
+		b.WriteString(dim.Render(i18n.T("Để trống rồi Enter: tên ngẫu nhiên, đổi lại sau bằng /rename.")))
 	}
 	return b.String()
+}
+
+// runRenameBook đổi tên hiển thị của truyện ĐANG MỞ (ghi meta/book.json).
+// Chỉ đổi tiêu đề, không đổi thư mục — an toàn khi engine đang chạy vì mọi
+// đường dẫn trong phiên đều trỏ theo thư mục, không theo tên.
+func (m Model) runRenameBook(args []string) (tea.Model, tea.Cmd) {
+	if m.runtime == nil {
+		return renderBooksError(m, i18n.T("Chưa mở truyện nào để đổi tên."))
+	}
+	title := strings.TrimSpace(strings.Join(args, " "))
+	if title == "" {
+		return renderBooksError(m, i18n.T("Cần nhập tên mới: /rename <tên mới>."))
+	}
+	if err := writeBookTitle(m.runtime.Dir(), title); err != nil {
+		return renderBooksError(m, i18n.Tf("Đổi tên hỏng: %v", err))
+	}
+	out, _ := renderBooksNotice(m, i18n.Tf("Đã đổi tên truyện thành %q.", title))
+	return out, fetchSnapshot(m.runtime)
 }
 
 func (m Model) handleBooksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -378,32 +398,82 @@ func (m Model) deleteConfirmedBook() (tea.Model, tea.Cmd) {
 	return renderBooksError(m, i18n.Tf("Đã xoá truyện %q (%d chương).", p.Name, p.Chapters))
 }
 
+// resolveNewBookName tách tên người gõ thành (slug thư mục, tên hiển thị, tự động).
+// Draft trống nghĩa là "đặt ngẫu nhiên cho tôi": slug ngẫu nhiên, tiêu đề để
+// trống để UI hiện "Chưa đặt tên" nhắc đổi sau bằng /rename.
+func resolveNewBookName(raw string) (slug, title string, auto bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return randomBookSlug(), "", true
+	}
+	slug = sanitizeBookName(raw)
+	if slug == "" {
+		return "", "", false
+	}
+	return slug, raw, false
+}
+
+// randomBookSlug sinh "truyen-xxxx" (4 ký tự a-z0-9, đã sạch để làm thư mục).
+// Đụng độ hiếm gặp do vòng lặp ở createBookConfirmed thử lại tên khác.
+func randomBookSlug() string {
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, 4)
+	for i := range b {
+		b[i] = chars[rand.IntN(len(chars))]
+	}
+	return "truyen-" + string(b)
+}
+
 // createBookConfirmed tạo truyện rồi MỞ LUÔN, không chỉ tạo thư mục rồi đứng ngoài.
 // Người dùng gõ /new là muốn bắt đầu viết, không phải muốn tạo rồi ngồi nhìn.
 func (m Model) createBookConfirmed() (tea.Model, tea.Cmd) {
 	if m.books == nil {
 		return m, nil
 	}
-	raw := strings.TrimSpace(m.books.draft)
-	if raw == "" {
-		return renderBooksError(m, i18n.T("Cần nhập tên truyện."))
+	if m.runtime == nil {
+		return renderBooksError(m, i18n.T("Chưa mở truyện nào để tạo mới."))
 	}
-	slug := sanitizeBookName(raw)
+	slug, title, auto := resolveNewBookName(m.books.draft)
 	if slug == "" {
 		return renderBooksError(m, i18n.T("Tên truyện phải có ít nhất một chữ cái hoặc số."))
 	}
-	dir, err := m.runtime.NewBookDir(slug)
+	var (
+		dir string
+		err error
+	)
+	if auto {
+		// Tên ngẫu nhiên có thể đụng truyện cũ (hiếm): thử tên khác thay vì báo lỗi.
+		for i := 0; i < 10; i++ {
+			if i > 0 {
+				slug = randomBookSlug()
+			}
+			dir, err = m.runtime.NewBookDir(slug)
+			if err == nil {
+				break
+			}
+			if !errors.Is(err, host.ErrBookExists) {
+				break
+			}
+		}
+	} else {
+		dir, err = m.runtime.NewBookDir(slug)
+	}
 	if err != nil {
 		return renderBooksError(m, err.Error())
 	}
 	// Ghi tên hiển thị (có dấu) vào book.json ngay, vì tên thư mục đã bị flatten.
-	if err := writeBookTitle(dir, raw); err != nil {
+	// Truyện tự động để trống tiêu đề: UI hiện "Chưa đặt tên" nhắc đổi sau.
+	if err := writeBookTitle(dir, title); err != nil {
 		return renderBooksError(m, i18n.Tf("Tạo được thư mục nhưng ghi tên hỏng: %v", err))
 	}
 	// Trước khi chuyển, đóng modal để không giữ trạng thái của khung cũ.
 	m.books = nil
 	m.textarea.Blur()
-	return m.askSwitch(dir, raw)
+	display := title
+	if display == "" {
+		display = slug
+	}
+	return m.askSwitch(dir, display)
 }
 
 // writeBookTitle ghi tên hiển thị vào meta/book.json, giữ nguyên dấu tiếng Việt.

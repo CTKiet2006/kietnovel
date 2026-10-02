@@ -674,6 +674,27 @@ func commandRegistryInstance() commandRegistry {
 			},
 		},
 		{
+			Name:    "rename",
+			Aliases: []string{"doiten"},
+			ID:      "rename",
+			Names: map[string][]string{
+				"vi": {"đổitên"},
+				"zh": {"重命名"},
+			},
+			UsageByLang: map[string]string{
+				"vi": "/rename <tên mới>",
+				"en": "/rename <new title>",
+				"zh": "/rename <新标题>",
+			},
+			Group:       "writing",
+			Usage:       "/rename <tên mới>",
+			Description: i18n.T("Đổi tên hiển thị của truyện đang mở"),
+			AutoExecute: true,
+			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
+				return m.runRenameBook(args)
+			},
+		},
+		{
 			Name:    "language",
 			Aliases: []string{"lang", "ngonngu"},
 			ID:      "language",
