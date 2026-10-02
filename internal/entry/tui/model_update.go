@@ -455,6 +455,20 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		}
 		return m, cmd, true
 	case bootstrapMsg:
+		// /start trên truyện đã có nội dung: đã tạo truyện mới + chuyển xong, giờ
+		// chạy nốt engine với prompt đã nhớ.
+		//
+		// Xử lý ở ĐẦU case, trước mọi nhánh return sớm bên dưới. Truyện vừa tạo
+		// rỗng nên bootstrap trả existing=true — nếu để sau, nhánh existing sẽ
+		// return trước và prompt rơi mất, engine không bao giờ chạy.
+		if m.pendingStart != "" {
+			prompt := m.pendingStart
+			m.pendingStart = ""
+			enableMouse := m.enterRunning()
+			m.resizeTextarea()
+			cmd := m.enterStarting(prompt)
+			return m, tea.Batch(fetchSnapshot(m.runtime), startRuntime(m.runtime, prompt), enableMouse, cmd), true
+		}
 		// Có tác phẩm hay không quyết chỗ rơi giao diện, khôi phục thành công chỉ quyết engine có chạy không. Lỗi nâng dữ liệu,
 		// ngân sách hay cổng sửa đổi thì vẫn ở bàn viết hiện sách cũ, không về trang chào.
 		if (msg.existing || msg.resumed) && m.mode == modeNew && !msg.completed {

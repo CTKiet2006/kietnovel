@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -74,5 +75,63 @@ func TestNewChuyenSangTruyenMoi(t *testing.T) {
 	}
 	// Host mới giữ khoá thư mục truyện mới: phải đóng trước khi TempDir xoá,
 	// nếu không Windows giữ file .kietnovel.lock và test fail vì cleanup.
+	t.Cleanup(m.runtime.Close)
+}
+
+// TestStartTaoVaChuyenTrongMotLenh là regression cho yêu cầu: /start phải là
+// MỘT lệnh. Trước đây truyện đã có nội dung thì /start báo lỗi "dùng /new",
+// bắt người dùng tự gõ /new rồi /start — hai lệnh nối tiếp, dễ quên.
+//
+// Giờ: /start mở khung tạo truyện mới, tạo xong chuyển truyện VÀ mang theo
+// prompt để engine chạy nốt — không cần gõ thêm lệnh nào.
+func TestStartTaoVaChuyenTrongMotLenh(t *testing.T) {
+	base := t.TempDir()
+	rt := newTestHost(t, base)
+	oldDir := rt.Dir()
+
+	m := NewModel(rt, "test")
+	m.cfg = testCfg(base)
+	m.hostOpts = nil
+	m.mode = modeRunning
+	m.snapshot = host.UISnapshot{Phase: "writing", CompletedCount: 12}
+
+	// Bước 1: /start <file> khi truyện đang mở đã có nội dung → mở khung tạo mới.
+	dir := filepath.Join(t.TempDir(), "dan-y")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "outline.md")
+	if err := os.WriteFile(path, []byte("Cốt truyện mẫu\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd, ok := parseSlashCommand("/start " + path)
+	if !ok {
+		t.Fatal("/start phải phân tích được")
+	}
+	out, _ := m.handleSlashCommand(cmd)
+	m = out.(Model)
+	if m.books == nil {
+		t.Fatal("/start trên truyện cũ phải mở khung tạo truyện mới")
+	}
+	if m.books.startAfterCreate == "" {
+		t.Fatal("phải nhớ prompt để chạy nốt, không thì tạo xong rồi đứng im")
+	}
+
+	// Bước 2: gõ tên rồi Enter.
+	m.books.draft = "Truyen Tu File"
+	out, _ = m.createBookConfirmed()
+	m = out.(Model)
+
+	want := filepath.Join(base, "output", "truyen-tu-file")
+	if !sameDir(m.runtime.Dir(), want) {
+		t.Errorf("/start chưa chuyển sang truyện mới:\n  cũ  = %s\n  mới = %s", m.runtime.Dir(), want)
+	}
+	if sameDir(m.runtime.Dir(), oldDir) {
+		t.Error("runtime vẫn trỏ truyện cũ sau /start")
+	}
+	// Prompt phải sống sót qua bước dựng Model mới, không bị switchBook bỏ rơi.
+	if m.pendingStart == "" {
+		t.Error("prompt /start bị mất khi chuyển truyện — sẽ không bao giờ chạy engine")
+	}
 	t.Cleanup(m.runtime.Close)
 }

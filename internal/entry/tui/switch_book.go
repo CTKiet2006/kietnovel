@@ -63,6 +63,9 @@ func (m Model) switchBook(dir string) (Model, tea.Cmd, error) {
 	// Chuyển truyện trong phiên thì KHÔNG hiện màn chào: người dùng vừa chủ động
 	// chọn, hỏi lại là thừa. Màn chào chỉ dành cho lúc mở app.
 	fresh.welcomeSeen = true
+	// Prompt /start đang chờ phải sống sót qua bước dựng Model mới, nếu không
+	// người dùng gõ /start rồi tạo truyện mới sẽ không bao giờ chạy.
+	fresh.pendingStart = m.pendingStart
 	// Lịch sử phím là của người dùng, không phải của truyện: giữ lại, đổi truyện
 	// không có nghĩa mất đường lui.
 	fresh.inputHistory = m.inputHistory

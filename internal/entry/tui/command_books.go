@@ -38,6 +38,12 @@ type booksState struct {
 	targetName string
 	switchWhy  string
 
+	// startAfterCreate là prompt /start đang chờ. Khi người dùng gõ /start mà
+	// truyện đang mở đã có nội dung, ta mở modal này để tạo truyện mới; tạo xong
+	// thì khởi động engine ngay với prompt đã nhớ — người dùng chỉ cần gõ 1 lệnh
+	// /start chứ không phải /new rồi /start.
+	startAfterCreate string
+
 	listVP   viewport.Model
 	contentW int
 	boxH     int
@@ -321,9 +327,17 @@ func (m Model) handleBooksKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // Tách riêng để Enter và 'y' dùng chung một đường, khỏi lệch nhau lần nữa.
 func (m Model) confirmSwitchFromModal() (tea.Model, tea.Cmd) {
 	dir := m.books.target
+	pendingStart := m.books.startAfterCreate
 	m.books.mode, m.books.target, m.books.targetName, m.books.switchWhy = booksList, "", "", ""
+	m.books.startAfterCreate = ""
 	m.books = nil
-	return m.doSwitch(dir)
+	next, cmd := m.doSwitch(dir)
+	// Khung xác nhận chỉ xuất hiện khi truyện cũ còn việc dở — tức là mở từ
+	// /start. Sau khi chuyển xong thì chạy nốt prompt đã nhớ.
+	if pendingStart != "" && next.books == nil {
+		next = next.withPendingStart(pendingStart)
+	}
+	return next, cmd
 }
 
 func renderBooksError(m Model, msg string) (tea.Model, tea.Cmd) {
@@ -426,6 +440,10 @@ func randomBookSlug() string {
 
 // createBookConfirmed tạo truyện rồi MỞ LUÔN, không chỉ tạo thư mục rồi đứng ngoài.
 // Người dùng gõ /new là muốn bắt đầu viết, không phải muốn tạo rồi ngồi nhìn.
+//
+// Nếu modal này được mở từ /start (startAfterCreate có prompt), thì sau khi chuyển
+// sang truyện mới sẽ khởi động engine ngay với prompt đó — để người dùng chỉ cần
+// gõ một lệnh /start chứ không phải /new rồi /start.
 func (m Model) createBookConfirmed() (tea.Model, tea.Cmd) {
 	if m.books == nil {
 		return m, nil
@@ -467,13 +485,31 @@ func (m Model) createBookConfirmed() (tea.Model, tea.Cmd) {
 		return renderBooksError(m, i18n.Tf("Tạo được thư mục nhưng ghi tên hỏng: %v", err))
 	}
 	// Trước khi chuyển, đóng modal để không giữ trạng thái của khung cũ.
+	pendingStart := m.books.startAfterCreate
 	m.books = nil
 	m.textarea.Blur()
 	display := title
 	if display == "" {
 		display = slug
 	}
-	return m.askSwitch(dir, display)
+	next, cmd := m.askSwitch(dir, display)
+	// Nếu modal này mở từ /start: sau khi chuyển xong thì khởi động engine với
+	// prompt đã nhớ, để người dùng chỉ gõ 1 lệnh.
+	//
+	// askSwitch có thể trả về khi đang ĐANG ở khung xác nhận (truyện cũ còn việc
+	// dở) — lúc đó chưa chuyển, chưa start; sẽ start sau ở confirmSwitchFromModal.
+	// Chỉ xử lý khi đã chuyển thẳng: books == nil và không còn khung nào.
+	if pendingStart != "" && next.books == nil {
+		next = next.withPendingStart(pendingStart)
+	}
+	return next, cmd
+}
+
+// withPendingStart gắn prompt /start đang chờ vào model, để sau khi khởi động
+// xong (bootstrapMsg) thì engine tự chạy với prompt này.
+func (m Model) withPendingStart(prompt string) Model {
+	m.pendingStart = prompt
+	return m
 }
 
 // writeBookTitle ghi tên hiển thị vào meta/book.json, giữ nguyên dấu tiếng Việt.

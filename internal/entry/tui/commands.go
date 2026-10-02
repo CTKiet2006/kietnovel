@@ -340,12 +340,10 @@ func commandRegistryInstance() commandRegistry {
 			Usage:       "/start <path>",
 			Description: i18n.T("Tạo truyện mới từ file thiết lập/dàn ý"),
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
-				// /start tạo truyện mới TỪ FILE, nên điều kiện đúng là "truyện
-				// đang mở còn trống" — không phải "đang ở màn hình chào".
-				// Trước đây chặn theo mode != modeNew: mở app, chọn "Viết tiếp"
-				// ở màn chào là mode thành modeRunning, và /start bị chặn vĩnh
-				// viễn dù truyện còn trống — người dùng không tạo được truyện mới
-				// mà không đóng app.
+				// /start tạo truyện mới TỪ FILE. Điều kiện đúng là "truyện đang
+				// mở còn trống" — không phải "đang ở màn hình chào". Trước đây chặn
+				// theo mode != modeNew: mở app, chọn "Viết tiếp" ở màn chào là
+				// mode thành modeRunning, nên /start bị chặn vĩnh viễn.
 				if m.snapshot.IsRunning {
 					m.applyEvent(host.Event{
 						Time: time.Now(), Category: "ERROR",
@@ -354,21 +352,23 @@ func commandRegistryInstance() commandRegistry {
 					m.refreshEventViewport()
 					return m, nil
 				}
-				// Truyện đã có nội dung thì /start sẽ ghi đè: chặn, nói rõ lý do.
-				if m.snapshot.CompletedCount > 0 || m.snapshot.InProgressChapter > 0 ||
-					m.snapshot.PendingSteer != "" {
-					m.applyEvent(host.Event{
-						Time: time.Now(), Category: "ERROR",
-						Summary: i18n.Tf("Truyện đang mở đã có nội dung — /start sẽ ghi đè. Dùng /new <tên> để tạo truyện khác (%d chương đã chốt).", m.snapshot.CompletedCount),
-						Level:   "error",
-					})
-					m.refreshEventViewport()
-					return m, nil
-				}
 				prompt, err := prepareFileStart(args)
 				if err != nil {
 					m.err = err
 					return m, nil
+				}
+				// Truyện đang mở đã có nội dung: /start sẽ ghi đè. Thay vì báo lỗi
+				// rồi bắt người dùng tự gõ /new rồi /start lại (hai lệnh nối tiếp,
+				// rất dễ quên), mở luôn khung tạo truyện mới và nhớ prompt. Tạo xong
+				// sẽ chuyển truyện và chạy nốt — người dùng chỉ gõ MỘT lệnh /start.
+				if m.snapshot.CompletedCount > 0 || m.snapshot.InProgressChapter > 0 ||
+					m.snapshot.PendingSteer != "" {
+					next, cmd := openBooks(m, booksNewDraft)
+					out := next.(Model)
+					if out.books != nil {
+						out.books.startAfterCreate = prompt
+					}
+					return out, cmd
 				}
 				cmd := m.enterStarting(prompt)
 				return m, tea.Batch(startRuntime(m.runtime, prompt), cmd)
@@ -913,6 +913,20 @@ func languageLabel(lang string) string {
 		return "中文"
 	default:
 		return "Tiếng Việt"
+	}
+}
+
+// Tên ngôn ngữ theo UI language đang chạy. Khung hỏi khoá ngôn ngữ hiện cả 3
+// lựa chọn: nếu cứ hardcode "Tiếng Việt"/"中文" thì người dùng đang để UI
+// English vẫn thấy nhãn tiếng Việt — đúng cái lỗi mà test i18n bắt.
+func languageLabelT(lang string) string {
+	switch lang {
+	case i18n.LangEnglish:
+		return i18n.T("Tiếng Anh")
+	case i18n.LangChinese:
+		return i18n.T("Tiếng Trung")
+	default:
+		return i18n.T("Tiếng Việt")
 	}
 }
 
