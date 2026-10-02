@@ -92,6 +92,12 @@ func migrateLegacyBook(st *storepkg.Store) error {
 			return err
 		}
 	}
+	// Truyện vừa tạo bằng /new: book.json có tên hiển thị nhưng chưa có synopsis
+	// (Architect viết sau bằng save_book). Không có gì để nâng cấp, và Save thì
+	// nghiêm nên ghi lại sẽ lỗi — bỏ qua thay vì làm hỏng lúc khởi động.
+	if book.Synopsis == "" {
+		return nil
+	}
 	if err := st.Book.Save(*book); err != nil {
 		return fmt.Errorf("保存旧作品信息: %w", err)
 	}

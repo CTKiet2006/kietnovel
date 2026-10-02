@@ -13,6 +13,14 @@ type BookStore struct{ io *IO }
 func NewBookStore(io *IO) *BookStore { return &BookStore{io: io} }
 
 // Load reads the book information; it returns nil when none has been produced yet.
+// Load đọc thông tin tác phẩm.
+//
+// KHÔNG validate nghiêm như Save: một truyện vừa tạo bằng /new có meta/book.json
+// chỉ gồm tên hiển thị, còn synopsis do Architect viết sau. Trước đây Load
+// gọi Validate nên mọi đường đọc — thu thập dữ kiện cho Arbiter, dựng context,
+// chụp snapshot — đều chết với "book synopsis is required", và người dùng không
+// gõ hướng dẫn tiếp được nữa. Đọc thì chấp nhận thiếu; ghi thì vẫn nghiêm để
+// Architect không lỡ tay lưu sơ sài.
 func (s *BookStore) Load() (*domain.BookMetadata, error) {
 	var book domain.BookMetadata
 	if err := s.io.ReadJSON("meta/book.json", &book); err != nil {
@@ -22,9 +30,6 @@ func (s *BookStore) Load() (*domain.BookMetadata, error) {
 		return nil, err
 	}
 	book = book.Normalized()
-	if err := book.Validate(); err != nil {
-		return nil, err
-	}
 	return &book, nil
 }
 
