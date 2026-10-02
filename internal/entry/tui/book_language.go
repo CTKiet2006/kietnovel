@@ -110,7 +110,7 @@ func (s *bookLanguageState) view(w, h int) string {
 	b = append(b, "")
 	for i, c := range s.choices {
 		marker := "  "
-		line := languageLabel(c) + "  " + dim.Render("("+c+")")
+		line := languageLabelT(c) + "  " + dim.Render("("+c+")")
 		if i == s.cursor {
 			marker = "❯ "
 			line = cur.Render(line)

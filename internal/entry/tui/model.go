@@ -72,6 +72,7 @@ type Model struct {
 	bookLang           *bookLanguageState // hỏi ngôn ngữ sáng tác lần viết đầu tiên với truyện chưa khoá
 	welcome            *welcomeState      // màn chào: hỏi viết tiếp / truyện khác / thoát, thay vì tự chạy engine
 	welcomeSeen        bool               // đã qua màn chào (hoặc không cần), tránh hiện lại mỗi snapshot
+	pendingStart       string             // prompt /start đang chờ chạy sau khi chuyển truyện (tạo truyện mới rồi start)
 	spState            *storyPartnerState // modal /sp hỏi: overlay, Engine bên dưới vẫn chạy
 	spSeq              uint64             // request ID tăng dần cho /sp, bỏ result cũ (stale)
 	simulator          *simulationState

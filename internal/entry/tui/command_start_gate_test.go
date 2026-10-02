@@ -3,7 +3,6 @@ package tui
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/CTKiet2006/kietnovel/internal/host"
@@ -46,31 +45,67 @@ func TestStartKhongChanTrenManChao(t *testing.T) {
 	}
 }
 
-// TestStartChan khi truyen da co noi dung: /start ghi đè nên phải chặn, và thông
-// báo phải chỉ ra lệnh thay thế (/new) chứ không trả lời chung chung.
-func TestStartChanKhiTruyenDaCoNoiDung(t *testing.T) {
+// TestStartTrenTruyenDaCoNoiDungMoKhungTaoMoi: /start trên truyện đã có nội dung
+// không báo lỗi nữa, mà mở luôn khung tạo truyện mới và nhớ prompt — để người
+// dùng gõ MỘT lệnh /start thay vì phải tự nối /new rồi /start.
+func TestStartTrenTruyenDaCoNoiDungMoKhungTaoMoi(t *testing.T) {
 	m := NewModel(nil, "")
 	m.mode = modeRunning
 	m.snapshot = host.UISnapshot{Phase: "writing", CompletedCount: 12}
+	path := startTestPromptFile(t)
 
-	cmd, _ := parseSlashCommand("/start " + startTestPromptFile(t))
-	next, startCmd := m.handleSlashCommand(cmd)
+	cmd, _ := parseSlashCommand("/start " + path)
+	next, _ := m.handleSlashCommand(cmd)
 	got := next.(Model)
-	if startCmd != nil {
-		t.Fatal("truyện đã có chương thì /start không được chạy")
-	}
+
 	if got.starting {
-		t.Error("starting phải false khi bị chặn")
+		t.Error("chưa tạo truyện mới thì chưa được chạy engine")
 	}
-	if len(got.events) == 0 {
-		t.Fatal("phải báo lý do chặn")
+	if got.books == nil {
+		t.Fatal("phải mở khung tạo truyện mới, không báo lỗi rồi đứng ngoài")
 	}
-	ev := got.events[len(got.events)-1]
-	if ev.Category != "ERROR" {
-		t.Errorf("category = %q, muốn ERROR", ev.Category)
+	if got.books.mode != booksNewDraft {
+		t.Errorf("mode khung = %v, muốn booksNewDraft", got.books.mode)
 	}
-	if !strings.Contains(ev.Summary, "/new") {
-		t.Errorf("thông báo chặn phải chỉ /new, được %q", ev.Summary)
+	if got.books.startAfterCreate == "" {
+		t.Fatal("phải nhớ prompt để chạy nốt sau khi tạo truyện")
+	}
+}
+
+// TestPendingStartChaySauBootstrap: prompt /start phải thực sự được chạy sau khi
+// Host bootstrap xong — không chỉ mang đi mà bị rơi. Đây là mắt xích cuối của
+// luồng 1 lệnh: tạo truyện mới → chuyển → bootstrapMsg → engine chạy với prompt.
+func TestPendingStartChaySauBootstrap(t *testing.T) {
+	m := NewModel(nil, "")
+	m.mode = modeNew
+	m.pendingStart = "Cốt truyện cần chạy"
+
+	next, startCmd, handled := m.handleRuntimeMsg(bootstrapMsg{existing: true})
+	if !handled {
+		t.Fatal("bootstrapMsg phải được xử lý")
+	}
+	got := next.(Model)
+	if !got.starting {
+		t.Error("phải chạy engine sau khi bootstrap")
+	}
+	if got.pendingStart != "" {
+		t.Error("pendingStart phải được xoá sau khi dùng, không lặp lại mỗi snapshot")
+	}
+	if startCmd == nil {
+		t.Error("phải có cmd khởi động engine")
+	}
+}
+
+// TestPendingStartKhongChayKhiDaDungHet: bootstrap lần sau không có prompt chờ
+// thì không được chạy lại — nếu không engine khởi động lại mỗi lần bật app.
+func TestPendingStartKhongChayKhiDaDungHet(t *testing.T) {
+	m := NewModel(nil, "")
+	m.mode = modeRunning
+
+	next, _, _ := m.handleRuntimeMsg(bootstrapMsg{existing: true})
+	got := next.(Model)
+	if got.starting {
+		t.Error("không có prompt chờ thì không được khởi động engine")
 	}
 }
 
