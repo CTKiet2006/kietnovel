@@ -55,9 +55,35 @@ func runProjectUpgrades(st *storepkg.Store) error {
 	return nil
 }
 
+// bookIncomplete báo meta/book.json có đọc được nhưng thiếu field bắt buộc.
+// ok=false nghĩa là không đọc được hoặc parse hỏng — không phải trường hợp
+// "còn thiếu", mà là dữ liệu hỏng, phải để lỗi nổi lên.
+func bookIncomplete(st *storepkg.Store) (incomplete, ok bool) {
+	data, err := os.ReadFile(filepath.Join(st.Dir(), "meta", "book.json"))
+	if err != nil {
+		return false, false
+	}
+	var raw domain.BookMetadata
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return false, false
+	}
+	raw = raw.Normalized()
+	return raw.Validate() != nil, true
+}
+
 func migrateLegacyBook(st *storepkg.Store) error {
 	book, err := st.Book.Load()
 	if err != nil {
+		// book.json có sẵn nhưng thiếu field — đúng trạng thái của truyện vừa
+		// tạo bằng /new: tên hiển thị đã ghi, còn synopsis thì Architect mới
+		// viết sau. Không bỏ qua thì /new tạo được thư mục rồi không bao giờ
+		// mở được, và người dùng tưởng lệnh hỏng.
+		//
+		// Chỉ bỏ qua khi file ĐỌC ĐƯỢC (JSON hợp lệ) và thiếu field. JSON hỏng
+		// thì phải báo lỗi: nuốt im lặng sẽ biến dữ liệu hỏng thành truyện trắng.
+		if incomplete, ok := bookIncomplete(st); ok && incomplete {
+			return nil
+		}
 		return err
 	}
 	if book == nil {
