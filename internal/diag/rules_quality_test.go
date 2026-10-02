@@ -50,7 +50,7 @@ func TestPayoffMissPattern(t *testing.T) {
 	if findings[0].Rule != "PayoffMissPattern" {
 		t.Fatalf("unexpected rule: %+v", findings[0])
 	}
-	if !strings.Contains(findings[0].Evidence, "ch1(1项 payoff)") || !strings.Contains(findings[0].Evidence, "2/3") {
+	if !strings.Contains(findings[0].Evidence, "ch1(1 payoff)") || !strings.Contains(findings[0].Evidence, "2/3") {
 		t.Fatalf("unexpected evidence: %s", findings[0].Evidence)
 	}
 }

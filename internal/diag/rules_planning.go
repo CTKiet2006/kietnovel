@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/CTKiet2006/kietnovel/internal/domain"
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 )
 
 // StaleForeshadow detects a setup that has not been advanced for a long time.
@@ -22,7 +23,7 @@ func StaleForeshadow(snap *Snapshot) []Finding {
 		}
 		gap := latest - f.PlantedAt
 		if gap > threshold {
-			stale = append(stale, fmt.Sprintf("%s(ch%d埋下,已过%d章)", f.ID, f.PlantedAt, gap))
+			stale = append(stale, fmt.Sprintf("%s(ch%d đã gieo, đã qua %d chương)", f.ID, f.PlantedAt, gap))
 		}
 	}
 	if len(stale) == 0 {
@@ -35,9 +36,9 @@ func StaleForeshadow(snap *Snapshot) []Finding {
 		Confidence: ConfMedium,
 		AutoLevel:  AutoNone,
 		Target:     "context.foreshadow",
-		Title:      fmt.Sprintf("伏笔停滞: %d 条超过 %d 章未推进", len(stale), threshold),
+		Title:      i18n.Tf("Câu tình tiết đứng yên: %d mục quá %d chương chưa được đẩy tiếp", len(stale), threshold),
 		Evidence:   strings.Join(stale, "; "),
-		Suggestion: "novel_context 的伏笔提醒加载可能未生效，或 Writer prompt 缺少推进伏笔的指引。检查 foreshadow_ledger 与上下文注入逻辑。",
+		Suggestion: i18n.T("Nhắc tình tiết trong novel_context có thể chưa nạp được, hoặc prompt Writer thiếu chỉ dẫn đẩy tiếp. Kiểm tra foreshadow_ledger và logic nạp ngữ cảnh."),
 	}}
 }
 
@@ -55,9 +56,9 @@ func CompassDrift(snap *Snapshot) []Finding {
 				Confidence: ConfMedium,
 				AutoLevel:  AutoNone,
 				Target:     "prompt.architect",
-				Title:      "长篇模式缺少指南针",
+				Title:      i18n.T("Chế độ dài hạn thiếu la bàn"),
 				Evidence:   fmt.Sprintf("layered=true, completed=%d, compass=nil", snap.CompletedCount()),
-				Suggestion: "Architect 应在初始规划时创建 compass。检查 architect-long.md 是否包含 compass 创建指令。",
+				Suggestion: i18n.T("Architect nên tạo compass lúc lập kế hoạch ban đầu. Kiểm tra architect-long.md có lệnh tạo compass không."),
 			}}
 		}
 		return nil
@@ -74,9 +75,9 @@ func CompassDrift(snap *Snapshot) []Finding {
 		Confidence: ConfLow,
 		AutoLevel:  AutoNone,
 		Target:     "prompt.architect",
-		Title:      fmt.Sprintf("指南针已 %d 章未更新", gap),
+		Title:      i18n.Tf("La bàn đã %d chương chưa cập nhật", gap),
 		Evidence:   fmt.Sprintf("last_updated=ch%d, latest=ch%d, open_threads=%d", snap.Compass.LastUpdated, snap.LatestCompleted(), len(snap.Compass.OpenThreads)),
-		Suggestion: "Architect 应在弧/卷边界更新 compass。检查 architect-long.md 中是否包含 compass 更新指令。",
+		Suggestion: i18n.T("Architect nên cập nhật compass tại ranh giới cung/tập. Kiểm tra architect-long.md có lệnh cập nhật compass không."),
 	}}
 }
 
@@ -114,9 +115,9 @@ func OutlineExhausted(snap *Snapshot) []Finding {
 		Confidence: ConfHigh,
 		AutoLevel:  AutoSafe,
 		Target:     "runtime.recovery",
-		Title:      fmt.Sprintf("大纲耗尽: 已完成 %d 章 >= 已规划 %d 章", completed, outlinedCount),
+		Title:      i18n.Tf("Dàn ý đã cạn: đã xong %d chương >= đã lên kế hoạch %d chương", completed, outlinedCount),
 		Evidence:   fmt.Sprintf("phase=%s, completed=%d, outlined=%d", p.Phase, completed, outlinedCount),
-		Suggestion: "展开/新卷信号可能未触发。检查宿主侧提交策略和恢复逻辑，确认弧边界检测、expand_next_arc 或 append_volume 是否正常执行。",
+		Suggestion: i18n.T("Tín hiệu bung cung/mở tập mới có thể chưa kích hoạt. Kiểm tra chiến lược chốt phía Host và logic khôi phục, xác nhận dò biên cung, expand_next_arc hoặc append_volume có chạy đúng không."),
 	}}
 }
 
@@ -142,8 +143,8 @@ func MissingSummaries(snap *Snapshot) []Finding {
 		Confidence: ConfHigh,
 		AutoLevel:  AutoNone,
 		Target:     "runtime.flow",
-		Title:      fmt.Sprintf("缺少摘要: %d 章无摘要", len(missing)),
+		Title:      i18n.Tf("Thiếu tóm tắt: %d chương không có tóm tắt", len(missing)),
 		Evidence:   fmt.Sprintf("missing=[%s]", intsToStr(missing)),
-		Suggestion: "摘要是上下文连续性的关键。检查 commit_chapter 的摘要写入逻辑是否正常工作。",
+		Suggestion: i18n.T("Tóm tắt là mấu chốt của tính liên tục ngữ cảnh. Kiểm tra logic ghi tóm tắt trong commit_chapter có chạy đúng không."),
 	}}
 }

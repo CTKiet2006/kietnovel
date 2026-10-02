@@ -1,6 +1,10 @@
 package diag
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
+)
 
 // PlanActions generates executable actions from high-confidence findings.
 // Only a finding with Confidence==high && AutoLevel==safe produces an Action.
@@ -29,15 +33,15 @@ func planRule(f Finding) []Action {
 	case "PhaseFlowMismatch":
 		return []Action{
 			{SourceRule: f.Rule, Kind: ActionEmitNotice, Severity: f.Severity, Summary: f.Title, Message: f.Title, Fingerprint: key},
-			{SourceRule: f.Rule, Kind: ActionEnqueueFollowUp, Severity: f.Severity, Summary: "状态机异常修复", Message: "状态机异常：" + f.Evidence + "。请先检查并修正 progress 的 phase/flow 状态，再继续运行。", Fingerprint: key},
+			{SourceRule: f.Rule, Kind: ActionEnqueueFollowUp, Severity: f.Severity, Summary: i18n.T("Sửa lỗi máy trạng thái"), Message: i18n.T("Máy trạng thái bất thường: ") + f.Evidence + i18n.T(". Hãy kiểm tra và sửa phase/flow của progress trước khi chạy tiếp."), Fingerprint: key},
 		}
 	case "OutlineExhausted":
 		return []Action{
-			{SourceRule: f.Rule, Kind: ActionEnqueueFollowUp, Severity: f.Severity, Summary: "大纲耗尽处理", Message: "已完成章节数达到已规划上限。请优先调用 Architect 展开下一弧或追加新卷，再继续写作。", Fingerprint: key},
+			{SourceRule: f.Rule, Kind: ActionEnqueueFollowUp, Severity: f.Severity, Summary: i18n.T("Xử lý dàn ý đã cạn"), Message: i18n.T("Số chương đã xong đạt giới hạn đã lên kế hoạch. Hãy gọi Architect bung cung kế tiếp hoặc thêm tập mới trước khi viết tiếp."), Fingerprint: key},
 		}
 	case "OrphanedSteer":
 		return []Action{
-			{SourceRule: f.Rule, Kind: ActionEnqueueFollowUp, Severity: f.Severity, Summary: "消费未处理的用户干预", Message: "存在未消费的用户干预指令，请优先处理 pending steer 后再继续当前任务。", Fingerprint: key},
+			{SourceRule: f.Rule, Kind: ActionEnqueueFollowUp, Severity: f.Severity, Summary: i18n.T("Xử lý chỉ dẫn người dùng chưa dùng"), Message: i18n.T("Còn chỉ dẫn của người dùng chưa được dùng. Hãy xử lý pending steer trước rồi mới tiếp tục việc đang dở."), Fingerprint: key},
 		}
 	default:
 		return nil

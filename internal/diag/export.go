@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CTKiet2006/kietnovel/internal/i18n"
 	"github.com/CTKiet2006/kietnovel/internal/store"
 )
 
@@ -40,34 +41,34 @@ func RenderExport(rep Report, rc RuntimeCapture) []byte {
 	st := rep.Stats
 
 	b.WriteString("# diag-export\n\n")
-	fmt.Fprintf(&b, "> 生成时间 %s · %s/%s\n", time.Now().Format("2006-01-02 15:04:05"), rc.GoOS, rc.GoArch)
-	b.WriteString("> ⚠️ 已脱敏：小说正文 / prompt / 思考已移除，仅保留行为骨架。可直接贴到 issue。\n\n")
+	fmt.Fprintf(&b, "> %s %s · %s/%s\n", i18n.T("Sinh lúc"), time.Now().Format("2006-01-02 15:04:05"), rc.GoOS, rc.GoArch)
+	b.WriteString("> ⚠️ " + i18n.T("Đã che thông tin nhạy cảm: văn bản truyện / prompt / suy nghĩ đã bị gỡ bỏ, chỉ giữ lại khung hành vi. Có thể dán thẳng vào issue.") + "\n\n")
 
 	// 1. Environment
-	b.WriteString("## 1. 环境\n\n")
-	fmt.Fprintf(&b, "- 阶段 `%s`", orDash(st.Phase))
+	b.WriteString("## 1. " + i18n.T("Môi trường") + "\n\n")
+	fmt.Fprintf(&b, "- %s `%s`", i18n.T("Giai đoạn"), orDash(st.Phase))
 	if st.Flow != "" {
 		fmt.Fprintf(&b, " / flow `%s`", st.Flow)
 	}
-	fmt.Fprintf(&b, " · 章节 %d/%d · 字数 %d\n", st.CompletedChapters, st.TotalChapters, st.TotalWords)
+	fmt.Fprintf(&b, " · %s %d/%d · %s %d\n", i18n.T("Chương"), st.CompletedChapters, st.TotalChapters, i18n.T("Số chữ"), st.TotalWords)
 	if st.PlanningTier != "" {
-		fmt.Fprintf(&b, "- 规划 `%s`\n", st.PlanningTier)
+		fmt.Fprintf(&b, "- %s `%s`\n", i18n.T("Kế hoạch"), st.PlanningTier)
 	}
 	for _, m := range rc.Models {
 		fmt.Fprintf(&b, "- %s → `%s` / `%s`\n", m.Agent, orDash(m.Provider), orDash(m.Model))
 	}
 
 	// 2. Diagnostic findings (runtime only; writing diagnostics contain plot/setups, so they stay on the /diag screen report and are not put into the shareable export)
-	b.WriteString("\n## 2. 诊断发现（运行时）\n\n")
+	b.WriteString("\n## 2. " + i18n.T("Phát hiện chẩn đoán (runtime)") + "\n\n")
 	rf := runtimeFindings(&rc)
 	sortFindings(rf)
 	if len(rf) == 0 {
-		b.WriteString("未发现运行时异常。\n")
+		b.WriteString(i18n.T("Không phát hiện bất thường runtime.") + "\n")
 	} else {
 		for _, f := range rf {
 			fmt.Fprintf(&b, "- [%s] %s\n", f.Severity, f.Title)
 			if f.Evidence != "" {
-				fmt.Fprintf(&b, "  - 证据：%s\n", f.Evidence)
+				fmt.Fprintf(&b, "  - %s %s\n", i18n.T("Bằng chứng:"), f.Evidence)
 			}
 			if f.Suggestion != "" {
 				fmt.Fprintf(&b, "  - → %s\n", f.Suggestion)
@@ -76,52 +77,52 @@ func RenderExport(rep Report, rc RuntimeCapture) []byte {
 	}
 
 	// 3. Runtime signals (raw aggregation)
-	b.WriteString("\n## 3. 运行时信号\n\n")
+	b.WriteString("\n## 3. " + i18n.T("Tín hiệu runtime") + "\n\n")
 	wrote := false
 	if rc.CurrentStep != "" {
-		fmt.Fprintf(&b, "- 当前 step `%s`\n", rc.CurrentStep)
+		fmt.Fprintf(&b, "- %s `%s`\n", i18n.T("Step hiện tại:"), rc.CurrentStep)
 		wrote = true
 	}
 	if rc.StuckStep != "" {
-		fmt.Fprintf(&b, "- ⚠️ 卡住：连续停在 `%s` ×%d\n", rc.StuckStep, rc.StuckCount)
+		fmt.Fprintf(&b, "- ⚠️ %s `%s` ×%d\n", i18n.T("Kẹt: liên tục dừng tại"), rc.StuckStep, rc.StuckCount)
 		wrote = true
 	}
 	if len(rc.Repeats) > 0 {
-		b.WriteString("- 高频签名（近端窗口 ≥3 次，含正常重复工具，仅供参考）：\n")
+		b.WriteString("- " + i18n.T("Chữ ký tần suất cao (cửa sổ gần đây ≥3 lần, gồm cả lặp tool bình thường, chỉ để tham khảo):") + "\n")
 		for _, r := range rc.Repeats {
 			fmt.Fprintf(&b, "  - `%s` ×%d\n", r.Sig, r.Count)
 		}
 		wrote = true
 	}
 	if len(rc.DupContent) > 0 {
-		b.WriteString("- 反复生成同段文本（同 sha）：\n")
+		b.WriteString("- " + i18n.T("Sinh lặp cùng một đoạn văn bản (cùng sha):") + "\n")
 		for _, d := range rc.DupContent {
 			fmt.Fprintf(&b, "  - sha=%s ×%d\n", d.Sha, d.Count)
 		}
 		wrote = true
 	}
 	if len(rc.LogKinds) > 0 {
-		b.WriteString("- 日志错误分类：")
+		b.WriteString("- " + i18n.T("Phân loại lỗi trong log:"))
 		b.WriteString(joinKinds(rc.LogKinds))
 		b.WriteString("\n")
 		wrote = true
 	}
 	if rc.LogErrors > 0 || rc.LogWarns > 0 {
-		fmt.Fprintf(&b, "- 日志 error ×%d · warn ×%d\n", rc.LogErrors, rc.LogWarns)
+		fmt.Fprintf(&b, "- %s error ×%d · warn ×%d\n", i18n.T("Log"), rc.LogErrors, rc.LogWarns)
 		wrote = true
 	}
 	if rc.StopGuard > 0 {
-		fmt.Fprintf(&b, "- StopGuard 拦截 ×%d\n", rc.StopGuard)
+		fmt.Fprintf(&b, "- StopGuard %s ×%d\n", i18n.T("chặn"), rc.StopGuard)
 		wrote = true
 	}
 	if !wrote {
-		b.WriteString("- 无明显运行时异常信号。\n")
+		b.WriteString("- " + i18n.T("Không có tín hiệu bất thường runtime nào rõ ràng.") + "\n")
 	}
 
 	// 4. The tail of the behaviour skeleton
-	fmt.Fprintf(&b, "\n## 4. 行为骨架尾巴（末 %d 条）\n\n", len(rc.Tail))
+	fmt.Fprintf(&b, "\n## 4. %s\n\n", i18n.Tf("Đuôi khung hành vi (%d mục)", len(rc.Tail)))
 	if len(rc.Tail) == 0 {
-		b.WriteString("（无会话记录）\n")
+		b.WriteString(i18n.T("(không có nhật ký phiên)") + "\n")
 	} else {
 		b.WriteString("```\n")
 		for _, ev := range rc.Tail {
@@ -132,10 +133,10 @@ func RenderExport(rep Report, rc RuntimeCapture) []byte {
 	}
 
 	// 5. Redaction self-check
-	b.WriteString("\n## 5. 脱敏自检\n\n")
-	fmt.Fprintf(&b, "- 打码文本块 %d 处 · 正文出包 0 处\n", rc.RedactedTexts)
+	b.WriteString("\n## 5. " + i18n.T("Tự kiểm tra che thông tin") + "\n\n")
+	fmt.Fprintf(&b, "- %s %d %s · %s 0 %s\n", i18n.T("Số khối văn bản đã che:"), rc.RedactedTexts, i18n.T("chỗ"), i18n.T("Văn bản truyện lọt ra ngoài:"), i18n.T("chỗ"))
 	if len(rc.Sources) > 0 {
-		fmt.Fprintf(&b, "- 数据源：%s\n", strings.Join(rc.Sources, " · "))
+		fmt.Fprintf(&b, "- %s %s\n", i18n.T("Nguồn dữ liệu:"), strings.Join(rc.Sources, " · "))
 	}
 
 	return []byte(b.String())

@@ -97,9 +97,25 @@ var (
 )
 
 // catalog[lang][nguồn tiếng Việt] = bản dịch.
+//
+// diagCatalogEn/Zh được trộn vào đây thay vì khai báo riêng, để mọi nơi đọc
+// catalog (T(), Has(), test) thấy một bảng duy nhất — tách riêng chỉ là cách
+// chia file cho dễ đọc, không phải hai nguồn sự thật.
 var catalog = map[string]map[string]string{
-	LangEnglish: enCatalog,
-	LangChinese: zhCatalog,
+	LangEnglish: mergeCatalog(enCatalog, diagCatalogEn),
+	LangChinese: mergeCatalog(zhCatalog, diagCatalogZh),
+}
+
+// mergeCatalog gộp nhiều bảng thành một. Khoá trùng thì bảng sau ghi đè bảng trước,
+// nên gọi theo thứ tự từ chung đến chuyên biệt.
+func mergeCatalog(parts ...map[string]string) map[string]string {
+	out := make(map[string]string)
+	for _, p := range parts {
+		for k, v := range p {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // SetLanguage đặt ngôn ngữ hiện tại. Chuẩn hoá qua Matcher nên "EN", "en-US",

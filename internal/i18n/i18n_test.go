@@ -131,11 +131,11 @@ func TestAvailable(t *testing.T) {
 // Giới hạn có chủ ý (ghi rõ để không ai "sửa test cho qua"):
 //   - chỉ bắt string literal trực tiếp; chuỗi dựng động (nối biến, Sprintf trước
 //     rồi mới T()) không quét được — những chỗ đó phải tự rà bằng mắt.
-//   - chỉ quét package có gọi i18n (hiện tại: entry/tui, host); thêm package mới
-//     gọi i18n thì thêm vào dirs dưới đây.
+//   - chỉ quét package có gọi i18n (hiện tại: diag, entry/tui, host); thêm package
+//     mới gọi i18n thì thêm vào dirs dưới đây.
 //   - bỏ qua file *_test.go.
 func TestMoiChuoiTDeuCoBanDich(t *testing.T) {
-	dirs := []string{"../entry/tui", "../host"}
+	dirs := []string{"../diag", "../entry/tui", "../host"}
 	got := map[string]map[string]bool{} // literal -> {file:line}
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
