@@ -340,9 +340,27 @@ func commandRegistryInstance() commandRegistry {
 			Usage:       "/start <path>",
 			Description: i18n.T("Tạo truyện mới từ file thiết lập/dàn ý"),
 			Run: func(m Model, args []string) (tea.Model, tea.Cmd) {
-				if m.mode != modeNew {
+				// /start tạo truyện mới TỪ FILE, nên điều kiện đúng là "truyện
+				// đang mở còn trống" — không phải "đang ở màn hình chào".
+				// Trước đây chặn theo mode != modeNew: mở app, chọn "Viết tiếp"
+				// ở màn chào là mode thành modeRunning, và /start bị chặn vĩnh
+				// viễn dù truyện còn trống — người dùng không tạo được truyện mới
+				// mà không đóng app.
+				if m.snapshot.IsRunning {
 					m.applyEvent(host.Event{
-						Time: time.Now(), Category: "ERROR", Summary: i18n.T("/start chỉ dùng ở màn hình chào để tạo truyện mới"), Level: "error",
+						Time: time.Now(), Category: "ERROR",
+						Summary: i18n.T("Truyện đang chạy, dừng lại rồi hãy /start."), Level: "error",
+					})
+					m.refreshEventViewport()
+					return m, nil
+				}
+				// Truyện đã có nội dung thì /start sẽ ghi đè: chặn, nói rõ lý do.
+				if m.snapshot.CompletedCount > 0 || m.snapshot.InProgressChapter > 0 ||
+					m.snapshot.PendingSteer != "" {
+					m.applyEvent(host.Event{
+						Time: time.Now(), Category: "ERROR",
+						Summary: i18n.Tf("Truyện đang mở đã có nội dung — /start sẽ ghi đè. Dùng /new <tên> để tạo truyện khác (%d chương đã chốt).", m.snapshot.CompletedCount),
+						Level:   "error",
 					})
 					m.refreshEventViewport()
 					return m, nil
