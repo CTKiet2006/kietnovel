@@ -53,7 +53,7 @@ func (m Model) switchBook(dir string) (Model, tea.Cmd, error) {
 	old.Close()
 
 	// Dựng Model mới quanh Host mới, rồi mang sang những thứ thuộc về người dùng
-	// chứ không thuộc về truyện.
+	// và thuộc về phiên làm việc, không thuộc về truyện.
 	fresh := NewModel(newRT, m.version)
 	fresh.cfg = cfg
 	fresh.bundle = m.bundle
@@ -66,6 +66,16 @@ func (m Model) switchBook(dir string) (Model, tea.Cmd, error) {
 	// Prompt /start đang chờ phải sống sót qua bước dựng Model mới, nếu không
 	// người dùng gõ /start rồi tạo truyện mới sẽ không bao giờ chạy.
 	fresh.pendingStart = m.pendingStart
+	// Kích thước terminal PHẢI mang sang. NewModel để width/height = 0, còn View()
+	// khi width==0 chỉ vẽ "Đang tải..." — thiếu đúng hai ô này thì toàn bộ UI biến
+	// mất sau mỗi lần chuyển truyện, mãi cho tới khi người dùng co giãn terminal
+	// cho gửi WindowSizeMsg mới. Đây chính là lý do "chọn truyện khác" trông
+	// như đứng hình: truyện ĐÃ chuyển, chỉ là không còn gì để vẽ.
+	fresh.width, fresh.height = m.width, m.height
+	fresh.focusPane = m.focusPane
+	fresh.mouseOff = m.mouseOff
+	fresh.autoScroll = m.autoScroll
+	fresh.streamScroll = m.streamScroll
 	// Lịch sử phím là của người dùng, không phải của truyện: giữ lại, đổi truyện
 	// không có nghĩa mất đường lui.
 	fresh.inputHistory = m.inputHistory

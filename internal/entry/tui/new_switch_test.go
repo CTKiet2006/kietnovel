@@ -53,6 +53,7 @@ func TestNewChuyenSangTruyenMoi(t *testing.T) {
 	// không chuyển.
 	m.cfg = testCfg(base)
 	m.hostOpts = nil
+	m.width, m.height = 120, 40
 
 	// Gõ /new <tên> rồi Enter: đi đúng đường người dùng gặp.
 	m.books = newBooksState(100, 30, booksNewDraft)
@@ -72,6 +73,11 @@ func TestNewChuyenSangTruyenMoi(t *testing.T) {
 	}
 	if sameDir(m.runtime.Dir(), oldDir) {
 		t.Error("runtime vẫn trỏ truyện cũ sau /new")
+	}
+	// Mất kích thước terminal thì View() chỉ vẽ "Đang tải..." — người dùng thấy
+	// truyện đã chuyển nhưng UI trống, dễ tưởng /new hỏng.
+	if m.width == 0 || m.height == 0 {
+		t.Errorf("/new xong mất kích thước terminal: %dx%d", m.width, m.height)
 	}
 	// Host mới giữ khoá thư mục truyện mới: phải đóng trước khi TempDir xoá,
 	// nếu không Windows giữ file .kietnovel.lock và test fail vì cleanup.
