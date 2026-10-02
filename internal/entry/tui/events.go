@@ -155,11 +155,22 @@ func fetchSnapshot(rt *host.Host) tea.Cmd {
 	}
 }
 
+// bookHasContent báo truyện đang mở đã có việc để khôi phục chưa.
+//
+// KHÔNG được xét BookTitle. /new ghi tên hiển thị vào meta/book.json ngay nên
+// truyện vừa tạo có title nhưng chưa có progress.json. Xét cả title thì truyện
+// mới bị coi là truyện cũ: TUI vào thẳng bàn viết, gõ chữ đi vào
+// Continue/Arbiter, mà truyện chưa có tiều đề nên Arbiter không có việc gì để
+// làm — chỉ ghi can thiệp rồi bỏ đó, người dùng thấy "can thiệp chờ xử lý".
+func bookHasContent(snap host.UISnapshot) bool {
+	return snap.Phase != ""
+}
+
 func bootstrapRuntime(rt *host.Host) tea.Cmd {
 	return func() tea.Msg {
 		snapshot := rt.Snapshot()
 		msg := bootstrapMsg{
-			existing:  snapshot.Phase != "" || snapshot.BookTitle != "",
+			existing:  bookHasContent(snapshot),
 			completed: snapshot.Phase == "complete",
 		}
 		label, err := rt.Resume()
@@ -188,7 +199,7 @@ func resumeBook(rt *host.Host) tea.Cmd {
 		snapshot := rt.Snapshot()
 		label, err := rt.Resume()
 		return bootstrapMsg{
-			existing: snapshot.Phase != "" || snapshot.BookTitle != "", completed: snapshot.Phase == "complete",
+			existing: bookHasContent(snapshot), completed: snapshot.Phase == "complete",
 			resumed: !label.Empty(), err: err,
 		}
 	}

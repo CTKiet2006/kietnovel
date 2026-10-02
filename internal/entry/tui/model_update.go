@@ -516,8 +516,11 @@ func (m Model) handleRuntimeMsg(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		// Màn chào: snapshot đầu tiên đã biết có sách thì hỏi, không tự chạy.
 		// Chỉ khi mở app (welcomeSeen=false); chuyển truyện trong phiên thì
 		// switchBook đã đặt welcomeSeen=true để không hỏi lại.
-		if !m.welcomeSeen && m.welcome == nil && m.mode == modeNew &&
-			(next.Phase != "" || next.BookTitle != "") {
+		//
+		// Dùng bookHasContent chứ không xét BookTitle: truyện vừa /new có tên
+		// hiển thị nhưng chưa có việc gì, hỏi "Viết tiếp / Chọn truyện khác" ở
+		// một truyện trống là hỏi nhầm.
+		if !m.welcomeSeen && m.welcome == nil && m.mode == modeNew && bookHasContent(next) {
 			m.snapshot = next
 			m.welcome = newWelcomeState(next)
 			m.textarea.Blur()
