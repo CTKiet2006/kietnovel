@@ -191,7 +191,7 @@ func dispatchSummary(agent, task string) string {
 	if firstLine == "" {
 		return agent
 	}
-	return agent + "（" + utils.TruncateRunes(firstLine, 30) + "）"
+	return agent + " (" + utils.TruncateRunes(firstLine, 30) + ")"
 }
 
 // dispatchDetail dựng phần Detail của sự kiện DISPATCH. Detail là field log đầy đủ

@@ -126,11 +126,11 @@ func BuildWriterPrompt(writerPrompt, voice, style string) string {
 var languageDirectives = map[string]string{
 	"vi": `## Ngôn ngữ sáng tác
 
-Toàn bộ sản phẩm của vai trò này — tên truyện, tóm tắt, tiền đề, dàn ý, hồ sơ nhân vật, quy tắc thế giới, phục bút, bản nháp và chương hoàn chỉnh — PHẢI viết bằng Tiếng Việt tự nhiên, mượt mà, đúng chuẩn văn phong trong phần văn phong (voice) phía trên. Không trộn tiếng Trung hay tiếng Anh trừ tên riêng. Tên tool, tên file và các khóa checkpoint hệ thống giữ nguyên không dịch.`,
+Toàn bộ sản phẩm của vai trò này — tên truyện, tóm tắt, tiền đề, dàn ý, hồ sơ nhân vật, quy tắc thế giới, phục bút, bản nháp và chương hoàn chỉnh — PHẢI viết bằng Tiếng Việt tự nhiên, mượt mà, đúng chuẩn văn phong trong phần văn phong (voice) phía trên. Toàn bộ quá trình tư duy, phân tích logic và suy nghĩ nội bộ (thinking/reasoning) PHẢI thực hiện hoàn toàn bằng Tiếng Việt, không suy nghĩ bằng tiếng Anh hay tiếng Trung. Không trộn tiếng Trung hay tiếng Anh trừ tên riêng. Tên tool, tên file và các khóa checkpoint hệ thống giữ nguyên không dịch.`,
 
 	"en": `## Writing Language
 
-Every product of this role — story title, summary, premise, outline, character profiles, world rules, foreshadowing ledger, draft, and finished chapter — MUST be written in fluent, idiomatic English, following the prose standards given in the voice section above. Do not mix in Vietnamese or Chinese except for proper nouns. Tool names, file names, and system checkpoint keys stay untranslated.`,
+Every product of this role — story title, summary, premise, outline, character profiles, world rules, foreshadowing ledger, draft, and finished chapter — MUST be written in fluent, idiomatic English, following the prose standards given in the voice section above. The entire internal thinking and reasoning process MUST be conducted in English. Do not mix in Vietnamese or Chinese except for proper nouns. Tool names, file names, and system checkpoint keys stay untranslated.`,
 }
 
 // ApplyLanguage appends the output-language directive to Architect/Writer/Editor.

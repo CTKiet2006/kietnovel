@@ -259,6 +259,8 @@ var zhCatalog = map[string]string{
 	" · Tab cuộn: hội thoại":              " · Tab 切换：对话",
 	" · đã nhập %d/%d":                    " · 已输入 %d/%d",
 	"Bị ngắt, gõ gì đó để viết tiếp":      "已中断，输入内容继续写作",
+	"[đã ẩn nghĩ]":                         "[已隐藏思考]",
+	"Ctrl+T bật/tắt hiển thị đoạn suy nghĩ": "Ctrl+T 开关思考过程显示",
 	"Enter gửi · ":                        "Enter 发送 · ",
 	"Enter gửi · Esc thoát đồng sáng tác": "Enter 发送 · Esc 退出共创",
 

@@ -336,12 +336,15 @@ func renderEventFlowViewport(vp viewport.Model, width, height int, focused bool)
 }
 
 // renderStreamPanel render panel output trực tiếp (nửa dưới cột giữa).
-func renderStreamPanel(vp viewport.Model, width, height int, focused, running bool, frame int) string {
+func renderStreamPanel(vp viewport.Model, width, height int, focused, running bool, frame int, hideThinking ...bool) string {
 	// Thanh tiêu đề phân cách (luôn nổi bật): tiền tố vạch đứng đậm + luôn Bold + màu nhấn,
 	// tránh đụng màu với dòng suy nghĩ xám nhạt in nghiêng
 	// khi focused thêm gạch chân để phân biệt trạng thái focus.
 	titleStyle := lipgloss.NewStyle().Foreground(colorAccent).Bold(true).Underline(focused)
 	title := titleStyle.Render(i18n.T("▍ Xuất trực tiếp"))
+	if len(hideThinking) > 0 && hideThinking[0] {
+		title += " " + lipgloss.NewStyle().Foreground(colorMuted).Render(i18n.T("[đã ẩn nghĩ]"))
+	}
 	if running {
 		status := renderStreamActivity(frame)
 		title += " " + status
@@ -403,11 +406,12 @@ func renderStreamActivity(frame int) string {
 // renderStreamContent render output trực tiếp theo vòng thành các khối ngữ nghĩa.
 // Khối điều phối agent (mở đầu bằng ▸ hoặc ✻) dùng tiêu đề accent + lệnh dim; khối chính văn theo màu mặc định terminal.
 // cursor khác rỗng thì nối ở cuối, nghĩa là AI đang xuất.
-func renderStreamContent(rounds []string, width int, cursor string) string {
+func renderStreamContent(rounds []string, width int, cursor string, hideThinking ...bool) string {
 	if width < 24 {
 		width = 24
 	}
 
+	hidden := len(hideThinking) > 0 && hideThinking[0]
 	var blocks []string
 	for _, round := range rounds {
 		// Host soạn tiêu đề khối (✻ …) bằng tiếng Việt làm nguồn, theo đúng quy ước
@@ -419,7 +423,10 @@ func renderStreamContent(rounds []string, width int, cursor string) string {
 		if strings.HasPrefix(text, "▸") || strings.HasPrefix(text, "✻") {
 			blocks = append(blocks, renderAgentBlock(text, width))
 		} else {
-			blocks = append(blocks, renderChapterBlock(text, width))
+			block := renderChapterBlock(text, width, hidden)
+			if strings.TrimSpace(block) != "" {
+				blocks = append(blocks, block)
+			}
 		}
 	}
 	result := strings.Join(blocks, "\n\n")
@@ -478,10 +485,11 @@ func renderAgentBlock(text string, width int) string {
 // renderChapterBlock render khối chính văn, tự phân biệt nội dung suy nghĩ với chính văn chương.
 // Nội dung suy nghĩ (đoạn đánh dấu ThinkingSep) dùng colorDim in nghiêng; chính văn chương đi bodyTextColor:
 // nền tối kế thừa màu chữ mặc định terminal, nền sáng dùng nâu đậm giữ tông ấm.
-func renderChapterBlock(text string, width int) string {
+func renderChapterBlock(text string, width int, hideThinking ...bool) string {
 	contentStyle := lipgloss.NewStyle().Foreground(bodyTextColor)
 	thinkStyle := lipgloss.NewStyle().Foreground(colorDim).Italic(true)
 	wrapW := max(16, width-4)
+	hidden := len(hideThinking) > 0 && hideThinking[0]
 
 	// Chia theo ThinkingSep: đoạn lẻ là suy nghĩ, đoạn chẵn là chính văn
 	// Định dạng: [chính văn] \x02 [suy nghĩ] [chính văn] \x02 [suy nghĩ] ...
@@ -494,6 +502,9 @@ func renderChapterBlock(text string, width int) string {
 			continue
 		}
 		isThinking := i > 0 && i%2 != 0 // Đoạn lẻ sau ThinkingSep là suy nghĩ
+		if isThinking && hidden {
+			continue
+		}
 
 		style := contentStyle
 		if isThinking {

@@ -18,6 +18,11 @@ func LoadState(store *storepkg.Store) (State, error) {
 		return s, fmt.Errorf("load foundation state: %w", err)
 	}
 	s.FoundationMissing = missing
+	if store.BookLanguage != nil {
+		if lang, err := store.BookLanguage.Load(); err == nil && lang != "" {
+			s.Language = lang
+		}
+	}
 	// Planning tier: written to RunMeta when save_foundation persists scale, and the completion branch derives the planner from it.
 	// A read failure is treated as unknown (empty tier → completion goes to LLM arbitration), consistent with the conservative default of the other facts.
 	meta, err := store.RunMeta.Load()

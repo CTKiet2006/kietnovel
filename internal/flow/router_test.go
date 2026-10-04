@@ -263,6 +263,18 @@ func TestRoute_NormalContinue(t *testing.T) {
 	if got.Chapter != 4 {
 		t.Errorf("expected Chapter=4, got %d", got.Chapter)
 	}
+
+	// Vietnamese language support
+	gotVi := Route(State{Progress: p, LastCompleted: 3, Language: "vi"})
+	if gotVi == nil || gotVi.Task != "Viết chương 4" || gotVi.Reason != "Viết tiếp chương tiếp theo" {
+		t.Errorf("expected Vietnamese task, got %+v", gotVi)
+	}
+
+	// English language support
+	gotEn := Route(State{Progress: p, LastCompleted: 3, Language: "en"})
+	if gotEn == nil || gotEn.Task != "Write chapter 4" || gotEn.Reason != "Continue next chapter" {
+		t.Errorf("expected English task, got %+v", gotEn)
+	}
 }
 
 func TestRoute_ExternalRevisionDispatchesArchitectBeforeWriter(t *testing.T) {

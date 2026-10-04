@@ -178,17 +178,54 @@ func cloneFatigue(m map[string]int) map[string]int {
 // the later-stage fatigue words (像一 / 沉默了 / 没有说话 / X息) come from evidence in a 196-chapter long run -- once the
 // early-stage cliche table was wiped out, the model used these "beat words" 5-7 times per chapter, so the thresholds are loose enough to tolerate normal use.
 func SystemDefaults() Candidate {
-	return Candidate{
-		Source: "system_defaults",
-		Structured: Structured{
-			// Fixed-length AI cliches; the checker does literal substring matching, while patterns with a variable slot (not X but Y) belong to the semantic layer.
-			ForbiddenPhrases: []string{"某种程度上", "值得注意的是", "不知为何", "五味杂陈"},
-			FatigueWords: map[string]int{
-				"不禁": 1, "竟然": 1, "仿佛": 2, "此外": 1, "然而": 2,
-				"一丝": 2, "一抹": 2, "一缕": 2, "宛如": 1, "不由得": 1,
-				"像一": 3, "沉默了": 2, "没有说话": 2, "几息": 3, "一息": 3, "数息": 2,
+	return SystemDefaultsForLanguage("zh")
+}
+
+// SystemDefaultsForLanguage returns the baseline candidate tailored to the creative language (vi, en, zh).
+func SystemDefaultsForLanguage(lang string) Candidate {
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "vi":
+		return Candidate{
+			Source: "system_defaults",
+			Structured: Structured{
+				ForbiddenPhrases: []string{
+					"ở một mức độ nào đó", "đáng chú ý là", "không biết vì sao", "ngũ vị tạp trần",
+				},
+				FatigueWords: map[string]int{
+					"bất giác": 1, "dường như": 2, "thoáng chốc": 2, "im lặng": 2, "không nói gì": 2,
+					"tựa như": 2, "không khỏi": 1, "trong lòng": 3, "thở dài": 2, "chợt": 2,
+					"hít sâu": 2, "khẽ": 3, "nhàn nhạt": 2, "chậm rãi": 3, "ngưng thần": 2, "chớp mắt": 2,
+				},
 			},
-		},
+		}
+	case "en":
+		return Candidate{
+			Source: "system_defaults",
+			Structured: Structured{
+				ForbiddenPhrases: []string{
+					"in a sense", "it is worth noting", "for some reason", "needless to say",
+				},
+				FatigueWords: map[string]int{
+					"suddenly": 2, "somehow": 2, "felt like": 2, "a sense of": 2,
+					"seemed to": 2, "could not help": 1, "silence fell": 2, "took a deep breath": 2,
+					"faintly": 2, "slowly": 3, "gently": 2, "in his heart": 2,
+					"in her heart": 2, "sighed": 2, "in an instant": 2, "blink of an eye": 2,
+				},
+			},
+		}
+	default:
+		return Candidate{
+			Source: "system_defaults",
+			Structured: Structured{
+				// Fixed-length AI cliches; the checker does literal substring matching, while patterns with a variable slot (not X but Y) belong to the semantic layer.
+				ForbiddenPhrases: []string{"某种程度上", "值得注意的是", "不知为何", "五味杂陈"},
+				FatigueWords: map[string]int{
+					"不禁": 1, "竟然": 1, "仿佛": 2, "此外": 1, "然而": 2,
+					"一丝": 2, "一抹": 2, "一缕": 2, "宛如": 1, "不由得": 1,
+					"像一": 3, "沉默了": 2, "没有说话": 2, "几息": 3, "一息": 3, "数息": 2,
+				},
+			},
+		}
 	}
 }
 

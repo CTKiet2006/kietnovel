@@ -65,6 +65,50 @@ func TestService_GetOrBuildInitializesMissingSnapshot(t *testing.T) {
 	}
 }
 
+func TestService_ReconcileDefaultsForLanguage(t *testing.T) {
+	svc, st := newDegradedService(t)
+	// Lock book language to Vietnamese
+	if err := st.BookLanguage.Save("vi"); err != nil {
+		t.Fatalf("Save BookLanguage: %v", err)
+	}
+
+	// Save an old snapshot with Chinese defaults
+	zhSnap := rules.BuildSnapshot([]rules.Candidate{rules.SystemDefaultsForLanguage("zh")})
+	zhSnap.Preferences = "custom preference"
+	if err := st.UserRules.Save(&zhSnap); err != nil {
+		t.Fatalf("Save UserRules: %v", err)
+	}
+
+	// GetOrBuild should reconcile Chinese defaults to Vietnamese defaults
+	reconciled, err := svc.GetOrBuild(t.Context())
+	if err != nil {
+		t.Fatalf("GetOrBuild: %v", err)
+	}
+
+	// Should no longer have Chinese forbidden phrase "某种程度上"
+	for _, p := range reconciled.Structured.ForbiddenPhrases {
+		if p == "某种程度上" {
+			t.Errorf("expected Chinese forbidden phrase to be removed")
+		}
+	}
+	// Should have Vietnamese forbidden phrase
+	hasViPhrase := false
+	for _, p := range reconciled.Structured.ForbiddenPhrases {
+		if p == "ở một mức độ nào đó" {
+			hasViPhrase = true
+			break
+		}
+	}
+	if !hasViPhrase {
+		t.Errorf("expected Vietnamese forbidden phrase to be present")
+	}
+
+	// Custom preferences should be preserved
+	if reconciled.Preferences != "custom preference" {
+		t.Errorf("expected preferences to be preserved, got %q", reconciled.Preferences)
+	}
+}
+
 func TestService_AddRuntimeRule_PersistsAndReturnsCandidate(t *testing.T) {
 	svc, st := newDegradedService(t)
 

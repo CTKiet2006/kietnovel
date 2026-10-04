@@ -118,6 +118,7 @@ type Model struct {
 	eventSpinnerActive bool // Đã bật timer animation sự kiện; không có sự kiện chạy thì tự dừng
 	cursorIdx          int  // Index khung con trỏ stream (tiến theo animation chính)
 	streamRound        int  // Đếm vòng output stream
+	hideThinking       bool // Ẩn đoạn suy nghĩ trong panel stream (Ctrl+T)
 	quitPending        bool // Xác nhận thoát bằng hai lần Ctrl+C
 	abortPending       bool // Tạm dừng tay chờ Done về
 	mouseOff           bool // true là đã tắt báo cáo chuột, để user kéo chuột bôi đen copy nguyên bản; bật lại thì hồi
@@ -287,7 +288,7 @@ func (m *Model) refreshStreamViewport() {
 	if m.snapshot.IsRunning {
 		cursor = renderStreamCursor(m.cursorIdx)
 	}
-	m.streamVP.SetContent(renderStreamContent(m.streamRounds, m.streamVP.Width, cursor))
+	m.streamVP.SetContent(renderStreamContent(m.streamRounds, m.streamVP.Width, cursor, m.hideThinking))
 }
 
 func (m *Model) refreshDetailViewport() {
@@ -726,7 +727,7 @@ func (m Model) View() string {
 		}
 
 		eventFlow := renderEventFlowViewport(m.viewport, centerW, eventH, m.paneHighlighted(focusEvents))
-		streamPanel := renderStreamPanel(m.streamVP, centerW, streamH, m.paneHighlighted(focusStream), m.snapshot.IsRunning || m.starting, m.spinnerIdx)
+		streamPanel := renderStreamPanel(m.streamVP, centerW, streamH, m.paneHighlighted(focusStream), m.snapshot.IsRunning || m.starting, m.spinnerIdx, m.hideThinking)
 		center := lipgloss.JoinVertical(lipgloss.Left, eventFlow, streamPanel)
 
 		left := renderStatePanel(m.stateVP, leftW, bodyH, m.paneHighlighted(focusState))

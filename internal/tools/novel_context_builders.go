@@ -166,7 +166,11 @@ func (t *ContextTool) buildUserRules(result map[string]any, reads *contextReads)
 	}
 	if snap == nil {
 		// While the snapshot is not yet initialised the code's built-in defaults are used, guaranteeing that the mechanical floor (word count / banned words / fatigue words) always exists.
-		def := rules.BuildSnapshot([]rules.Candidate{rules.SystemDefaults()})
+		lang := ""
+		if t.store != nil && t.store.BookLanguage != nil {
+			lang, _ = t.store.BookLanguage.Load()
+		}
+		def := rules.BuildSnapshot([]rules.Candidate{rules.SystemDefaultsForLanguage(lang)})
 		snap = &def
 	}
 	working, ok := result["working_memory"].(map[string]any)

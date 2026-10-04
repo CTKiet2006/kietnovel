@@ -260,6 +260,8 @@ var enCatalog = map[string]string{
 	" · Tab cuộn: hội thoại":              " · Tab cycles: chat",
 	" · đã nhập %d/%d":                    " · entered %d/%d",
 	"Bị ngắt, gõ gì đó để viết tiếp":      "Interrupted, type something to keep writing",
+	"[đã ẩn nghĩ]":                         "[thinking hidden]",
+	"Ctrl+T bật/tắt hiển thị đoạn suy nghĩ": "Ctrl+T toggle thinking display",
 	"Enter gửi · ":                        "Enter sends · ",
 	"Enter gửi · Esc thoát đồng sáng tác": "Enter sends · Esc leaves co-create",
 

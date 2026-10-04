@@ -63,6 +63,7 @@ func renderHelpText(width int) string {
 		i18n.T("Tab/Enter nhận gợi ý"),
 		i18n.T("Esc đóng bảng lệnh đang mở"),
 		i18n.T("Ctrl+R bật chế độ bôi đen để copy (tắt báo chuột để kéo chọn, nhấn lần nữa để về như cũ)"),
+		i18n.T("Ctrl+T bật/tắt hiển thị đoạn suy nghĩ"),
 	} {
 		b.WriteString(hintStyle.Render(line))
 		b.WriteString("\n")

@@ -41,7 +41,7 @@ func (s *Service) normalizeOrDegrade(ctx context.Context, source, text string) r
 // Build normalizes the static sources (system_defaults + rules files + startup prompt), builds a snapshot and persists it.
 // Called on book creation/refresh. startupPrompt may be empty.
 func (s *Service) Build(ctx context.Context, startupPrompt string) (*rules.Snapshot, error) {
-	cands := []rules.Candidate{rules.SystemDefaults()}
+	cands := []rules.Candidate{rules.SystemDefaultsForLanguage(s.bookLanguage())}
 	for _, rs := range rules.RawFileSources(s.rulesOpts) {
 		cands = append(cands, s.normalizeOrDegrade(ctx, rs.Label, rs.Text))
 	}
@@ -55,6 +55,15 @@ func (s *Service) Build(ctx context.Context, startupPrompt string) (*rules.Snaps
 	return &snap, nil
 }
 
+func (s *Service) bookLanguage() string {
+	if s.store != nil && s.store.BookLanguage != nil {
+		if l, err := s.store.BookLanguage.Load(); err == nil && l != "" {
+			return l
+		}
+	}
+	return ""
+}
+
 // GetOrBuild returns the current snapshot; when it is missing it initializes from system_defaults + the rules files.
 // The runtime read path always goes through here.
 func (s *Service) GetOrBuild(ctx context.Context) (*rules.Snapshot, error) {
@@ -63,9 +72,62 @@ func (s *Service) GetOrBuild(ctx context.Context) (*rules.Snapshot, error) {
 		return nil, err
 	}
 	if cur != nil {
+		if s.reconcileDefaults(cur) {
+			_ = s.store.UserRules.Save(cur)
+		}
 		return cur, nil
 	}
 	return s.Build(ctx, "")
+}
+
+func (s *Service) reconcileDefaults(snap *rules.Snapshot) bool {
+	if snap == nil {
+		return false
+	}
+	lang := s.bookLanguage()
+	if lang == "zh" {
+		return false
+	}
+	zhDefaults := rules.SystemDefaultsForLanguage("zh").Structured
+	hasZhDefault := false
+	if snap.Structured.FatigueWords != nil && snap.Structured.FatigueWords["不禁"] > 0 {
+		hasZhDefault = true
+	}
+	for _, p := range snap.Structured.ForbiddenPhrases {
+		if p == "某种程度上" {
+			hasZhDefault = true
+			break
+		}
+	}
+	if !hasZhDefault {
+		return false
+	}
+
+	targetDefaults := rules.SystemDefaultsForLanguage(lang).Structured
+
+	zhPhrases := make(map[string]bool)
+	for _, p := range zhDefaults.ForbiddenPhrases {
+		zhPhrases[p] = true
+	}
+	var keptPhrases []string
+	for _, p := range snap.Structured.ForbiddenPhrases {
+		if !zhPhrases[p] {
+			keptPhrases = append(keptPhrases, p)
+		}
+	}
+	snap.Structured.ForbiddenPhrases = append(targetDefaults.ForbiddenPhrases, keptPhrases...)
+
+	newFatigue := make(map[string]int)
+	for k, v := range targetDefaults.FatigueWords {
+		newFatigue[k] = v
+	}
+	for k, v := range snap.Structured.FatigueWords {
+		if _, isZh := zhDefaults.FatigueWords[k]; !isZh {
+			newFatigue[k] = v
+		}
+	}
+	snap.Structured.FatigueWords = newFatigue
+	return true
 }
 
 // AddRuntimeRule normalizes one long-term runtime rule, overlays it onto the current snapshot with the highest priority and persists it.

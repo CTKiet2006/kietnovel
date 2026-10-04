@@ -223,6 +223,10 @@ func (m Model) handleBaseKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyCtrlR:
 		return m.toggleMouseReporting()
+	case tea.KeyCtrlT:
+		m.hideThinking = !m.hideThinking
+		m.refreshStreamViewport()
+		return m, nil
 	case tea.KeyTab:
 		if m.mode == modeNew {
 			if m.cocreate != nil {
