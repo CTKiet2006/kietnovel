@@ -23,7 +23,7 @@ var (
 	// version mặc định cho `go run`/build tay. Bản release chính thức sẽ bị
 	// goreleaser ghi đè qua ldflags (-X main.version=...), nên nâng số ở đây
 	// không ảnh hưởng release. Nhớ nâng theo tag mới nhất.
-	version = "v1.6.3"
+	version = "v2.0.0"
 	commit  = "unknown"
 	date    = "unknown"
 )
