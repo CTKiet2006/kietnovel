@@ -165,74 +165,61 @@ Từ phiên bản v1.6.3, hệ thống áp dụng kiến trúc **cô lập ngôn
 - Khi đang chạy: gõ `/language` để xem ngôn ngữ hiện tại, hoặc `/language en` (hoặc `vi`, `zh`) để đổi trực tiếp.
 - Mỗi bộ truyện còn được khóa ngôn ngữ độc lập trong `meta/language.json`, đảm bảo khi chuyển đổi giữa các tác phẩm khác nhau thì ngữ cảnh sáng tác vẫn luôn đồng bộ chuẩn xác.
 
-## 4. Cấu Hình Nhà Cung Cấp AI & Chiến Lược Model P/P Tối Ưu
+## 4. Cấu Trúc Cấu Hình (Config JSON)
 
-### Bài toán chi phí khi sáng tác tiểu thuyết (Token Economics)
+File cấu hình được tự động tạo lần đầu tại `~/.kietnovel/config.json` thông qua Setup Wizard. Bạn có thể sửa nhanh trực tiếp qua TUI bằng lệnh `/config` hoặc mở tệp chỉnh sửa thủ công.
 
-Sáng tác một bộ tiểu thuyết dài (80–150 chương) đòi hỏi hệ thống duy trì ngữ cảnh lớn (dàn ý phân tầng, đối chiếu phục bút, kiểm tra tính nhất quán và thẩm định 7 chiều). Trung bình một cuốn sách tiêu tốn từ **15M đến 40M tokens input** và **1M đến 3M tokens output**.
-
-* Nếu sử dụng các model đầu bảng đắt đỏ (Claude 3.7 Sonnet, GPT-4o...), chi phí cho một bộ truyện có thể lên tới **$50 – $150 USD (~1.200.000đ – 3.700.000đ)** — hoàn toàn không tối ưu cho nhu cầu sáng tác thực chiến lâu dài.
-* Trong khi đó, với các dòng model **P/P (Hiệu năng / Giá thành)** thế hệ mới, chi phí cho trọn vẹn một cuốn sách chỉ từ **$1.5 – $4.0 USD (~35.000đ – 95.000đ)** mà chất lượng hành văn vẫn mềm mại, sống động, ít bị rập khuôn hay giáo điều.
-
-### Bảng Xếp Hạng Model P/P Khuyên Dùng Cho Viết Tiểu Thuyết
-
-| Model | Nhà cung cấp / Nền tảng | Chi phí (Input / Output per 1M) | Đánh giá thực chiến |
-|---|---|---|---|
-| **DeepSeek-V3** (`deepseek-chat`) | DeepSeek API / OpenRouter | **$0.14 / $0.28** *(Cache hit chỉ $0.07)* | **Vua P/P không đối thủ**. Khả năng thẩm thấu ngôn ngữ phương Đông cực tốt, hành văn tiếng Việt mượt mà, tự nhiên. Khuyên dùng làm model chính cho `writer` và `editor`. |
-| **Google Gemini 2.5 Flash** (`gemini-2.5-flash`) | Google AI Studio / OpenRouter | **$0.10 / $0.40** | Tốc độ sinh chữ cực nhanh, context 1M tokens nuốt trọn cả chục chương truyện trước mà không lo đứt mạch hay quên tình tiết. |
-| **DeepSeek-R1** (`deepseek-reasoner`) | DeepSeek API / OpenRouter | **$0.55 / $2.19** | Model lý luận chuyên sâu. Khuyên dùng riêng cho vai trò `architect` để thiết lập thế giới quan, quy hoạch dàn ý phức tạp và gieo mạng lưới phục bút chặt chẽ. |
-| **Qwen 2.5 72B** (`qwen/qwen-2.5-72b-instruct`) | OpenRouter / DeepInfra | **$0.35 / $0.40** | Vốn từ vựng đồ sộ, văn phong rất hợp với các thể loại huyền huyễn, tiên hiệp, kiếm hiệp, trinh thám tâm lý. |
-| **Llama 3.3 70B** (`meta-llama/llama-3.3-70b-instruct`) | OpenRouter / Groq | **$0.12 / $0.30** | Mô hình mã nguồn mở chất lượng cao, rất thích hợp cấu hình làm phương án dự phòng (`fallback`). |
-
----
-
-### Chiến lược Cấu hình Phân Vai Tối Ưu Chi Phí (`roles`)
-
-File cấu hình: `~/.kietnovel/config.json`. Thay vì dùng một model đắt tiền chạy từ đầu đến cuối, hãy tận dụng cơ chế **Phân vai độc lập (`roles`)** của `kietnovel`:
-
-* **`architect`**: Dùng model lý luận sâu (`deepseek-reasoner`). Vì chỉ gọi vài lần ở đầu truyện hoặc đầu mỗi Arc nên tốn chưa tới $0.15, nhưng cho ra bộ khung cốt truyện có chiều sâu vượt bậc.
-* **`writer`**: Dùng model P/P cao (`deepseek-chat` hoặc `gemini-2.5-flash`). Viết 3.000 – 5.000 từ mỗi chương chỉ tốn vài chục đồng lẻ.
-* **`editor`**: Dùng `deepseek-chat` để đối chiếu, chấm điểm rubric và bắt lỗi logic.
+### Cấu trúc tệp mẫu đầy đủ
 
 ```json
 {
   "language": "vi",
   "ui_language": "vi",
-  "provider": "deepseek",
-  "model": "deepseek-chat",
+  "provider": "<tên-provider-mặc-định>",
+  "model": "<tên-model-mặc-định>",
   "providers": {
-    "deepseek": {
-      "api_key": "sk-..."
-    },
-    "openrouter": {
-      "api_key": "sk-or-v1-..."
+    "<tên-provider>": {
+      "api_key": "YOUR_API_KEY",
+      "base_url": "https://api.example.com/v1"
     }
   },
   "roles": {
     "architect": {
-      "provider": "deepseek",
-      "model": "deepseek-reasoner"
+      "provider": "<provider-cho-architect>",
+      "model": "<model-cho-architect>"
     },
     "writer": {
-      "provider": "deepseek",
-      "model": "deepseek-chat",
+      "provider": "<provider-cho-writer>",
+      "model": "<model-cho-writer>",
+      "reasoning_effort": "high",
       "fallbacks": [
-        { "provider": "openrouter", "model": "google/gemini-2.5-flash" },
-        { "provider": "openrouter", "model": "qwen/qwen-2.5-72b-instruct" }
+        { "provider": "<provider-dự-phòng>", "model": "<model-dự-phòng>" }
       ]
     },
     "editor": {
-      "provider": "deepseek",
-      "model": "deepseek-chat"
+      "provider": "<provider-cho-editor>",
+      "model": "<model-cho-editor>"
     }
   },
-  "style": "default"
+  "style": "default",
+  "context_window": 0
 }
 ```
 
-* `context_window`: Tự động nhận diện từ model nếu để trống.
-* `reasoning_effort`: `off` / `low` / `medium` / `high` / `xhigh` / `max` (áp dụng cho các model lý luận như R1, o3-mini).
-* `fallbacks`: Danh sách model dự phòng tự động kích hoạt khi nhà cung cấp chính gặp sự cố mạng hoặc hết hạn mức.
+### Ý nghĩa các trường cấu hình
+
+| Trường | Bắt buộc | Ý nghĩa & Hướng dẫn |
+|---|---|---|
+| `language` | Không | Ngôn ngữ sáng tác tiểu thuyết (`vi`, `en`, `zh`). Mặc định: `vi`. |
+| `ui_language` | Không | Ngôn ngữ hiển thị của giao diện TUI (`vi`, `en`, `zh`). Mặc định đồng bộ theo `language`. |
+| `provider` | **Có** | Nhà cung cấp AI mặc định dùng cho toàn bộ hệ thống (trỏ tới key trong mục `providers`). |
+| `model` | **Có** | Định danh model mặc định (ID model do provider cung cấp). |
+| `providers` | **Có** | Bảng chứa thông tin kết nối và API Key của từng nhà cung cấp. Hỗ trợ trường `base_url` nếu dùng proxy hoặc endpoint tùy biến. |
+| `roles` | Không | Cấu hình model riêng biệt theo từng vai trò (`architect`, `writer`, `editor`). |
+| `roles.<role>.fallbacks` | Không | Danh sách model dự phòng theo thứ tự ưu tiên, tự động kích hoạt khi model chính lỗi kết nối hoặc cạn hạn mức. |
+| `reasoning_effort` | Không | Mức độ suy luận cho các model hỗ trợ reasoning/thinking: `off`, `low`, `medium`, `high`, `xhigh`, `max`. |
+| `context_window` | Không | Giới hạn cửa sổ ngữ cảnh (token). Mặc định `0` để hệ thống tự động nhận diện theo model. |
+| `style` | Không | Thư mục phong cách hành văn mặc định (`default`, `suspense`, `fantasy`, `romance`...). |
 
 ## 5. Hướng Dẫn Sử Dụng & Bảng Lệnh TUI
 
