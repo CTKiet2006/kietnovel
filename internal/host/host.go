@@ -632,6 +632,10 @@ func (h *Host) Resume() (Msg, error) {
 	for _, w := range h.store.CheckConsistency() {
 		h.emitEvent(Event{Time: time.Now(), Category: "SYSTEM", Summary: "Cảnh báo nhất quán: " + w, Level: "warn"})
 	}
+	// Bảo đảm ngôn ngữ sáng tác được khoá cho truyện này
+	if locked, err := h.BookLanguage(); err == nil && locked == "" {
+		_ = h.SetBookLanguage(defaultWriteLanguage(h.cfg))
+	}
 	// Bảo đảm snapshot quy tắc người dùng tồn tại; đã có thì đọc rất rẻ.
 	h.ensureUserRules()
 	h.refreshWriterRestore()

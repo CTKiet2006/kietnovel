@@ -61,7 +61,7 @@ func (s *Service) bookLanguage() string {
 			return l
 		}
 	}
-	return ""
+	return "vi"
 }
 
 // GetOrBuild returns the current snapshot; when it is missing it initializes from system_defaults + the rules files.

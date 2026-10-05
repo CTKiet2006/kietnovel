@@ -151,6 +151,47 @@ func (b *Bundle) ApplyLanguage(lang string) {
 	b.Prompts.ArchitectLong += d
 	b.Prompts.Writer += d
 	b.Prompts.Editor += d
+	if key == "vi" {
+		b.References.ChapterTemplate = `# Chương [X]: [Tên chương]
+
+## Tóm tắt chương
+- **Sự kiện cốt lõi**: [Một câu khái quát diễn biến chính của chương]
+- **Tiếp nối chương trước**: [Giải quyết hoặc nối tiếp móc câu trước]
+- **Móc câu lơ lửng**: [Móc câu kịch tính cuối chương]
+
+---
+
+## Nội dung chính
+
+[Nội dung chính của chương, số từ tuân thủ theo user_rules và sở thích văn phong]
+
+---
+
+## Ghi chú chương
+- Móc câu chương này: [Mô tả ngắn móc câu]
+- Hé lộ chương sau: [Tùy chọn, 1-2 câu]
+- Đánh dấu phục bút: [Nếu có gài phục bút, ghi nhận tại đây]`
+	} else if key == "en" {
+		b.References.ChapterTemplate = `# Chapter [X]: [Chapter Title]
+
+## Chapter Summary
+- **Core Event**: [One sentence summary]
+- **Bridge from previous**: [Address previous suspense]
+- **Suspense Hook**: [Ending hook]
+
+---
+
+## Main Text
+
+[Chapter text content conforming to user_rules and target word count]
+
+---
+
+## Chapter Notes
+- Suspense hook: [Brief note]
+- Next chapter preview: [Optional, 1-2 sentences]
+- Foreshadowing markers: [Record if any]`
+	}
 	// Arbiter cũng phải nhận directive. Thiếu đoạn này thì nhiệm vụ Arbiter sinh ra
 	// vẫn bằng Trung, Architect làm theo nhiệm vụ đó, và tiền đề ra tiếng Trung dù
 	// config đã đặt language=vi. Directive gắn vào Architect là không đủ — nó

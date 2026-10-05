@@ -182,19 +182,19 @@ func SystemDefaults() Candidate {
 }
 
 // SystemDefaultsForLanguage returns the baseline candidate tailored to the creative language (vi, en, zh).
+// Empty or unconfigured language defaults to Vietnamese in kietnovel.
 func SystemDefaultsForLanguage(lang string) Candidate {
 	switch strings.ToLower(strings.TrimSpace(lang)) {
-	case "vi":
+	case "zh":
 		return Candidate{
 			Source: "system_defaults",
 			Structured: Structured{
-				ForbiddenPhrases: []string{
-					"ở một mức độ nào đó", "đáng chú ý là", "không biết vì sao", "ngũ vị tạp trần",
-				},
+				// Fixed-length AI cliches; the checker does literal substring matching, while patterns with a variable slot (not X but Y) belong to the semantic layer.
+				ForbiddenPhrases: []string{"某种程度上", "值得注意的是", "不知为何", "五味杂陈"},
 				FatigueWords: map[string]int{
-					"bất giác": 1, "dường như": 2, "thoáng chốc": 2, "im lặng": 2, "không nói gì": 2,
-					"tựa như": 2, "không khỏi": 1, "trong lòng": 3, "thở dài": 2, "chợt": 2,
-					"hít sâu": 2, "khẽ": 3, "nhàn nhạt": 2, "chậm rãi": 3, "ngưng thần": 2, "chớp mắt": 2,
+					"不禁": 1, "竟然": 1, "仿佛": 2, "此外": 1, "然而": 2,
+					"一丝": 2, "一抹": 2, "一缕": 2, "宛如": 1, "不由得": 1,
+					"像一": 3, "沉默了": 2, "没有说话": 2, "几息": 3, "一息": 3, "数息": 2,
 				},
 			},
 		}
@@ -213,16 +213,17 @@ func SystemDefaultsForLanguage(lang string) Candidate {
 				},
 			},
 		}
-	default:
+	default: // "vi" or ""
 		return Candidate{
 			Source: "system_defaults",
 			Structured: Structured{
-				// Fixed-length AI cliches; the checker does literal substring matching, while patterns with a variable slot (not X but Y) belong to the semantic layer.
-				ForbiddenPhrases: []string{"某种程度上", "值得注意的是", "不知为何", "五味杂陈"},
+				ForbiddenPhrases: []string{
+					"ở một mức độ nào đó", "đáng chú ý là", "không biết vì sao", "ngũ vị tạp trần",
+				},
 				FatigueWords: map[string]int{
-					"不禁": 1, "竟然": 1, "仿佛": 2, "此外": 1, "然而": 2,
-					"一丝": 2, "一抹": 2, "一缕": 2, "宛如": 1, "不由得": 1,
-					"像一": 3, "沉默了": 2, "没有说话": 2, "几息": 3, "一息": 3, "数息": 2,
+					"bất giác": 1, "dường như": 2, "thoáng chốc": 2, "im lặng": 2, "không nói gì": 2,
+					"tựa như": 2, "không khỏi": 1, "trong lòng": 3, "thở dài": 2, "chợt": 2,
+					"hít sâu": 2, "khẽ": 3, "nhàn nhạt": 2, "chậm rãi": 3, "ngưng thần": 2, "chớp mắt": 2,
 				},
 			},
 		}
