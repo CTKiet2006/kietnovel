@@ -151,25 +151,68 @@ type InterventionDecision struct {
 	Reason   string         `json:"reason"`
 }
 
-var interventionContract = llmcontract.Contract{
-	Name:        "arbiter_intervention",
-	Description: "用户干预裁定：回答、规则、暂停、重开与派单",
-	Schema: schema.Object(
-		schema.Property("answer", llmcontract.Nullable(schema.String("回显给用户的文字；无则为 null"))).Required(),
-		schema.Property("rules", llmcontract.Nullable(schema.String("要落盘的长效写作规则原文；无则为 null"))).Required(),
-		schema.Property("hold", llmcontract.Nullable(schema.Object(
-			schema.Property("cancel", schema.Bool("是否取消既有一次性暂停")).Required(),
-			schema.Property("after", llmcontract.Nullable(schema.Enum("暂停触发点；取消时为 null", string(domain.AdvanceHoldAtBoundary), string(domain.AdvanceHoldAfterRewritesDrained), string(domain.AdvanceHoldAtChapter)))).Required(),
-			schema.Property("target_chapter", llmcontract.Nullable(schema.Int("after=chapter 时的目标章节；其他情况为 null"))).Required(),
-			schema.Property("reason", llmcontract.Nullable(schema.String("用户诉求摘要；取消时可为 null"))).Required(),
-		))).Required(),
-		schema.Property("reopen", llmcontract.Nullable(schema.Object(
-			schema.Property("chapters", schema.Array("需要重开的章节号", schema.Int("章节号"))).Required(),
-			schema.Property("reason", llmcontract.Nullable(schema.String("重开理由"))).Required(),
-		))).Required(),
-		schema.Property("dispatch", dispatchSchema("派单目标；无需派单时为 null")).Required(),
-		schema.Property("reason", schema.String("一句话裁定理由")).Required(),
-	),
+var interventionContract = interventionContractFor("zh")
+
+func interventionContractFor(lang string) llmcontract.Contract {
+	desc := "用户干预裁定：回答、规则、暂停、重开与派单"
+	ansDesc := "回显给用户的文字；无则为 null"
+	rulesDesc := "要落盘的长效写作规则原文；无则为 null"
+	holdCancelDesc := "是否取消既有一次性暂停"
+	holdAfterDesc := "暂停触发点；取消时为 null"
+	holdTargetDesc := "after=chapter 时的目标章节；其他情况为 null"
+	holdReasonDesc := "用户诉求摘要；取消时可为 null"
+	reopenChapsDesc := "需要重开的章节号"
+	reopenReasonDesc := "重开理由"
+	dispatchDesc := "派单目标；无需派单时为 null"
+	reasonDesc := "一句话裁定理由"
+
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "vi":
+		desc = "Phán quyết can thiệp của người dùng: Trả lời, quy tắc, tạm dừng, mở lại và giao việc"
+		ansDesc = "Văn bản phản hồi cho người dùng; null nếu không có"
+		rulesDesc = "Quy tắc văn phong dài hạn cần lưu đĩa; null nếu không có"
+		holdCancelDesc = "Có hủy bỏ lệnh tạm dừng một lần hiện có hay không"
+		holdAfterDesc = "Thời điểm kích hoạt tạm dừng; null khi hủy bỏ"
+		holdTargetDesc = "Số chương mục tiêu khi after=chapter; null trong trường hợp khác"
+		holdReasonDesc = "Tóm tắt yêu cầu của người dùng; null khi hủy bỏ"
+		reopenChapsDesc = "Các số chương cần mở lại"
+		reopenReasonDesc = "Lý do mở lại"
+		dispatchDesc = "Mục tiêu phân phát công việc; null nếu không cần giao việc"
+		reasonDesc = "Lý do phán quyết ngắn gọn"
+	case "en":
+		desc = "User intervention adjudication: answer, rules, hold, reopen, and dispatch"
+		ansDesc = "Response text echoed to user; null if none"
+		rulesDesc = "Writing rules to persist; null if none"
+		holdCancelDesc = "Whether to cancel existing advance hold"
+		holdAfterDesc = "Pause trigger point; null when cancelling"
+		holdTargetDesc = "Target chapter when after=chapter; null otherwise"
+		holdReasonDesc = "Summary of user request; null when cancelling"
+		reopenChapsDesc = "Chapter numbers to reopen"
+		reopenReasonDesc = "Reopen reason"
+		dispatchDesc = "Dispatch target; null if no dispatch needed"
+		reasonDesc = "Concise adjudication reason"
+	}
+
+	return llmcontract.Contract{
+		Name:        "arbiter_intervention",
+		Description: desc,
+		Schema: schema.Object(
+			schema.Property("answer", llmcontract.Nullable(schema.String(ansDesc))).Required(),
+			schema.Property("rules", llmcontract.Nullable(schema.String(rulesDesc))).Required(),
+			schema.Property("hold", llmcontract.Nullable(schema.Object(
+				schema.Property("cancel", schema.Bool(holdCancelDesc)).Required(),
+				schema.Property("after", llmcontract.Nullable(schema.Enum(holdAfterDesc, string(domain.AdvanceHoldAtBoundary), string(domain.AdvanceHoldAfterRewritesDrained), string(domain.AdvanceHoldAtChapter)))).Required(),
+				schema.Property("target_chapter", llmcontract.Nullable(schema.Int(holdTargetDesc))).Required(),
+				schema.Property("reason", llmcontract.Nullable(schema.String(holdReasonDesc))).Required(),
+			))).Required(),
+			schema.Property("reopen", llmcontract.Nullable(schema.Object(
+				schema.Property("chapters", schema.Array(reopenChapsDesc, schema.Int(""))).Required(),
+				schema.Property("reason", llmcontract.Nullable(schema.String(reopenReasonDesc))).Required(),
+			))).Required(),
+			schema.Property("dispatch", dispatchSchemaFor(dispatchDesc, lang)).Required(),
+			schema.Property("reason", schema.String(reasonDesc)).Required(),
+		),
+	}
 }
 
 // ValidateAgainst mechanically validates against the facts (legality inside the scenario; cross-scenario actions are already excluded by the types).
@@ -253,7 +296,8 @@ func DecideIntervention(ctx context.Context, model agentcore.ChatModel, systemPr
 	if err != nil {
 		return InterventionDecision{}, err
 	}
-	return decide(ctx, model, interventionContract, systemPrompt, payload, func(d *InterventionDecision) error {
+	lang := detectPromptLanguage(systemPrompt)
+	return decide(ctx, model, interventionContractFor(lang), systemPrompt, payload, func(d *InterventionDecision) error {
 		return d.ValidateAgainst(facts)
 	})
 }

@@ -79,12 +79,34 @@ func (d *DispatchOp) validate() error {
 	return nil
 }
 
+func detectPromptLanguage(systemPrompt string) string {
+	lower := strings.ToLower(systemPrompt)
+	if strings.Contains(lower, "tiếng việt") {
+		return "vi"
+	}
+	if strings.Contains(lower, "english") {
+		return "en"
+	}
+	return "zh"
+}
+
 // dispatchSchema is the nullable schema slot of DispatchOp: actions that need a dispatch supply an object,
 // everything else is null (strict mode requires all fields, so optional semantics are expressed as null).
 func dispatchSchema(desc string) map[string]any {
+	return dispatchSchemaFor(desc, "zh")
+}
+
+func dispatchSchemaFor(desc, lang string) map[string]any {
+	taskDesc := "交给该 worker 的完整任务描述"
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "vi":
+		taskDesc = "Mô tả nhiệm vụ đầy đủ giao cho worker"
+	case "en":
+		taskDesc = "Complete task description assigned to worker"
+	}
 	return llmcontract.Nullable(schema.Object(
 		schema.Property("agent", schema.Enum(desc, workerNames...)).Required(),
-		schema.Property("task", schema.String("交给该 worker 的完整任务描述")).Required(),
+		schema.Property("task", schema.String(taskDesc)).Required(),
 	))
 }
 

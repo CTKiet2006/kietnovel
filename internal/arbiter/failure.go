@@ -56,14 +56,36 @@ func (d *FailureDecision) ValidateAgainst(f FailureFacts) error {
 
 // failureContract sits next to FailureDecision: action is a closed enum, dispatch is a nullable object
 // (non-null only for reroute); cross-field combinations are still checked against the facts by ValidateAgainst.
-var failureContract = llmcontract.Contract{
-	Name:        "arbiter_failure",
-	Description: "失败/僵局裁定:给出出路",
-	Schema: schema.Object(
-		schema.Property("action", schema.Enum("出路", "retry", "reroute", "abort")).Required(),
-		schema.Property("dispatch", dispatchSchema("派单目标(仅 reroute 时给出,否则为 null)")).Required(),
-		schema.Property("reason", schema.String("裁定理由")).Required(),
-	),
+var failureContract = failureContractFor("zh")
+
+func failureContractFor(lang string) llmcontract.Contract {
+	desc := "失败/僵局裁定:给出出路"
+	actionDesc := "出路"
+	dispatchDesc := "派单目标(仅 reroute 时给出,否则为 null)"
+	reasonDesc := "裁定理由"
+
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "vi":
+		desc = "Phán quyết sự cố/bế tắc: Đưa ra lối thoát"
+		actionDesc = "Lối thoát (retry, reroute, abort)"
+		dispatchDesc = "Mục tiêu phân phát (chỉ khi reroute, trường hợp khác là null)"
+		reasonDesc = "Lý do phán quyết"
+	case "en":
+		desc = "Failure/deadlock adjudication: provide resolution path"
+		actionDesc = "Resolution action (retry, reroute, abort)"
+		dispatchDesc = "Dispatch target (only when reroute, null otherwise)"
+		reasonDesc = "Adjudication reason"
+	}
+
+	return llmcontract.Contract{
+		Name:        "arbiter_failure",
+		Description: desc,
+		Schema: schema.Object(
+			schema.Property("action", schema.Enum(actionDesc, "retry", "reroute", "abort")).Required(),
+			schema.Property("dispatch", dispatchSchemaFor(dispatchDesc, lang)).Required(),
+			schema.Property("reason", schema.String(reasonDesc)).Required(),
+		),
+	}
 }
 
 // DecideFailure arbitrates a failure / deadlock. Failure semantics: returning an error → the Engine takes the most
@@ -73,7 +95,8 @@ func DecideFailure(ctx context.Context, model agentcore.ChatModel, systemPrompt 
 	if err != nil {
 		return FailureDecision{}, err
 	}
-	return decide(ctx, model, failureContract, systemPrompt, payload, func(d *FailureDecision) error {
+	lang := detectPromptLanguage(systemPrompt)
+	return decide(ctx, model, failureContractFor(lang), systemPrompt, payload, func(d *FailureDecision) error {
 		return d.ValidateAgainst(facts)
 	})
 }

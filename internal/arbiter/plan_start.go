@@ -31,14 +31,36 @@ func (d *PlanStartDecision) Validate() error {
 }
 
 // planStartContract sits next to PlanStartDecision: all fields are required and planner is a closed enum.
-var planStartContract = llmcontract.Contract{
-	Name:        "arbiter_plan_start",
-	Description: "启动裁定:选规划师并产出完整任务文本",
-	Schema: schema.Object(
-		schema.Property("planner", schema.Enum("规划师", "architect_long", "architect_short")).Required(),
-		schema.Property("task", schema.String("交给规划师的完整任务(含扩充后的需求)")).Required(),
-		schema.Property("reason", schema.String("选择理由")).Required(),
-	),
+var planStartContract = planStartContractFor("zh")
+
+func planStartContractFor(lang string) llmcontract.Contract {
+	desc := "启动裁定:选规划师并产出完整任务文本"
+	plannerDesc := "规划师"
+	taskDesc := "交给规划师的完整任务(含扩充后的需求)"
+	reasonDesc := "选择理由"
+
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "vi":
+		desc = "Phán quyết khởi tạo: Chọn quy hoạch sư và tạo văn bản nhiệm vụ hoàn chỉnh"
+		plannerDesc = "Quy hoạch sư (architect_long hoặc architect_short)"
+		taskDesc = "Nhiệm vụ hoàn chỉnh giao cho quy hoạch sư (kèm yêu cầu đã mở rộng)"
+		reasonDesc = "Lý do lựa chọn"
+	case "en":
+		desc = "Startup adjudication: select planner and output complete task text"
+		plannerDesc = "Planner (architect_long or architect_short)"
+		taskDesc = "Complete task assigned to planner (including expanded requirements)"
+		reasonDesc = "Selection reason"
+	}
+
+	return llmcontract.Contract{
+		Name:        "arbiter_plan_start",
+		Description: desc,
+		Schema: schema.Object(
+			schema.Property("planner", schema.Enum(plannerDesc, "architect_long", "architect_short")).Required(),
+			schema.Property("task", schema.String(taskDesc)).Required(),
+			schema.Property("reason", schema.String(reasonDesc)).Required(),
+		),
+	}
 }
 
 // planStartPayload is the user payload of plan_start (the facts are the input, there is no store state — a new book).
@@ -55,5 +77,6 @@ func DecidePlanStart(ctx context.Context, model agentcore.ChatModel, systemPromp
 	if err != nil {
 		return PlanStartDecision{}, err
 	}
-	return decide(ctx, model, planStartContract, systemPrompt, payload, (*PlanStartDecision).Validate)
+	lang := detectPromptLanguage(systemPrompt)
+	return decide(ctx, model, planStartContractFor(lang), systemPrompt, payload, (*PlanStartDecision).Validate)
 }

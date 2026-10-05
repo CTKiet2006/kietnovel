@@ -1641,13 +1641,15 @@ func (h *Host) ReplayQueue(afterSeq int64) ([]domain.RuntimeQueueItem, error) {
 
 // CoCreateStream đồng sáng tác khởi đầu từ số 0: làm rõ yêu cầu và sinh chỉ đạo sáng tác cho cả cuốn.
 func (h *Host) CoCreateStream(ctx context.Context, history []CoCreateMessage, onProgress func(kind, text string)) (CoCreateReply, error) {
-	return coCreateStream(ctx, h.models, h.store.Sessions, coCreateSystemPrompt, history, onProgress)
+	lang, _ := h.BookLanguage()
+	return coCreateStream(ctx, h.models, h.store.Sessions, coCreateSystemPromptFor(lang), history, onProgress)
 }
 
 // StageCoCreateStream đồng sáng tác theo giai đoạn: quy hoạch hướng đi tiếp dựa trên phần đã viết.
 // Prompt hệ thống = prompt giai đoạn + tóm tắt trạng thái câu chuyện hiện tại, để trợ lý biết "đã viết đến đâu".
 func (h *Host) StageCoCreateStream(ctx context.Context, history []CoCreateMessage, onProgress func(kind, text string)) (CoCreateReply, error) {
-	return coCreateStream(ctx, h.models, h.store.Sessions, stageSystemPrompt(h.store), history, onProgress)
+	lang, _ := h.BookLanguage()
+	return coCreateStream(ctx, h.models, h.store.Sessions, stageSystemPromptFor(h.store, lang), history, onProgress)
 }
 
 // stagePlanPrefix bọc "bản tóm tắt hướng đi tiếp" do đồng sáng tác sinh ra thành một can thiệp quy hoạch giai đoạn, đưa Arbiter định đoạn.

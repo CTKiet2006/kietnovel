@@ -128,11 +128,25 @@ func (t *AuditFoundationTool) Execute(_ context.Context, args json.RawMessage) (
 		return nil, fmt.Errorf("ready=true 时 issues 必须为空: %w", errs.ErrToolArgs)
 	}
 	if !audit.Ready && len(audit.Issues) == 0 {
-		return nil, fmt.Errorf("ready=false 时必须给出具体 issues: %w", errs.ErrToolArgs)
+		switch toolLang(t.store) {
+		case "vi":
+			return nil, fmt.Errorf("khi ready=false bắt buộc phải nêu rõ issues cụ thể: %w", errs.ErrToolArgs)
+		case "en":
+			return nil, fmt.Errorf("when ready=false, specific issues must be provided: %w", errs.ErrToolArgs)
+		default:
+			return nil, fmt.Errorf("ready=false 时必须给出具体 issues: %w", errs.ErrToolArgs)
+		}
 	}
 	for i, issue := range audit.Issues {
 		if strings.TrimSpace(issue.Artifact) == "" || strings.TrimSpace(issue.Description) == "" || strings.TrimSpace(issue.Evidence) == "" {
-			return nil, fmt.Errorf("issues[%d] 必须包含 artifact、description 和 evidence: %w", i, errs.ErrToolArgs)
+			switch toolLang(t.store) {
+			case "vi":
+				return nil, fmt.Errorf("issues[%d] bắt buộc phải có artifact, description và evidence: %w", i, errs.ErrToolArgs)
+			case "en":
+				return nil, fmt.Errorf("issues[%d] must contain artifact, description, and evidence: %w", i, errs.ErrToolArgs)
+			default:
+				return nil, fmt.Errorf("issues[%d] 必须包含 artifact、description 和 evidence: %w", i, errs.ErrToolArgs)
+			}
 		}
 	}
 

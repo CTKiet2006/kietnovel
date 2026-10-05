@@ -219,12 +219,26 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 			if errors.Is(err, errs.ErrToolConflict) {
 				return nil, err
 			}
-			return nil, fmt.Errorf("章节当前不允许提交: %w: %w", errs.ErrToolPrecondition, err)
+			switch toolLang(t.store) {
+			case "vi":
+				return nil, fmt.Errorf("Chương hiện tại chưa được phép nộp: %w: %w", errs.ErrToolPrecondition, err)
+			case "en":
+				return nil, fmt.Errorf("Chapter currently not eligible for commit: %w: %w", errs.ErrToolPrecondition, err)
+			default:
+				return nil, fmt.Errorf("章节当前不允许提交: %w: %w", errs.ErrToolPrecondition, err)
+			}
 		}
 		if progress.Flow != domain.FlowRewriting && progress.Flow != domain.FlowPolishing {
 			expected := progress.NextChapter()
 			if a.Chapter != expected {
-				return nil, fmt.Errorf("正常续写只能提交下一章 %d，收到第 %d 章: %w", expected, a.Chapter, errs.ErrToolConflict)
+				switch toolLang(t.store) {
+				case "vi":
+					return nil, fmt.Errorf("Viết tiếp bình thường chỉ được nộp chương tiếp theo là %d, nhận được chương %d: %w", expected, a.Chapter, errs.ErrToolConflict)
+				case "en":
+					return nil, fmt.Errorf("Standard progression only allows committing the next chapter %d, received chapter %d: %w", expected, a.Chapter, errs.ErrToolConflict)
+				default:
+					return nil, fmt.Errorf("正常续写只能提交下一章 %d，收到第 %d 章: %w", expected, a.Chapter, errs.ErrToolConflict)
+				}
 			}
 		}
 	}
@@ -235,12 +249,23 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 	if progress.Layered {
 		b, bErr := t.store.Outline.CheckArcBoundary(a.Chapter)
 		if bErr != nil {
-			return nil, fmt.Errorf("弧边界检测失败 chapter=%d: %w: %w", a.Chapter, errs.ErrStoreRead, bErr)
+			return nil, fmt.Errorf("check arc boundary chapter=%d: %w: %w", a.Chapter, errs.ErrStoreRead, bErr)
 		}
 		if b == nil {
-			return nil, fmt.Errorf(
-				"第 %d 章不在分层大纲范围内：写作必须先 expand_next_arc 扩展弧或 append_volume 追加卷；若全书已完结请调 save_foundation type=complete_book: %w",
-				a.Chapter, errs.ErrToolPrecondition)
+			switch toolLang(t.store) {
+			case "vi":
+				return nil, fmt.Errorf(
+					"Chương %d không nằm trong phạm vi dàn ý phân tầng: Sáng tác bắt buộc phải gọi expand_next_arc để mở rộng arc hoặc append_volume để thêm quyển; nếu toàn thư đã hoàn thành hãy gọi save_foundation type=complete_book: %w",
+					a.Chapter, errs.ErrToolPrecondition)
+			case "en":
+				return nil, fmt.Errorf(
+					"Chapter %d is outside layered outline scope: must call expand_next_arc or append_volume first; if the book is complete, call save_foundation type=complete_book: %w",
+					a.Chapter, errs.ErrToolPrecondition)
+			default:
+				return nil, fmt.Errorf(
+					"第 %d 章不在分层大纲范围内：写作必须先 expand_next_arc 扩展弧或 append_volume 追加卷；若全书已完结请调 save_foundation type=complete_book: %w",
+					a.Chapter, errs.ErrToolPrecondition)
+			}
 		}
 		boundary = b
 	}
@@ -522,8 +547,25 @@ func (t *CommitChapterTool) validateRewriteDraft(chapter int, title string, prog
 	if progress != nil && progress.Flow == domain.FlowPolishing {
 		mode = "打磨"
 	}
-	return "", fmt.Errorf("第 %d 章正文和标题均未发生变化，未检测到%s改动: %w",
-		chapter, mode, errs.ErrToolPrecondition)
+	switch toolLang(t.store) {
+	case "vi":
+		modeVi := "viết lại"
+		if progress != nil && progress.Flow == domain.FlowPolishing {
+			modeVi = "gọt giũa"
+		}
+		return "", fmt.Errorf("Chương %d cả chính văn và tiêu đề đều chưa thay đổi, không phát hiện chỉnh sửa %s nào: %w",
+			chapter, modeVi, errs.ErrToolPrecondition)
+	case "en":
+		modeEn := "rewrite"
+		if progress != nil && progress.Flow == domain.FlowPolishing {
+			modeEn = "polish"
+		}
+		return "", fmt.Errorf("Chapter %d prose and title are unchanged; no %s modifications detected: %w",
+			chapter, modeEn, errs.ErrToolPrecondition)
+	default:
+		return "", fmt.Errorf("第 %d 章正文和标题均未发生变化，未检测到%s改动: %w",
+			chapter, mode, errs.ErrToolPrecondition)
+	}
 }
 
 func (t *CommitChapterTool) rewriteChanged(chapter int, content, title string) (bool, error) {
@@ -589,8 +631,25 @@ func (t *CommitChapterTool) executeRewriteCommit(a commitArgs, progress *domain.
 			if progress != nil && progress.Flow == domain.FlowPolishing {
 				mode = "打磨"
 			}
-			return nil, fmt.Errorf("第 %d 章正文和标题均未发生变化，未检测到%s改动: %w",
-				chapter, mode, errs.ErrToolPrecondition)
+			switch toolLang(t.store) {
+			case "vi":
+				modeVi := "viết lại"
+				if progress != nil && progress.Flow == domain.FlowPolishing {
+					modeVi = "gọt giũa"
+				}
+				return nil, fmt.Errorf("Chương %d cả chính văn và tiêu đề đều chưa thay đổi, không phát hiện chỉnh sửa %s nào: %w",
+					chapter, modeVi, errs.ErrToolPrecondition)
+			case "en":
+				modeEn := "rewrite"
+				if progress != nil && progress.Flow == domain.FlowPolishing {
+					modeEn = "polish"
+				}
+				return nil, fmt.Errorf("Chapter %d prose and title are unchanged; no %s modifications detected: %w",
+					chapter, modeEn, errs.ErrToolPrecondition)
+			default:
+				return nil, fmt.Errorf("第 %d 章正文和标题均未发生变化，未检测到%s改动: %w",
+					chapter, mode, errs.ErrToolPrecondition)
+			}
 		}
 	}
 

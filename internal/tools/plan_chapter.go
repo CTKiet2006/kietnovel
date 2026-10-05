@@ -127,11 +127,18 @@ func (t *PlanChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 		return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, err)
 	}
 	if completed {
+		reason := fmt.Sprintf("第 %d 章已提交完成，不能重新规划", plan.Chapter)
+		switch toolLang(t.store) {
+		case "vi":
+			reason = fmt.Sprintf("Chương %d đã nộp hoàn thành, không thể quy hoạch lại", plan.Chapter)
+		case "en":
+			reason = fmt.Sprintf("Chapter %d has already been committed and cannot be replanned", plan.Chapter)
+		}
 		return json.Marshal(map[string]any{
 			"chapter":   plan.Chapter,
 			"skipped":   true,
 			"completed": true,
-			"reason":    fmt.Sprintf("第 %d 章已提交完成，不能重新规划", plan.Chapter),
+			"reason":    reason,
 		})
 	}
 	if err := t.store.Progress.ValidateChapterWork(plan.Chapter); err != nil {

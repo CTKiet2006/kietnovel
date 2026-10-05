@@ -202,8 +202,9 @@ func NewEditorStopGuard(st *store.Store, task string, onBlock BlockHook) agentco
 	if st != nil && st.BookLanguage != nil {
 		lang, _ = st.BookLanguage.Load()
 	}
-	isVolumeSummary := strings.Contains(task, "save_volume_summary") || strings.Contains(task, "卷摘要") || strings.Contains(task, "tóm tắt quyển")
-	isArcSummary := strings.Contains(task, "save_arc_summary") || strings.Contains(task, "弧摘要") || strings.Contains(task, "tóm tắt arc")
+	lowerTask := strings.ToLower(task)
+	isVolumeSummary := strings.Contains(task, "save_volume_summary") || strings.Contains(task, "卷摘要") || strings.Contains(task, "tóm tắt quyển") || strings.Contains(lowerTask, "volume summary")
+	isArcSummary := strings.Contains(task, "save_arc_summary") || strings.Contains(task, "弧摘要") || strings.Contains(task, "tóm tắt arc") || strings.Contains(lowerTask, "arc summary")
 	switch {
 	case isVolumeSummary:
 		msg := "本次任务是生成卷摘要：你必须调用 save_volume_summary 落盘后才能结束，save_review 复核不算完成。"
