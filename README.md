@@ -167,80 +167,101 @@ Từ phiên bản v1.6.3, hệ thống áp dụng kiến trúc **cô lập ngôn
 
 ## 4. Cấu Hình Nhà Cung Cấp AI (LLM)
 
-File cấu hình: `~/.kietnovel/config.json` (Setup Wizard tạo sẵn). Chọn Provider trong
-wizard là xong — mục này chỉ dành khi muốn tự sửa tay.
+File cấu hình: `~/.kietnovel/config.json` (Setup Wizard tự tạo lần đầu). Bạn có thể chỉnh sửa trực tiếp qua TUI bằng lệnh `/config` hoặc mở file sửa tay:
 
-| Provider | `model` gợi ý | Ghi chú |
+| Nhà cung cấp | Model gợi ý | Đặc điểm & Khuyên dùng |
 |---|---|---|
-| DeepSeek | `deepseek-chat` | Rẻ nhất, nên thử trước |
-| OpenRouter | `anthropic/claude-3.5-sonnet` | Một key, nhiều hãng |
-| Gemini | `gemini-2.5-pro` | Context dài |
-| Anthropic | `claude-3.5-sonnet` | |
-| OpenAI | `gpt-4o` | |
+| **DeepSeek** | `deepseek-chat`, `deepseek-reasoner` | Chi phí rẻ nhất, bản R1 suy luận sâu rất mạnh cho quy hoạch dàn ý |
+| **Anthropic** | `claude-3-7-sonnet-20250219` | Văn phong tự nhiên, giàu hình ảnh, hỗ trợ hybrid reasoning |
+| **OpenRouter** | `anthropic/claude-3.7-sonnet`, `deepseek/deepseek-chat` | Một API key gọi được tất cả các hãng, dễ cấu hình fallback |
+| **Google Gemini** | `gemini-2.5-pro`, `gemini-2.5-flash` | Cửa sổ ngữ cảnh cực dài (1M - 2M tokens), nạp nhiều chương mượt |
+| **OpenAI** | `gpt-4o`, `o3-mini` | Tốc độ nhanh, ổn định cao |
 
-Cấu trúc chung:
+### Cấu hình mẫu chi tiết (Hỗ trợ cấu hình riêng từng vai trò & Fallback)
 
 ```json
 {
   "language": "vi",
-  "provider": "deepseek",
-  "model": "deepseek-chat",
+  "ui_language": "vi",
+  "provider": "openrouter",
+  "model": "anthropic/claude-3.7-sonnet",
   "providers": {
-    "deepseek": { "api_key": "YOUR_API_KEY" }
+    "openrouter": {
+      "api_key": "sk-or-v1-..."
+    },
+    "deepseek": {
+      "api_key": "sk-..."
+    }
   },
-  "context_window": 64000,
+  "roles": {
+    "architect": {
+      "provider": "deepseek",
+      "model": "deepseek-reasoner"
+    },
+    "writer": {
+      "provider": "openrouter",
+      "model": "anthropic/claude-3.7-sonnet",
+      "reasoning_effort": "high",
+      "fallbacks": [
+        { "provider": "deepseek", "model": "deepseek-chat" }
+      ]
+    },
+    "editor": {
+      "provider": "deepseek",
+      "model": "deepseek-chat"
+    }
+  },
   "style": "default"
 }
 ```
 
-`context_window` tự dò từ model nếu bỏ trống. `reasoning_effort`:
-`off / low / medium / high / xhigh / max`. Thêm nhiều provider và dùng làm fallback:
-
-```json
-{
-  "roles": {
-    "writer": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-3.5-sonnet",
-      "fallbacks": ["deepseek", "gemini"]
-    }
-  }
-}
-```
+* `context_window`: Tự động nhận diện từ model nếu để trống.
+* `reasoning_effort`: `off` / `low` / `medium` / `high` / `xhigh` / `max`.
+* `roles`: Cho phép gán model rẻ/mạnh chuyên biệt cho từng vai trò (`architect` lên kế hoạch, `writer` viết chính văn, `editor` thẩm định chất lượng) và cấu hình danh sách model dự phòng (`fallbacks`) tự động thế chỗ khi nhà cung cấp chính gặp sự cố mạng hoặc cạn quota.
 
 ## 5. Hướng Dẫn Sử Dụng & Bảng Lệnh TUI
 
-Gõ `kietnovel` để vào TUI. Tại màn hình chào:
+Gõ `kietnovel` để vào giao diện dòng lệnh tương tác.
 
-- `Tab` — chuyển giữa **Bắt đầu nhanh** (nhập 1 câu, AI tự dàn ý rồi viết) và
-  **Đồng sáng tác** (trao đổi từng bước để chốt thế giới/nhân vật trước khi viết).
-- `Enter` — bắt đầu. `/` — tìm lệnh. `Ctrl+C` 2 lần — lưu trạng thái rồi thoát.
+### Bảng Phím Tắt Tiện Dụng
 
-### Danh sách Lệnh Điều Khiển (Slash Commands)
+| Phím tắt | Tác dụng |
+|---|---|
+| `Ctrl+T` | **Ẩn / Hiện luồng suy nghĩ (Thinking block)** của AI trong lúc viết |
+| `Ctrl+C` (2 lần) | Lưu lại toàn bộ dữ kiện xuống đĩa an toàn rồi thoát |
+| `Ctrl+S` | Chốt định hướng & Bắt đầu viết trong chế độ Đồng sáng tác |
+| `Tab` | Chuyển đổi giữa **Bắt đầu nhanh** và **Đồng sáng tác** tại màn hình chào |
+| `Esc` | Đóng popup, hủy thao tác hoặc quay lại màn hình chính |
+| `/` | Mở nhanh Bảng chọn lệnh (Command Palette) |
+| `↑` / `↓` hoặc `k` / `j` | Di chuyển, cuộn trang đọc truyện hoặc chọn menu |
 
-Gõ `/` trong TUI để mở bảng chọn lệnh:
+### Bảng Lệnh Điều Khiển Đầy Đủ (Slash Commands)
 
-| Lệnh | Mô tả |
-|------|-------|
-| `/help` | Mở bảng trợ giúp tra cứu danh sách lệnh và phím tắt |
-| `/model` | Chuyển đổi Model hoặc mức độ suy luận (reasoning/thinking) |
-| `/config` | Quản lý cấu hình Provider, Model ID, API Key, Base URL, Context Window |
-| `/diag` | Xem báo cáo chẩn đoán toàn diện về sức khỏe, tiến độ và chất lượng truyện |
-| `/review [on\|off]` | Bật/tắt chế độ nghiệm thu từng chương (dừng lại sau mỗi chương để bạn duyệt) |
-| `/next` | Phê duyệt cho phép viết chương tiếp theo (khi ở chế độ nghiệm thu) |
-| `/start <tệp>` | Đọc tệp dàn ý / ý tưởng bên ngoài để bắt đầu truyện mới |
-| `/import <tệp>` | Nhập tiểu thuyết từ bên ngoài vào để AI phân tích và viết tiếp |
-| `/reopen <hướng>` | Viết tiếp tập mới sau khi tác phẩm đã hoàn thành |
-| `/cocreate` | Tạm dừng để vào chế độ đồng sáng tác định hướng giai đoạn tiếp theo |
-| `/simulate` | Phân tích các file văn mẫu trong `./simulate` để mô phỏng văn phong |
-| `/importsim <file>` | Nhập hồ sơ mô phỏng văn phong từ tệp json |
-| `/sync` | Đồng bộ các chỉnh sửa thủ công của bạn trên các file chương vào hệ thống |
-| `/export` | Xuất tác phẩm thành file văn bản hoàn chỉnh (.txt hoặc .epub) |
-| `/read [n]` | Đọc truyện ngay trong TUI — cả chương đã chốt lẫn bản nháp đang làm dở |
-| `/books` | Xem danh sách truyện trong `output/`, chuyển qua lại giữa các truyện |
-| `/new [tên]` | Tạo truyện mới và mở luôn để viết (tên có dấu và khoảng trắng đều được) |
-| `/delete [tên]` | Xoá truyện — hai bước, bước hai phải gõ `y`, không khôi phục được |
-| `/language [vi\|en\|zh]` | Xem hoặc đổi ngôn ngữ giao diện; lựa chọn được lưu vào cấu hình |
+Gõ `/` trong TUI để mở thanh tìm kiếm lệnh:
+
+| Lệnh | Cú pháp | Công dụng |
+|---|---|---|
+| `/help` | `/help` | Mở bảng trợ giúp tra cứu danh sách lệnh và phím tắt |
+| `/model` | `/model [vai-trò]` | Chuyển đổi Model hoặc mức độ suy luận (reasoning/thinking) của từng vai trò |
+| `/config` | `/config` | Quản lý trực quan cấu hình Provider, Model ID, API Key, Base URL |
+| `/diag` | `/diag` | Báo cáo chẩn đoán 4 chiều về tiến độ, chất lượng, phục bút và độ nhất quán |
+| `/review` | `/review on\|off` | Bật/tắt chế độ nghiệm thu (dừng lại sau mỗi chương để bạn duyệt trước khi viết tiếp) |
+| `/next` | `/next` | Phê duyệt cho phép viết chương tiếp theo (khi đang ở chế độ nghiệm thu) |
+| `/read` | `/read [số-chương]` | Đọc truyện ngay trong TUI — xem cả chương đã hoàn thành lẫn bản nháp đang viết |
+| `/sp` | `/sp [hỏi\|soi\|gợi ý]` | **Story Partner**: Trợ lý cốt truyện chạy song song để hỏi đáp/gợi ý mà không làm dừng máy |
+| `/start` | `/start <đường-dẫn>` | Bắt đầu viết truyện mới từ tệp ý tưởng / dàn ý có sẵn bên ngoài |
+| `/import` | `/import <path> [--guide=...]` | Nhập tiểu thuyết từ bên ngoài vào để AI phân tích cấu trúc và viết tiếp |
+| `/cocreate` | `/cocreate` (hoặc `/plan`) | Tạm dừng để vào chế độ đồng sáng tác định hướng giai đoạn tiếp theo |
+| `/reopen` | `/reopen [hướng-đi]` | Mở lại bộ truyện đã hoàn thành để viết thêm tập mới / phần ngoại truyện |
+| `/books` | `/books` | Xem danh sách truyện trong `output/`, chuyển đổi qua lại giữa các truyện |
+| `/new` | `/new [tên-truyện]` | Tạo bộ truyện mới và chuyển vào viết ngay |
+| `/delete` | `/delete [tên-truyện]` | Xóa bộ truyện (có bước gõ `y` xác nhận an toàn, không xóa nhầm) |
+| `/rename` | `/rename <tên-mới>` | Đổi tên hiển thị của bộ truyện đang mở |
+| `/language` | `/language [ui\|write] [vi\|en\|zh]` | Xem hoặc đổi riêng biệt ngôn ngữ giao diện (`ui`) hoặc ngôn ngữ viết truyện (`write`) |
+| `/simulate` | `/simulate` | Phân tích các file văn mẫu trong `./simulate` để mô phỏng văn phong tác giả |
+| `/importsim` | `/importsim <profile.json>` | Nhập hồ sơ mô phỏng văn phong có sẵn từ tệp JSON |
+| `/sync` | `/sync [--check]` | Quét SHA-256 để nhận các chỉnh sửa thủ công của bạn trên file chương vào hệ thống |
+| `/export` | `/export [path] [from=N] [to=M]` | Xuất toàn bộ tác phẩm hoặc một khoảng chương ra định dạng `.txt` hoặc `.epub` |
 
 ### Can thiệp thời gian thực (Steer)
 
