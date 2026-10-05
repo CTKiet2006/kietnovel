@@ -165,32 +165,47 @@ Từ phiên bản v1.6.3, hệ thống áp dụng kiến trúc **cô lập ngôn
 - Khi đang chạy: gõ `/language` để xem ngôn ngữ hiện tại, hoặc `/language en` (hoặc `vi`, `zh`) để đổi trực tiếp.
 - Mỗi bộ truyện còn được khóa ngôn ngữ độc lập trong `meta/language.json`, đảm bảo khi chuyển đổi giữa các tác phẩm khác nhau thì ngữ cảnh sáng tác vẫn luôn đồng bộ chuẩn xác.
 
-## 4. Cấu Hình Nhà Cung Cấp AI (LLM)
+## 4. Cấu Hình Nhà Cung Cấp AI & Chiến Lược Model P/P Tối Ưu
 
-File cấu hình: `~/.kietnovel/config.json` (Setup Wizard tự tạo lần đầu). Bạn có thể chỉnh sửa trực tiếp qua TUI bằng lệnh `/config` hoặc mở file sửa tay:
+### Bài toán chi phí khi sáng tác tiểu thuyết (Token Economics)
 
-| Nhà cung cấp | Model gợi ý | Đặc điểm & Khuyên dùng |
-|---|---|---|
-| **DeepSeek** | `deepseek-chat`, `deepseek-reasoner` | Chi phí rẻ nhất, bản R1 suy luận sâu rất mạnh cho quy hoạch dàn ý |
-| **Anthropic** | `claude-3-7-sonnet-20250219` | Văn phong tự nhiên, giàu hình ảnh, hỗ trợ hybrid reasoning |
-| **OpenRouter** | `anthropic/claude-3.7-sonnet`, `deepseek/deepseek-chat` | Một API key gọi được tất cả các hãng, dễ cấu hình fallback |
-| **Google Gemini** | `gemini-2.5-pro`, `gemini-2.5-flash` | Cửa sổ ngữ cảnh cực dài (1M - 2M tokens), nạp nhiều chương mượt |
-| **OpenAI** | `gpt-4o`, `o3-mini` | Tốc độ nhanh, ổn định cao |
+Sáng tác một bộ tiểu thuyết dài (80–150 chương) đòi hỏi hệ thống duy trì ngữ cảnh lớn (dàn ý phân tầng, đối chiếu phục bút, kiểm tra tính nhất quán và thẩm định 7 chiều). Trung bình một cuốn sách tiêu tốn từ **15M đến 40M tokens input** và **1M đến 3M tokens output**.
 
-### Cấu hình mẫu chi tiết (Hỗ trợ cấu hình riêng từng vai trò & Fallback)
+* Nếu sử dụng các model đầu bảng đắt đỏ (Claude 3.7 Sonnet, GPT-4o...), chi phí cho một bộ truyện có thể lên tới **$50 – $150 USD (~1.200.000đ – 3.700.000đ)** — hoàn toàn không tối ưu cho nhu cầu sáng tác thực chiến lâu dài.
+* Trong khi đó, với các dòng model **P/P (Hiệu năng / Giá thành)** thế hệ mới, chi phí cho trọn vẹn một cuốn sách chỉ từ **$1.5 – $4.0 USD (~35.000đ – 95.000đ)** mà chất lượng hành văn vẫn mềm mại, sống động, ít bị rập khuôn hay giáo điều.
+
+### Bảng Xếp Hạng Model P/P Khuyên Dùng Cho Viết Tiểu Thuyết
+
+| Model | Nhà cung cấp / Nền tảng | Chi phí (Input / Output per 1M) | Đánh giá thực chiến |
+|---|---|---|---|
+| **DeepSeek-V3** (`deepseek-chat`) | DeepSeek API / OpenRouter | **$0.14 / $0.28** *(Cache hit chỉ $0.07)* | **Vua P/P không đối thủ**. Khả năng thẩm thấu ngôn ngữ phương Đông cực tốt, hành văn tiếng Việt mượt mà, tự nhiên. Khuyên dùng làm model chính cho `writer` và `editor`. |
+| **Google Gemini 2.5 Flash** (`gemini-2.5-flash`) | Google AI Studio / OpenRouter | **$0.10 / $0.40** | Tốc độ sinh chữ cực nhanh, context 1M tokens nuốt trọn cả chục chương truyện trước mà không lo đứt mạch hay quên tình tiết. |
+| **DeepSeek-R1** (`deepseek-reasoner`) | DeepSeek API / OpenRouter | **$0.55 / $2.19** | Model lý luận chuyên sâu. Khuyên dùng riêng cho vai trò `architect` để thiết lập thế giới quan, quy hoạch dàn ý phức tạp và gieo mạng lưới phục bút chặt chẽ. |
+| **Qwen 2.5 72B** (`qwen/qwen-2.5-72b-instruct`) | OpenRouter / DeepInfra | **$0.35 / $0.40** | Vốn từ vựng đồ sộ, văn phong rất hợp với các thể loại huyền huyễn, tiên hiệp, kiếm hiệp, trinh thám tâm lý. |
+| **Llama 3.3 70B** (`meta-llama/llama-3.3-70b-instruct`) | OpenRouter / Groq | **$0.12 / $0.30** | Mô hình mã nguồn mở chất lượng cao, rất thích hợp cấu hình làm phương án dự phòng (`fallback`). |
+
+---
+
+### Chiến lược Cấu hình Phân Vai Tối Ưu Chi Phí (`roles`)
+
+File cấu hình: `~/.kietnovel/config.json`. Thay vì dùng một model đắt tiền chạy từ đầu đến cuối, hãy tận dụng cơ chế **Phân vai độc lập (`roles`)** của `kietnovel`:
+
+* **`architect`**: Dùng model lý luận sâu (`deepseek-reasoner`). Vì chỉ gọi vài lần ở đầu truyện hoặc đầu mỗi Arc nên tốn chưa tới $0.15, nhưng cho ra bộ khung cốt truyện có chiều sâu vượt bậc.
+* **`writer`**: Dùng model P/P cao (`deepseek-chat` hoặc `gemini-2.5-flash`). Viết 3.000 – 5.000 từ mỗi chương chỉ tốn vài chục đồng lẻ.
+* **`editor`**: Dùng `deepseek-chat` để đối chiếu, chấm điểm rubric và bắt lỗi logic.
 
 ```json
 {
   "language": "vi",
   "ui_language": "vi",
-  "provider": "openrouter",
-  "model": "anthropic/claude-3.7-sonnet",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
   "providers": {
-    "openrouter": {
-      "api_key": "sk-or-v1-..."
-    },
     "deepseek": {
       "api_key": "sk-..."
+    },
+    "openrouter": {
+      "api_key": "sk-or-v1-..."
     }
   },
   "roles": {
@@ -199,11 +214,11 @@ File cấu hình: `~/.kietnovel/config.json` (Setup Wizard tự tạo lần đ�
       "model": "deepseek-reasoner"
     },
     "writer": {
-      "provider": "openrouter",
-      "model": "anthropic/claude-3.7-sonnet",
-      "reasoning_effort": "high",
+      "provider": "deepseek",
+      "model": "deepseek-chat",
       "fallbacks": [
-        { "provider": "deepseek", "model": "deepseek-chat" }
+        { "provider": "openrouter", "model": "google/gemini-2.5-flash" },
+        { "provider": "openrouter", "model": "qwen/qwen-2.5-72b-instruct" }
       ]
     },
     "editor": {
@@ -216,8 +231,8 @@ File cấu hình: `~/.kietnovel/config.json` (Setup Wizard tự tạo lần đ�
 ```
 
 * `context_window`: Tự động nhận diện từ model nếu để trống.
-* `reasoning_effort`: `off` / `low` / `medium` / `high` / `xhigh` / `max`.
-* `roles`: Cho phép gán model rẻ/mạnh chuyên biệt cho từng vai trò (`architect` lên kế hoạch, `writer` viết chính văn, `editor` thẩm định chất lượng) và cấu hình danh sách model dự phòng (`fallbacks`) tự động thế chỗ khi nhà cung cấp chính gặp sự cố mạng hoặc cạn quota.
+* `reasoning_effort`: `off` / `low` / `medium` / `high` / `xhigh` / `max` (áp dụng cho các model lý luận như R1, o3-mini).
+* `fallbacks`: Danh sách model dự phòng tự động kích hoạt khi nhà cung cấp chính gặp sự cố mạng hoặc hết hạn mức.
 
 ## 5. Hướng Dẫn Sử Dụng & Bảng Lệnh TUI
 
