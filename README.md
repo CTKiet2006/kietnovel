@@ -6,13 +6,31 @@
 
 Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định chạy trọn một bộ truyện, model chỉ được gọi đúng chỗ cần phán đoán — Engine điều phối 3 agent tự chủ Architect / Writer / Editor theo bảng quyết định, Arbiter ngữ nghĩa chỉ thức dậy khi cần. Từ một câu ý tưởng tới tiểu thuyết hoàn chỉnh.
 
-## Điểm Nổi Bật Của Bản Việt Hóa & Đa Ngôn Ngữ
+```text
+┌─ Tổng quan ──────────────────┐┌─ Dòng sự kiện thời gian thực (Activity Stream) ───────────────┐
+│ Trạng thái   Đang sáng tác   ││ 15:02:10 ⚙ WRITER (Đang viết Chương 1)                         │
+│ Giai đoạn    Viết chính văn  ││   ├ novel_context (chương 1)                                   │
+│ Đã xong      0 chương        ││   ├ draft_chapter (chương 1, 3.200 từ)                         │
+│ Đã dàn ý     9 chương        ││   ├ check_consistency (đối chiếu phục bút & thế giới quan)     │
+│ Dung lượng   0 từ            ││   └ commit_chapter (hoàn tất chương 1)                         │
+│ Vai trò      WRITER (Chạy)   ││ 15:04:15 ✓ EDITOR: Đã thẩm định đạt 88/100 (Accept)            │
+│ Ngữ cảnh     [████░░░] 24%   ││ 15:04:18 ⚙ ARCHITECT: Mở rộng Arc tiếp theo (expand_next_arc)   │
+└──────────────────────────────┘└───────────────────────────────────────────────────────────────┘
+│ ❯ Cho nhân vật chính gặp tai nạn bất ngờ ở ngã tư để kích hoạt phục bút về quá khứ...         │
+└───────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+## Điểm Nổi Bật Của Bản Việt Hóa & Đa Ngôn Ngữ (v1.6.3)
 
 - 🌐 **Giao diện TUI đa ngôn ngữ (vi / en / zh)**: Từ Setup Wizard cài đặt ban đầu, màn hình chào mừng, thanh trạng thái, Activity stream trực tiếp, bảng quản lý Provider/Model (`/config`, `/model`) đến thông báo lỗi và phím tắt — tất cả dịch theo ngôn ngữ đang chọn, chuẩn mực và tự nhiên. Đổi giữa chừng bằng lệnh `/language`.
-- ✍️ **Tùy chọn ngôn ngữ sáng tác truyện**: Viết truyện bằng Tiếng Việt (mặc định), Tiếng Anh hay Tiếng Trung giản thuận qua `"language": "vi"` / `"en"` / `"zh"`. Bộ prompt giữ nguyên bản gốc (đã kiểm chứng), chỉ đổi lớp văn phong kèm chỉ dẫn buộc ngôn ngữ đầu ra.
+- ✍️ **Độc lập ngôn ngữ sáng tác triệt để (Tri-Language Isolation)**:
+  - **100% Native Prompts**: Toàn bộ hệ thống prompt của Architect, Writer, Editor và Arbiter được chuyển hóa sâu sắc sang văn phong tiểu thuyết Tiếng Việt chuẩn mực, gãy gọn, giàu hình tượng, không dịch thô từ tiếng Trung.
+  - **100% Dynamic Tool Schemas & Error Handling**: 16 công cụ giao tiếp với LLM (`draft_chapter`, `plan_chapter`, `commit_chapter`, `novel_context`...) tự động đồng bộ schema và thông báo lỗi bằng Tiếng Việt / Tiếng Anh / Tiếng Trung, cắt đứt hoàn toàn nguy cơ model bị "nhiễm" tiếng Trung khi suy nghĩ (thinking) hoặc khi gặp lỗi.
+  - **100% Native Reference Docs**: 10 tài liệu kỹ thuật ngầm (10 kỹ thuật móc câu kịch tính, nghệ thuật Show Don't Tell, duy trì tính nhất quán, cẩm nang đối thoại, quy hoạch trường thiên...) được nạp trực tiếp bằng ngôn ngữ truyện.
+  - **Đồng sáng tác (Co-create)**: Trợ lý trò chuyện định hướng ý tưởng thô và lập kế hoạch chặng tiếp theo bằng ngôn ngữ bản địa tự nhiên.
 - 🔑 **Chạy thẳng với API cloud**: Hỗ trợ OpenRouter, DeepSeek, Gemini, Anthropic, OpenAI. Một API key là viết được ngay, không cần Docker.
-- ✍️ **Văn phong chống AI sáo rỗng**: kèm quy chuẩn hành văn tiểu thuyết Tiếng Việt (`assets/voice.md`) và bộ chống sáo rỗng (`assets/references/anti-ai-tone.md`) với danh sách cụm cấm cụ thể cho tiếng Việt — "ở một mức độ nào đó", "như thể", "bất giác", "không khỏi"... giúp hành văn sống động, gãy gọn, có chiều sâu.
-- 🚀 **Đồng bộ toàn diện Upstream mới nhất**: Kiến trúc Đa Agent, quy hoạch cuộn 2 tầng (Rolling planning), nén ngữ cảnh 4 cấp, điểm phục hồi step-level, và toàn bộ 14 lệnh slash commands.
+- ✍️ **Văn phong chống AI sáo rỗng**: kèm quy chuẩn hành văn tiểu thuyết Tiếng Việt (`assets/voice.md`) và bộ chống sáo rỗng (`assets/references/anti-ai-tone_vi.md`) với danh sách cụm cấm cụ thể cho tiếng Việt — "ở một mức độ nào đó", "như thể", "bất giác", "không khỏi", "đáng chú ý là"... giúp hành văn sống động, gãy gọn, có chiều sâu.
+- 🚀 **Kiến trúc Đa Agent hiện đại**: Quy hoạch cuộn 2 tầng (Rolling planning), nén ngữ cảnh 4 cấp, điểm phục hồi checkpoint step-level, và toàn bộ 14 lệnh slash commands.
 
 ## 🛡️ Đã kiểm tra bảo mật
 
@@ -143,27 +161,23 @@ Một lựa chọn này chi phối **cả hai**: ngôn ngữ giao diện TUI l�
 - `"language": "en"`: Giao diện tiếng Anh, nội dung truyện sinh ra bằng tiếng Anh tự nhiên, đúng chuẩn tiểu thuyết bản ngữ.
 - `"language": "zh"`: Giao diện tiếng Trung, nội dung truyện sinh ra bằng tiếng Trung giản thuận (phù hợp nếu bạn viết truyện Trung hoặc muốn đăng cùng cổ địch sau).
 
-### Cách hoạt động
+### Cách hoạt động (Tri-Language Isolation)
 
-Bộ prompt giữ nguyên bản gốc của tác giả, viết bằng tiếng Trung — đã được kiểm chứng về chất lượng nên giữ nguyên. Ngôn ngữ sáng tác được điều khiển ở hai điểm:
+Từ phiên bản v1.6.3, hệ thống áp dụng kiến trúc **cô lập ngôn ngữ 4 tầng** nhằm loại bỏ triệt để hiện tượng rò rỉ ngoại ngữ và ngăn LLM bị "nhiễm" ngôn ngữ chéo trong quá trình suy nghĩ (thinking):
 
-| Điểm | `vi` (mặc định) | `en` | `zh` |
+| Thành phần | Tiếng Việt (`vi`) | Tiếng Anh (`en`) | Tiếng Trung (`zh`) |
 |---|---|---|---|
-| Lớp văn phong (`voice`) | `assets/voice.md` - quy chuẩn nhà văn tiểu thuyết Tiếng Việt | `assets/voice_en.md` - quy chuẩn tiểu thuyết tiếng Anh bản ngữ | `assets/voice_zh.md` - bản gốc tiếng Trung |
-| Chỉ dẫn đầu ra | Gắn vào Architect/Writer/Editor: *toàn bộ sản phẩm phải viết bằng Tiếng Việt tự nhiên, đúng chuẩn văn phong* | Gắn tương tự, bằng tiếng Anh | Không gắn - protocol vốn đã là tiếng Trung |
-
-Bản chất: một câu lệnh buộc ngôn ngữ + một bộ quy chuẩn văn phong tương ứng, thay vì
-duy trì hai bản prompt song song dễ lệch nội dung.
+| **System Prompts** | `writer_vi.md`, `editor_vi.md`, `architect-*_vi.md` | `writer_en.md`, `editor_en.md`, `architect-*_en.md` | `writer.md`, `editor.md`, `architect-*.md` (gốc) |
+| **Lớp văn phong (`voice`)** | `voice.md` + `anti-ai-tone_vi.md` | `voice_en.md` + `anti-ai-tone_en.md` | `voice_zh.md` + `anti-ai-tone.md` |
+| **Tool Schemas & Lỗi** | 16 tools dịch 100% tiếng Việt cả description lẫn error | 16 tools dịch 100% tiếng Anh | 16 tools giữ nguyên tiếng Trung |
+| **References ngầm** | 10 tài liệu kỹ thuật bản địa hóa Tiếng Việt | 10 tài liệu kỹ thuật Tiếng Anh | 10 tài liệu kỹ thuật bản gốc |
+| **Đồng sáng tác / Co-create** | Prompt & Tóm tắt trạng thái thuần Việt | Prompt & Tóm tắt trạng thái tiếng Anh | Prompt & Tóm tắt trạng thái tiếng Trung |
 
 ### Cách đổi ngôn ngữ
 
 - Lúc cài đặt: Setup Wizard hỏi ngôn ngữ ngay từ đầu.
-- Khi đang chạy: gõ `/language` để xem ngôn ngữ hiện tại, hoặc `/language en`
-  (cũng nhận `vi`, `zh`) để đổi. Lựa chọn được ghi vào cấu hình và giữ cho các
-  lần khởi động sau.
-
-Giao diện đổi ngay. Riêng **ngôn ngữ sáng tác** được nạp một lần lúc khởi động, nên
-có hiệu lực đầy đủ từ lần mở kế tiếp - ứng dụng sẽ nhắc việc này ngay sau khi đổi.
+- Khi đang chạy: gõ `/language` để xem ngôn ngữ hiện tại, hoặc `/language en` (hoặc `vi`, `zh`) để đổi trực tiếp.
+- Mỗi bộ truyện còn được khóa ngôn ngữ độc lập trong `meta/language.json`, đảm bảo khi chuyển đổi giữa các tác phẩm khác nhau thì ngữ cảnh sáng tác vẫn luôn đồng bộ chuẩn xác.
 
 ## 4. Cấu Hình Nhà Cung Cấp AI (LLM)
 
@@ -242,15 +256,55 @@ Gõ `/` trong TUI để mở bảng chọn lệnh:
 | `/delete [tên]` | Xoá truyện — hai bước, bước hai phải gõ `y`, không khôi phục được |
 | `/language [vi\|en\|zh]` | Xem hoặc đổi ngôn ngữ giao diện; lựa chọn được lưu vào cấu hình |
 
-### Can thiệp thời gian thực (Steer)
+### Trực Quan Hóa Các Tính Năng UI
 
+#### 1. Màn hình Đồng sáng tác (/cocreate)
+Giúp bạn và AI cùng lên khung thế giới quan, nhân vật và hướng đi trước khi viết hoặc giữa các chặng:
+
+```text
+┌─ Đồng sáng tác ý tưởng (Co-Create) ────────────────────────────────────────────┐
+│ AI: Chào bạn! Bạn muốn viết về đề tài gì? Đô thị huyền bí, tu chân, hay trinh │
+│     thám hồi hộp? Nhân vật chính là người như thế nào?                         │
+│                                                                                │
+│ Bạn: Trinh thám tâm lý, nhân vật nữ làm ca đêm ở bến xe vắng, nghe thấy tiếng │
+│      chuông điện thoại lạ từ phòng trực tầng ba.                               │
+│                                                                                │
+│ AI: Hướng đi rất hấp dẫn! Đang cập nhật bản thảo chỉ đạo sáng tác:             │
+│     ## Chủ đề: Kinh dị tâm lý / Án mạng bí ẩn tại trạm xe đêm                 │
+│     ## Nhân vật: Ngọc (nữ trực tổng đài, ít nói, tuân thủ nghiêm ngặt quy tắc) │
+│                                                                                │
+│  gợi ý: [1] Cài cắm thêm một bí mật gia đình  [2] Tập trung vào yếu tố giật gân│
+│ [Ctrl+S]: Bắt đầu sáng tác  |  [Ctrl+C]: Lưu bản nháp  |  [Esc]: Quay lại      │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 2. Can thiệp thời gian thực (Steer)
 Trong lúc AI đang viết, bạn có thể nhập trực tiếp ý kiến sửa đổi vào ô nhập liệu bên dưới bất cứ lúc nào mà không cần tạm dừng hay khởi động lại:
 
 ```text
-❯ Cho nhân vật phụ A hy sinh ở cuối chương này để tạo bước ngoặt cảm xúc lớn
+┌────────────────────────────────────────────────────────────────────────────────┐
+│ 15:02:10 ⚙ WRITER (Đang viết Chương 1)                                         │
+│   ├ novel_context (chương 1)                                                   │
+│   ├ draft_chapter (chương 1, 3.200 từ)                                         │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ ❯ Cho nhân vật phụ A hy sinh ở cuối chương này để tạo bước ngoặt cảm xúc lớn   │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
+Sau khi nhấn `Enter`, Arbiter sẽ tự động đánh giá phạm vi ảnh hưởng và điều phối Writer/Editor cập nhật mạch truyện ngay lập tức.
 
-Sau khi nhấn Enter, Arbiter sẽ tự động đánh giá phạm vi ảnh hưởng và điều phối Writer/Editor cập nhật mạch truyện.
+#### 3. Đọc truyện trực tiếp trong TUI (/read)
+Gõ `/read` để đọc chương hiện tại hoặc `/read 5` để đọc lại chương 5 với định dạng sạch sẽ, phân trang mượt mà ngay trong cửa sổ dòng lệnh:
+
+```text
+┌─ Đang đọc: Chương 1 - Hai giờ bốn mươi bảy (3.420 từ) ─────────────────────────┐
+│ Hai giờ bốn mươi bảy phút, máy trong phòng trực reo lên.                       │
+│                                                                                │
+│ Tiếng chuông của đường dây nội bộ không giống tiếng chuông ngoài sảnh. Nó ngắn,│
+│ hai tiếng, lặp lại ba lần, rồi ngừng. Ngọc biết mẩu đó thuộc dãy tầng ba...    │
+├────────────────────────────────────────────────────────────────────────────────┤
+│ [↑/↓ hoặc j/k]: Cuộn trang  |  [q hoặc Esc]: Quay lại màn hình chính           │
+└────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ### Chế độ chạy ngầm (Headless)
 
