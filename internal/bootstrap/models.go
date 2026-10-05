@@ -406,6 +406,12 @@ func createModelFromConfig(providerKey, model string, pc ProviderConfig, cache m
 	if err != nil {
 		return nil, fmt.Errorf("giải loại provider thất bại: %w", err)
 	}
+	// chatgpt-web là bridge local, không cần key thật — litellm vẫn bắt key
+	// non-empty ở tầng client nên điền dummy. Bridge bỏ qua Bearer này.
+	apiKey := pc.APIKey
+	if strings.TrimSpace(apiKey) == "" && strings.EqualFold(strings.TrimSpace(providerKey), "chatgpt-web") {
+		apiKey = "local"
+	}
 	providerExtra := cloneMap(pc.Extra)
 	if pc.API != "" {
 		if providerExtra == nil {
@@ -420,7 +426,7 @@ func createModelFromConfig(providerKey, model string, pc ProviderConfig, cache m
 	}
 
 	m, err := llm.NewModel(providerType, model,
-		llm.WithAPIKey(pc.APIKey),
+		llm.WithAPIKey(apiKey),
 		llm.WithBaseURL(pc.BaseURL),
 		llm.WithStreamIdleTimeout(streamIdle),
 		llm.WithProviderExtra(providerExtra),
