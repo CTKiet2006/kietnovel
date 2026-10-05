@@ -253,16 +253,16 @@ var zhCatalog = map[string]string{
 	// layout.go
 
 	// model.go
-	" · Ctrl+R để bôi đen copy":           " · Ctrl+R 选黑复制",
-	" · Esc thoát đồng sáng tác":          " · Esc 退出共创",
-	" · Tab cuộn: chỉ đạo viết":           " · Tab 切换：写作指令",
-	" · Tab cuộn: hội thoại":              " · Tab 切换：对话",
-	" · đã nhập %d/%d":                    " · 已输入 %d/%d",
-	"Bị ngắt, gõ gì đó để viết tiếp":      "已中断，输入内容继续写作",
-	"[đã ẩn nghĩ]":                         "[已隐藏思考]",
+	" · Ctrl+R để bôi đen copy":             " · Ctrl+R 选黑复制",
+	" · Esc thoát đồng sáng tác":            " · Esc 退出共创",
+	" · Tab cuộn: chỉ đạo viết":             " · Tab 切换：写作指令",
+	" · Tab cuộn: hội thoại":                " · Tab 切换：对话",
+	" · đã nhập %d/%d":                      " · 已输入 %d/%d",
+	"Bị ngắt, gõ gì đó để viết tiếp":        "已中断，输入内容继续写作",
+	"[đã ẩn nghĩ]":                          "[已隐藏思考]",
 	"Ctrl+T bật/tắt hiển thị đoạn suy nghĩ": "Ctrl+T 开关思考过程显示",
-	"Enter gửi · ":                        "Enter 发送 · ",
-	"Enter gửi · Esc thoát đồng sáng tác": "Enter 发送 · Esc 退出共创",
+	"Enter gửi · ":                          "Enter 发送 · ",
+	"Enter gửi · Esc thoát đồng sáng tác":   "Enter 发送 · Esc 退出共创",
 
 	"Gõ / tìm lệnh · Enter viết tiếp · Esc xóa ô nhập": "输入 / 查找命令 · Enter 续写 · Esc 清空输入框",
 
