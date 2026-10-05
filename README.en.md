@@ -6,10 +6,13 @@
 
 A semi-automatic AI novel-writing tool: the Engine runs a whole book end to end, and the model is only called where judgement is actually required — the Engine orchestrates 3 autonomous agents, Architect / Writer / Editor, driven by a decision table, while the semantic Arbiter only wakes up when needed. From a single spark of an idea to a finished novel.
 
-## Highlights Of The Vietnamese Localization & Multilingual Support
+**New in v2.0.0:** write for free with your ChatGPT Web account — no API key needed. Pick the `ChatGPT Web` provider in the Setup Wizard, log in once, and just open the app to write from then on.
+
+## Highlights (v2.0.0)
 
 - 🌐 **Multilingual TUI interface (vi / en / zh)**: From the initial Setup Wizard, the welcome screen, the status bar, the live Activity stream and the Provider/Model management table (`/config`, `/model`) through error messages and keybindings — everything follows the selected language, idiomatically and naturally. Switch mid-session with `/language`.
 - ✍️ **Optional writing language**: Write in Vietnamese (default), English or Simplified Chinese via `"language": "vi"` / `"en"` / `"zh"`. The prompt set stays the original, byte for byte (proven in practice); only the voice layer and the forced output-language instruction change.
+- 🔑 **Write for free with ChatGPT Web**: no API key needed — use your ChatGPT account (Free included). Pick `ChatGPT Web` in the Setup Wizard and log in once; from then on the local bridge starts itself.
 - 🔑 **Runs straight against cloud APIs**: Supports OpenRouter, DeepSeek, Gemini, Anthropic, OpenAI. One API key and you can write — no Docker needed.
 - ✍️ **A voice that fights empty AI prose**: ships with a Vietnamese novel-writing style guide (`assets/voice.md`) and an anti-AI-tone kit (`assets/references/anti-ai-tone.md`) listing concrete banned phrases for Vietnamese — "ở một mức độ nào đó", "như thể", "bất giác", "không khỏi"... — keeping the prose vivid, terse and deep.
 - 🚀 **Fully in sync with the latest upstream**: Multi-Agent architecture, 2-tier rolling planning, 4-level context compression, step-level recovery points, and the complete set of 14 slash commands.
@@ -46,7 +49,7 @@ One thing worth knowing: this is an **agent framework** — the model is given t
 ## 1. System Requirements
 
 - **Go ≥ 1.25** to build from source. No Docker required.
-- An API key from an LLM provider: OpenRouter, DeepSeek, Gemini, Anthropic or OpenAI.
+- An API key from an LLM provider (OpenRouter, DeepSeek, Gemini, Anthropic or OpenAI) — **or** a ChatGPT Web account (Free included) to write without any key.
 
 > **Why not recommend running a local model?** This tool needs a very large context (200k tokens by default, compressed at 85%) and calls the LLM **4-6 times per chapter** — Architect plans, Writer drafts, Editor scores 7 dimensions, then it commits. Local models don't cut it: a 14B model needs ~40GB RAM to reach 64k context, and on CPU it runs at 2-5 tok/s, so a single chapter takes hours. Use a cloud API.
 
@@ -80,14 +83,14 @@ running file.
 **Downgrading to an older version:**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1.4.0
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v2.0.0
 ```
 
 No Go? Download the script first, then run it:
 
 ```powershell
 irm https://github.com/CTKiet2006/kietnovel/releases/latest/download/install-windows.ps1 -OutFile ki.ps1
-.\ki.ps1 -Version v1.4.0
+.\ki.ps1 -Version v2.0.0
 ```
 
 All releases: <https://github.com/CTKiet2006/kietnovel/releases>
@@ -472,14 +475,9 @@ Copyright 2026 KietNovel contributors.
 
 *Built on the shoulders of giants:*
 
-Originally inspired by and initially based on **AINovel-CLI by voocel**. KietNovel
-is now independently developed — new architecture, new features, ongoing
-development.
+KietNovel started from the inspiration and technical foundation of **AINovel-CLI (voocel)**, then was rewritten and developed independently — engine architecture, multi-agent workflow, trilingual support, the ChatGPT Web provider and all current features are the project's own work.
 
-- **[ainovel-cli](https://github.com/voocel/ainovel-cli)** — where it all started. The
-  multi-agent engine, the rolling plan, the checkpointing, the TUI commands and the
-  prompt set all came from here, and the prompts are still the originals, untouched
-  and in the author's own words.
+- **[ainovel-cli](https://github.com/voocel/ainovel-cli)** — where it all started: multi-agent engine, rolling plan, checkpointing, TUI commands and the original prompt set.
 - **[agentcore](https://github.com/voocel/agentcore)** — the tool-calling and
   streaming runtime the agent layer is built on.
 - **[litellm](https://github.com/voocel/litellm)** — multi-provider LLM interface.

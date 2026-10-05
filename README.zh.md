@@ -6,10 +6,13 @@
 
 半自动 AI 长篇小说创作工具：Engine 负责把一整本书从头跑完，模型只在真正需要判断的地方被调用 —— Engine 按决策表调度 3 个各自独立的 Agent（Architect / Writer / Editor），语义仲裁者 Arbiter 只在必要时才被唤醒。从一个创意念头，到一部完整小说。
 
-## 越南语本地化与多语言特性
+**v2.0.0 新特性：**用你的 ChatGPT Web 账号免费写作——无需购买 API key。在 Setup Wizard 里选择 `ChatGPT Web` provider，登录一次，之后打开就能写。
+
+## 特性亮点 (v2.0.0)
 
 - 🌐 **多语言 TUI 界面（vi / en / zh）**：从首次安装的 Setup Wizard、欢迎界面、状态栏、实时 Activity 流，到 Provider/Model 管理表（`/config`、`/model`），再到错误提示与快捷键 —— 全部随所选语言切换，用词地道自然。运行途中用 `/language` 即可换语言。
 - ✍️ **可选的创作语言**：通过 `"language": "vi"` / `"en"` / `"zh"` 用越南语（默认）、英语或简体中文写作。prompt 集合保持原版不变（已被反复验证有效），只更换文风层以及强制输出语言的指令。
+- 🔑 **用 ChatGPT Web 免费写作**：无需 API key——用你的 ChatGPT 账号（含 Free 版）。在 Setup Wizard 里选择 `ChatGPT Web` 并登录一次，之后本地 bridge 会自动启动。
 - 🔑 **直接调用云端 API**：支持 OpenRouter、DeepSeek、Gemini、Anthropic、OpenAI。一个 API key 就能开写，无需 Docker。
 - ✍️ **拒绝 AI 套话的文风**：内置越南语小说写作规范（`assets/voice.md`）和一套反套话素材（`assets/references/anti-ai-tone.md`），并针对越南语列出具体禁用短语 —— 「ở một mức độ nào đó」「như thể」「bất giác」「không khỏi」…… 让文字生动、干脆、有厚度。
 - 🚀 **全面同步最新 upstream**：多 Agent 架构、2 层滚动规划（Rolling planning）、4 级上下文压缩、step 级恢复点，以及全部 14 个 slash commands。
@@ -46,7 +49,7 @@
 ## 1. 系统要求
 
 - **Go ≥ 1.25**，用于从源码构建。无需 Docker。
-- 来自某个 LLM provider 的 API key：OpenRouter、DeepSeek、Gemini、Anthropic 或 OpenAI。
+- 来自某个 LLM provider 的 API key（OpenRouter、DeepSeek、Gemini、Anthropic 或 OpenAI）——**或者**用 ChatGPT Web 账号（含 Free 版）免费写作，无需任何 key。
 
 > **为什么不建议跑本地模型？** 这个工具需要非常大的 context（默认 200k token，85% 时开始压缩），并且**每一章要调用 4-6 次 LLM** —— Architect 做规划、Writer 写初稿、Editor 做 7 维评估，然后 commit。本地模型撑不住：14B 模型要达到 64k context 需要约 40GB 内存，在 CPU 上只有 2-5 tok/s，写一章要几个小时。请用云端 API。
 
@@ -76,14 +79,14 @@ kietnovel
 **降级到旧版本：**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1.4.0
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v2.0.0
 ```
 
 没装 Go？先下载脚本再运行：
 
 ```powershell
 irm https://github.com/CTKiet2006/kietnovel/releases/latest/download/install-windows.ps1 -OutFile ki.ps1
-.\ki.ps1 -Version v1.4.0
+.\ki.ps1 -Version v2.0.0
 ```
 
 <details>
@@ -451,14 +454,9 @@ Copyright 2026 KietNovel contributors.
 
 *Built on the shoulders of giants:*
 
-Originally inspired by and initially based on **AINovel-CLI by voocel**. KietNovel
-is now independently developed — new architecture, new features, ongoing
-development.
+KietNovel 最初受到 **AINovel-CLI（voocel）** 的启发并以其技术为起点，之后被重写并独立发展——引擎架构、多 Agent 工作流、三语言支持、ChatGPT Web provider 以及全部现有功能都是本项目自己的成果。
 
-- **[ainovel-cli](https://github.com/voocel/ainovel-cli)** — where it all started. The
-  multi-agent engine, the rolling plan, the checkpointing, the TUI commands and the
-  prompt set all came from here, and the prompts are still the originals, untouched
-  and in the author's own words.
+- **[ainovel-cli](https://github.com/voocel/ainovel-cli)** ——一切的起点：多 Agent 引擎、滚动规划、checkpoint、TUI 命令和最初的 prompt 集合。
 - **[agentcore](https://github.com/voocel/agentcore)** — the tool-calling and
   streaming runtime the agent layer is built on.
 - **[litellm](https://github.com/voocel/litellm)** — multi-provider LLM interface.

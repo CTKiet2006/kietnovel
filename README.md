@@ -6,7 +6,9 @@
 
 Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định chạy trọn một bộ truyện, model chỉ được gọi đúng chỗ cần phán đoán — Engine điều phối 3 agent tự chủ Architect / Writer / Editor theo bảng quyết định, Arbiter ngữ nghĩa chỉ thức dậy khi cần. Từ một câu ý tưởng tới tiểu thuyết hoàn chỉnh.
 
-## Điểm Nổi Bật Của Bản Việt Hóa & Đa Ngôn Ngữ (v1.6.3)
+**Mới ở v2.0.0:** viết truyện miễn phí bằng tài khoản ChatGPT Web — không cần mua API key. Chọn provider `ChatGPT Web` trong Setup Wizard, đăng nhập một lần, từ lần sau mở lên là viết.
+
+## Điểm Nổi Bật (v2.0.0)
 
 - 🌐 **Giao diện TUI đa ngôn ngữ (vi / en / zh)**: Từ Setup Wizard cài đặt ban đầu, màn hình chào mừng, thanh trạng thái, Activity stream trực tiếp, bảng quản lý Provider/Model (`/config`, `/model`) đến thông báo lỗi và phím tắt — tất cả dịch theo ngôn ngữ đang chọn, chuẩn mực và tự nhiên. Đổi giữa chừng bằng lệnh `/language`.
 - ✍️ **Độc lập ngôn ngữ sáng tác triệt để (Tri-Language Isolation)**:
@@ -14,6 +16,7 @@ Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định 
   - **100% Dynamic Tool Schemas & Error Handling**: 16 công cụ giao tiếp với LLM (`draft_chapter`, `plan_chapter`, `commit_chapter`, `novel_context`...) tự động đồng bộ schema và thông báo lỗi bằng Tiếng Việt / Tiếng Anh / Tiếng Trung, cắt đứt hoàn toàn nguy cơ model bị "nhiễm" tiếng Trung khi suy nghĩ (thinking) hoặc khi gặp lỗi.
   - **100% Native Reference Docs**: 10 tài liệu kỹ thuật ngầm (10 kỹ thuật móc câu kịch tính, nghệ thuật Show Don't Tell, duy trì tính nhất quán, cẩm nang đối thoại, quy hoạch trường thiên...) được nạp trực tiếp bằng ngôn ngữ truyện.
   - **Đồng sáng tác (Co-create)**: Trợ lý trò chuyện định hướng ý tưởng thô và lập kế hoạch chặng tiếp theo bằng ngôn ngữ bản địa tự nhiên.
+- 🔑 **Viết miễn phí với ChatGPT Web**: không có API key vẫn viết được bằng tài khoản ChatGPT (kể cả Free). Chọn `ChatGPT Web` trong Setup Wizard, đăng nhập một lần duy nhất — từ lần sau mở lên là bridge tự chạy ngầm.
 - 🔑 **Chạy thẳng với API cloud**: Hỗ trợ OpenRouter, DeepSeek, Gemini, Anthropic, OpenAI. Một API key là viết được ngay, không cần Docker.
 - ✍️ **Văn phong chống AI sáo rỗng**: kèm quy chuẩn hành văn tiểu thuyết Tiếng Việt (`assets/voice.md`) và bộ chống sáo rỗng (`assets/references/anti-ai-tone_vi.md`) với danh sách cụm cấm cụ thể cho tiếng Việt — "ở một mức độ nào đó", "như thể", "bất giác", "không khỏi", "đáng chú ý là"... giúp hành văn sống động, gãy gọn, có chiều sâu.
 - 🚀 **Kiến trúc Đa Agent hiện đại**: Quy hoạch cuộn 2 tầng (Rolling planning), nén ngữ cảnh 4 cấp, điểm phục hồi checkpoint step-level, và toàn bộ 14 lệnh slash commands.
@@ -50,7 +53,7 @@ Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định 
 ## 1. Yêu Cầu Hệ Thống
 
 - **Go ≥ 1.25** để build từ source. Không cần Docker.
-- Một API key từ nhà cung cấp LLM: OpenRouter, DeepSeek, Gemini, Anthropic hoặc OpenAI.
+- Một API key từ nhà cung cấp LLM (OpenRouter, DeepSeek, Gemini, Anthropic, OpenAI) — **hoặc** tài khoản ChatGPT Web (kể cả Free) để viết miễn phí không cần key.
 
 > **Vì sao không khuyến nghị chạy model local?** Công cụ này cần context rất lớn (mặc định 200k token, nén ở 85%) và gọi LLM **4-6 lần cho mỗi chương** — Architect lên kế hoạch, Writer viết nháp, Editor đánh giá 7 chiều, rồi commit. Model local địa phương không đáp ứng: model 14B cần ~40GB RAM để đạt 64k context, và trên CPU tốc độ 2-5 tok/s nên một chương mất hàng giờ. Hãy dùng API cloud.
 
@@ -83,14 +86,14 @@ file đang chạy.
 **Hạ về bản cũ:**
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v1.4.0
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1 -Version v2.0.0
 ```
 
 Nếu không có Go, tải script rồi chạy:
 
 ```powershell
 irm https://github.com/CTKiet2006/kietnovel/releases/latest/download/install-windows.ps1 -OutFile ki.ps1
-.\ki.ps1 -Version v1.4.0
+.\ki.ps1 -Version v2.0.0
 ```
 
 Tất cả bản phát hành: <https://github.com/CTKiet2006/kietnovel/releases>
@@ -482,14 +485,9 @@ Copyright 2026 KietNovel contributors.
 
 *Built on the shoulders of giants:*
 
-Originally inspired by and initially based on **AINovel-CLI by voocel**. KietNovel
-is now independently developed — new architecture, new features, ongoing
-development.
+KietNovel khởi đầu từ cảm hứng và nền tảng kỹ thuật của **AINovel-CLI (voocel)**, sau đó được viết lại và phát triển độc lập — kiến trúc engine, workflow đa agent, hỗ trợ ba ngôn ngữ, provider ChatGPT Web và toàn bộ tính năng hiện tại đều là công sức riêng của dự án.
 
-- **[ainovel-cli](https://github.com/voocel/ainovel-cli)** — where it all started. The
-  multi-agent engine, the rolling plan, the checkpointing, the TUI commands and the
-  prompt set all came from here, and the prompts are still the originals, untouched
-  and in the author's own words.
+- **[ainovel-cli](https://github.com/voocel/ainovel-cli)** — điểm khởi đầu: engine đa agent, quy hoạch cuộn, checkpoint, lệnh TUI và bộ prompt gốc.
 - **[agentcore](https://github.com/voocel/agentcore)** — the tool-calling and
   streaming runtime the agent layer is built on.
 - **[litellm](https://github.com/voocel/litellm)** — multi-provider LLM interface.
