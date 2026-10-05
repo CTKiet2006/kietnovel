@@ -7,14 +7,22 @@ import (
 
 // Lint is the built-in product floor check: it scans the body for machinery residue, is unrelated to user rules, and always runs at commit time.
 // It shares Check's contract -- facts only (iron law one), no flow blocking, adjudicated by review/the user.
-//
-// The current three kinds (all empirically observed defects from real long-run output):
-//   - markdown_residue: leftover ** bolding and # heading lines outside the first line (exporting to txt would expose the raw symbols)
-//   - non_cjk_fragments: runs of Latin letters (the model mixing languages, e.g. a bare "pattern" inside Chinese prose)
 func Lint(text string) []Violation {
+	return LintForLanguage(text, "zh")
+}
+
+// LintForLanguage runs linting checks tailored to the creative language.
+// For Chinese: flags Latin letter fragments.
+// For Vietnamese/English: flags leftover Chinese (CJK) characters.
+func LintForLanguage(text string, lang string) []Violation {
 	var vs []Violation
 	vs = appendMarkdownResidue(vs, text)
-	vs = appendNonCJKFragments(vs, text)
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "vi", "en":
+		vs = appendCJKResidue(vs, text)
+	default:
+		vs = appendNonCJKFragments(vs, text)
+	}
 	return vs
 }
 
@@ -75,6 +83,33 @@ func appendNonCJKFragments(vs []Violation, text string) []Violation {
 	return append(vs, Violation{
 		Rule:     "non_cjk_fragments",
 		Target:   strings.Join(examples, "、"),
+		Actual:   len(matches),
+		Severity: SeverityWarning,
+	})
+}
+
+var cjkCharRe = regexp.MustCompile(`[\p{Han}]`)
+
+// appendCJKResidue reports Chinese character residue in Vietnamese or English prose.
+func appendCJKResidue(vs []Violation, text string) []Violation {
+	matches := cjkCharRe.FindAllString(text, -1)
+	if len(matches) == 0 {
+		return vs
+	}
+	seen := make(map[string]struct{})
+	var examples []string
+	for _, m := range matches {
+		if _, ok := seen[m]; ok {
+			continue
+		}
+		seen[m] = struct{}{}
+		if len(examples) < 5 {
+			examples = append(examples, m)
+		}
+	}
+	return append(vs, Violation{
+		Rule:     "cjk_residue",
+		Target:   strings.Join(examples, ", "),
 		Actual:   len(matches),
 		Severity: SeverityWarning,
 	})

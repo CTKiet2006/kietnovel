@@ -99,7 +99,7 @@ func LoadWithLanguage(language, style string, opts LoadOptions) Bundle {
 	}
 	return Bundle{
 		References: loadReferences(style, opts),
-		Prompts:    loadPrompts(),
+		Prompts:    loadPromptsForLanguage(lang),
 		Styles:     loadStyles(opts),
 		Voice:      resolveAppendable(mustRead(voiceFS, voiceFile), "voice.md", opts),
 		Language:   lang,
@@ -274,12 +274,26 @@ func loadReferences(style string, opts LoadOptions) tools.References {
 	return refs
 }
 
+func promptForLanguage(baseName, lang string) string {
+	if lang != "" && lang != "zh" {
+		langPath := fmt.Sprintf("prompts/%s_%s.md", baseName, lang)
+		if data, err := promptsFS.ReadFile(langPath); err == nil && len(data) > 0 {
+			return string(data)
+		}
+	}
+	return mustRead(promptsFS, fmt.Sprintf("prompts/%s.md", baseName))
+}
+
 func loadPrompts() Prompts {
+	return loadPromptsForLanguage("zh")
+}
+
+func loadPromptsForLanguage(lang string) Prompts {
 	return Prompts{
-		ArchitectShort:   WithSimulationGuidance(mustRead(promptsFS, "prompts/architect-short.md"), "architect"),
-		ArchitectLong:    WithSimulationGuidance(mustRead(promptsFS, "prompts/architect-long.md"), "architect"),
-		Writer:           WithSimulationGuidance(mustRead(promptsFS, "prompts/writer.md"), "writer"),
-		Editor:           WithSimulationGuidance(mustRead(promptsFS, "prompts/editor.md"), "editor"),
+		ArchitectShort:   WithSimulationGuidance(promptForLanguage("architect-short", lang), "architect"),
+		ArchitectLong:    WithSimulationGuidance(promptForLanguage("architect-long", lang), "architect"),
+		Writer:           WithSimulationGuidance(promptForLanguage("writer", lang), "writer"),
+		Editor:           WithSimulationGuidance(promptForLanguage("editor", lang), "editor"),
 		ImportSegment:    mustRead(promptsFS, "prompts/import-segment.md"),
 		ImportAnalyze:    mustRead(promptsFS, "prompts/import-analyze.md"),
 		ImportSynthesize: mustRead(promptsFS, "prompts/import-synthesize.md"),
@@ -288,9 +302,9 @@ func loadPrompts() Prompts {
 		SimulationMerge:  mustRead(promptsFS, "prompts/simulation-merge.md"),
 		RevisionAnalyze:  mustRead(promptsFS, "prompts/revision-analyze.md"),
 
-		ArbiterPlanStart:    mustRead(promptsFS, "prompts/arbiter-plan-start.md"),
-		ArbiterIntervention: mustRead(promptsFS, "prompts/arbiter-intervention.md"),
-		ArbiterFailure:      mustRead(promptsFS, "prompts/arbiter-failure.md"),
+		ArbiterPlanStart:    promptForLanguage("arbiter-plan-start", lang),
+		ArbiterIntervention: promptForLanguage("arbiter-intervention", lang),
+		ArbiterFailure:      promptForLanguage("arbiter-failure", lang),
 	}
 }
 

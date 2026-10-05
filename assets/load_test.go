@@ -166,7 +166,7 @@ func TestOverrideVoice_SharesAssemblyPath(t *testing.T) {
 		t.Fatal("占位符必须被消耗")
 	}
 	// the protocol section is unaffected by the voice override
-	if !strings.Contains(got, "## 执行协议") {
+	if !strings.Contains(got, "## 执行协议") && !strings.Contains(got, "## Quy trình thực hiện") {
 		t.Fatal("协议模板不得被 voice 覆盖破坏")
 	}
 }

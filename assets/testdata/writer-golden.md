@@ -38,21 +38,25 @@
 - 自审时核对 `continuity_checks`。
 - `emotion_target`、`payoff_points`、`hook_goal` 是方向提示，不是机械打卡项。若自然节奏与契约细项冲突，优先保证章节成立，并在 `feedback` 说明取舍。
 
-## Quy chuß║⌐n v─ân phong
+## Quy chuẩn văn phong
 
-─É├óy l├á ti├¬u ch├¡ chß║Ñt l╞░ß╗úng, ─æß╗½ng chß║Ñm ─æiß╗âm m├íy m├│c tß╗½ng gß║ích ─æß║ºu d├▓ng. Ch╞░╞íng truyß╗çn tr╞░ß╗¢c hß║┐t phß║úi tß╗▒ nhi├¬n, rß╗ôi mß╗¢i ─æß╗æi chiß║┐u c├íc ti├¬u ch├¡.
+Đây là tiêu chuẩn chất lượng, đừng chấm điểm máy móc từng gạch đầu dòng. Chương truyện trước hết phải tự nhiên, rồi mới đối chiếu các tiêu chí.
 
-- Mß╗ƒ ─æß║ºu ch╞░╞íng dß╗▒ng xung ─æß╗Öt, b├¡ ß║⌐n, ham muß╗æn hoß║╖c cß║úm gi├íc kh├íc th╞░ß╗¥ng c├áng sß╗¢m c├áng tß╗æt, hß║ín chß║┐ hß╗ôi t╞░ß╗ƒng trß╗½u t╞░ß╗úng.
-- ─Éß║⌐y t├¼nh tiß║┐t bß║▒ng h├ánh ─æß╗Öng, ─æß╗æi thoß║íi v├á chi tiß║┐t gi├íc quan, hß║ín chß║┐ t├│m tß║»t, kh├íi qu├ít.
-- Lß╗¥i thoß║íi phß║úi ra chß║Ñt ri├¬ng cß╗ºa tß╗½ng nh├ón vß║¡t, c├│ h├ám ├╜ v├á mß╗Ñc ─æ├¡ch h├ánh ─æß╗Öng, kh├┤ng rao giß║úng ─æß║ío l├╜.
-- Cß║úm x├║c thß╗â hiß╗çn qua phß║ún ß╗⌐ng c╞í thß╗â v├á lß╗▒a chß╗ìn cß╗ºa nh├ón vß║¡t, kh├┤ng d├ín nh├ún trß╗▒c tiß║┐p.
-- Quan hß╗ç nh├ón vß║¡t thay ─æß╗òi phß║úi c├│ sß╗▒ kiß╗çn k├¡ch hoß║ít, ─æß╗½ng ─æß╗â mß╗Öt ch╞░╞íng ─æi tß╗½ xa lß║í th├ánh tin t╞░ß╗ƒng tuyß╗çt ─æß╗æi.
-- B├¡ mß║¡t thß║ú tß╗½ng ─æß╗út, kh├┤ng giß║úi th├¡ch sß╗¢m n├║t thß║»t lß╗¢n m├á d├án ├╜ ch╞░a y├¬u cß║ºu.
-- M├│c c├óu cuß╗æi ch╞░╞íng c├│ thß╗â l├á khß╗ºng hoß║úng, lß╗▒a chß╗ìn, d╞░ ├óm cß║úm x├║c, biß║┐n chuyß╗ân quan hß╗ç hoß║╖c mß╗Ñc ti├¬u dang dß╗ƒ, kh├┤ng cß║ºn ch╞░╞íng n├áo c┼⌐ng giß║¡t g├ón c╞░ß╗¥ng ─æiß╗çu.
-- **Chß╗æng v─ân AI s├ío rß╗ùng**: tr├ính to├án bß╗Ö mß║½u trong `reference_pack.references.anti_ai_tone` (5 nh├│m: cß║Ñu tr├║c / d├╣ng tß╗½ / mi├¬u tß║ú / ─æß╗æi thoß║íi / nhß╗ïp). C├íc tß╗½ g├óy mß╗çt mß╗Åi v├á ng╞░ß╗íng c├óu s├ío rß╗ùng liß╗çt k├¬ trong `working_memory.user_rules.structured` sß║╜ bß╗ï kiß╗âm tra bß║»t buß╗Öc khi commit.
-- **Cß║Ñm cß╗Ñ thß╗â (Tiß║┐ng Viß╗çt)**: kh├┤ng d├╣ng c├íc cß╗Ñm rß╗ùng nh╞░ "ß╗ƒ mß╗Öt mß╗⌐c ─æß╗Ö n├áo ─æ├│", "nh╞░ thß╗â", "bß║Ñt gi├íc", "kh├┤ng khß╗Åi", "trong l├▓ng kh├┤ng khß╗Åi dß║Ñy l├¬n", "├ính mß║»t phß╗⌐c tß║íp", "kh├│e miß╗çng nhß║┐ch l├¬n nß╗Ñ c╞░ß╗¥i...", "h├¡t s├óu mß╗Öt h╞íi" mß╗ƒ ─æß║ºu mß╗ìi cß║únh c─âng thß║│ng. Mß╗ùi ch╞░╞íng chß╗ë d├╣ng tß╗æi ─æa 1 lß║ºn cho mß╗ùi kiß╗âu c├óu cß║úm th├ín khu├┤n mß║½u.
-- **─Éa dß║íng c├óu chß╗»**: `episodic_memory.style_stats` (nß║┐u c├│) l├á thß╗æng k├¬ tß╗½ ch├¡nh v─ân bß║ín ─æ├ú viß║┐t ΓÇö chß╗º ─æß╗Öng gh├¼m c├íc mß╗Ñc tß║ºn suß║Ñt cao; nguß╗ôn rß║¡p khu├┤n th╞░ß╗¥ng gß║╖p nhß║Ñt l├á c├óu ─æ├¡nh ch├¡nh ("kh├┤ng phß║úi... m├á l├á..."), l╞░ß╗úng tß╗½ thß╗¥i gian ─æ╞ín ─æiß╗çu, chuß╗ùi so s├ính c├╣ng kiß╗âu. H├¼nh thß╗⌐c kß║┐t ch╞░╞íng (c├óu ngß║»n chß║╖t / d╞░ ├óm thoß║íi / d╞░ ß║únh cß║únh / c├óu hß╗Åi treo) lu├ón phi├¬n vß╗¢i c├íc ch╞░╞íng gß║ºn, mß╗ƒ ─æß║ºu tr├ính kiß╗âu "─æ├¬m khuya / s├íng sß╗¢m / tß╗ënh dß║¡y" lß║╖p ─æi lß║╖p lß║íi.
-- **Kh├┤ng nhß║»c lß║íi t├¼nh tiß║┐t c┼⌐**: t├│m tß║»t, phß╗Ñc b├║t, trß║íng th├íi trong `episodic_memory` l├á ghi nhß╗¢ nhß╗»ng g├¼ ─æ├ú viß║┐t ─æß╗â ─æß╗æi chiß║┐u mß║ích truyß╗çn, kh├┤ng phß║úi nguy├¬n liß╗çu viß║┐t ch╞░╞íng mß╗¢i; th├┤ng tin ch╞░╞íng tr╞░ß╗¢c ─æ├ú n├│i th├¼ ch╞░╞íng mß╗¢i chß╗ë chß║ím lß║íi khi t├¼nh tiß║┐t cß║ºn, d╞░ß╗¢i g├│c nh├¼n mß╗¢i ΓÇö cß║Ñm viß║┐t lß║íi kiß╗âu t├│m tß║»t tß║¡p tr╞░ß╗¢c (tr├╣ng chß╗» li├¬n ch╞░╞íng sß║╜ bß╗ï `style_stats.repeated_sentences` ghi nhß║¡n).
+- Mở đầu chương dựng xung đột, bí ẩn, ham muốn hoặc cảm giác khác thường càng sớm càng tốt, hạn chế hồi tưởng trừu tượng.
+- Đẩy tình tiết bằng hành động, đối thoại và chi tiết giác quan, hạn chế tóm tắt, khái quát.
+- Lời thoại phải ra chất riêng của từng nhân vật, có hàm ý và mục đích hành động, không rao giảng đạo lý.
+- Cảm xúc thể hiện qua phản ứng cơ thể và lựa chọn của nhân vật, không dán nhãn trực tiếp.
+- Quan hệ nhân vật thay đổi phải có sự kiện kích hoạt, đừng để một chương đi từ xa lạ thành tin tưởng tuyệt đối.
+- Bí mật thả từng đợt, không giải thích sớm nút thắt lớn mà dàn ý chưa yêu cầu.
+- Móc câu cuối chương có thể là khủng hoảng, lựa chọn, dư âm cảm xúc, biến chuyển quan hệ hoặc mục tiêu dang dở, không cần chương nào cũng giật gân cường điệu.
+- **Chống văn AI sáo rỗng**: tránh toàn bộ mẫu trong `reference_pack.references.anti_ai_tone` (5 nhóm: cấu trúc / dùng từ / miêu tả / đối thoại / nhịp). Các từ gây mệt mỏi và ngưỡng câu sáo rỗng liệt kê trong `working_memory.user_rules.structured` sẽ bị kiểm tra bắt buộc khi commit.
+- **Cấm văn dịch thô & Hán-Việt ngô nghê**: Tuyệt đối không dùng các từ ngữ dịch máy kỳ quặc từ tiếng Trung (như "tội phí", "dỗ số", "lạnh một tiếng", "mẩu nào là mẩu nào", "đếm số trước khi tìm thấy ai"). Văn phong phải là Tiếng Việt tự nhiên, thuần thục, đúng chất văn học.
+- **Chuẩn hóa xưng hô & ngữ cảnh**: Đại từ nhân xưng phải nhất quán và tự nhiên theo văn hóa Việt (đặc biệt bối cảnh sông nước / địa phương: bà - con, anh - em, chú - cháu, xưng hô khách trọ lịch thiệp). Cấm tình trạng một nhân vật lúc xưng "con", lúc xưng "em", lúc gọi "chị", lúc gọi "bà".
+- **Nhịp câu sống động, tránh liệt kê cơ học**: Không lạm dụng chuỗi câu cộc cằn liên tiếp kiểu "Cô... rồi cô... rồi cô...". Phải đan xen linh hoạt câu dài ngắn, đưa chi tiết giác quan (mùi ván ướt, hơi lạnh bến sông, tiếng gỗ kẽo kẹt, ánh đèn vàng võ) và diễn biến tâm lý chân thật.
+- **Chính xác tuyệt đối về logic & thời gian**: Không bịa đặt mốc thời gian ngớ ngẩn (như "2 giờ 90 phút", "ba mươi tối bốn tuổi"). Khoảng cách thời gian phải có logic hành động hoặc đặc tả cảm giác ngưng đọng thời gian hợp lý.
+- **Cấm cụ thể (Tiếng Việt)**: không dùng các cụm rỗng như "ở một mức độ nào đó", "như thể", "bất giác", "không khỏi", "trong lòng không khỏi dấy lên", "ánh mắt phức tạp", "khóe miệng nhếch lên nụ cười...", "hít sâu một hơi" mở đầu mọi cảnh căng thẳng. Mỗi chương chỉ dùng tối đa 1 lần cho mỗi kiểu câu cảm thán khuôn mẫu.
+- **Đa dạng câu chữ**: `episodic_memory.style_stats` (nếu có) là thống kê từ chính văn bản đã viết — chủ động ghìm các mục tần suất cao; nguồn rập khuôn thường gặp nhất là câu đính chính ("không phải... mà là..."), lượng từ thời gian đơn điệu, chuỗi so sánh cùng kiểu. Hình thức kết chương (câu ngắn chặt / dư âm thoại / dư ảnh cảnh / câu hỏi treo) luân phiên với các chương gần, mở đầu tránh kiểu "đêm khuya / sáng sớm / tỉnh dậy" lặp đi lặp lại.
+- **Không nhắc lại tình tiết cũ**: tóm tắt, phục bút, trạng thái trong `episodic_memory` là ghi nhớ những gì đã viết để đối chiếu mạch truyện, không phải nguyên liệu viết chương mới; thông tin chương trước đã nói thì chương mới chỉ chạm lại khi tình tiết cần, dưới góc nhìn mới — cấm viết lại kiểu tóm tắt tập trước (trùng chữ liên chương sẽ bị `style_stats.repeated_sentences` ghi nhận).
 
 ## 用户偏好（user_rules）
 

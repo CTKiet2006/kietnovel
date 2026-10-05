@@ -528,11 +528,11 @@ func (t *CommitChapterTool) appendCommitCheckpoint(chapter int) error {
 // checkRules runs mechanical checks on the chapter body: the built-in product floor Lint (a mechanism residue, always executed)
 // plus the user rules Check (reading this book's snapshot `structured`; when the snapshot is missing it falls back to the built-in defaults, guaranteeing that the mechanical floor is always present).
 func (t *CommitChapterTool) checkRules(text string) []rules.Violation {
-	violations := rules.Lint(text)
 	lang := ""
 	if t.store != nil && t.store.BookLanguage != nil {
 		lang, _ = t.store.BookLanguage.Load()
 	}
+	violations := rules.LintForLanguage(text, lang)
 	structured := rules.SystemDefaultsForLanguage(lang).Structured
 	if snap, err := t.store.UserRules.Load(); err == nil && snap != nil {
 		structured = snap.Structured

@@ -47,3 +47,26 @@ func TestLint_NonCJKFragments(t *testing.T) {
 		t.Errorf("severity: %v", v.Severity)
 	}
 }
+
+func TestLintForLanguage_Vietnamese(t *testing.T) {
+	// Vietnamese text should not trigger non_cjk_fragments
+	vnClean := "# Chương 1: Hai giờ bốn mươi bảy\nNgọc đặt bút xuống, nhấc máy.\nBên kia có tiếng gõ."
+	vs := LintForLanguage(vnClean, "vi")
+	if len(vs) != 0 {
+		t.Errorf("clean Vietnamese text should have 0 violations, got: %+v", vs)
+	}
+
+	// Vietnamese text with Chinese characters should trigger cjk_residue
+	vnWithCJK := "# Chương 1\nCô nhìn thấy chữ 某种程度上 trên tường."
+	vsCJK := LintForLanguage(vnWithCJK, "vi")
+	var cjkV *Violation
+	for i := range vsCJK {
+		if vsCJK[i].Rule == "cjk_residue" {
+			cjkV = &vsCJK[i]
+			break
+		}
+	}
+	if cjkV == nil || cjkV.Actual != 5 {
+		t.Errorf("expected cjk_residue violation with count 5, got: %+v", vsCJK)
+	}
+}
