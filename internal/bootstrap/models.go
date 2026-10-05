@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/CTKiet2006/kietnovel/internal/bridge"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
 	"github.com/CTKiet2006/kietnovel/internal/llmcontract"
 	"github.com/voocel/agentcore"
@@ -402,6 +404,31 @@ func createModelFromConfig(providerKey, model string, pc ProviderConfig, cache m
 		return m, nil
 	}
 
+	// chatgpt-web dùng provider riêng nói thẳng với bridge (body native có
+	// client_metadata + turn_id) vì litellm không forward được field này.
+	if strings.EqualFold(strings.TrimSpace(providerKey), "chatgpt-web") {
+		streamIdle, err := pc.StreamIdleTimeoutValue()
+		if err != nil {
+			return nil, fmt.Errorf("provider %s stream_idle_timeout: %w: %w", providerKey, errs.ErrConfig, err)
+		}
+		if streamIdle <= 0 {
+			streamIdle = 60 * time.Minute
+		}
+		baseURL := strings.TrimSpace(pc.BaseURL)
+		if baseURL == "" {
+			baseURL = "http://127.0.0.1:17841/v1"
+		}
+		modelName := strings.TrimSpace(model)
+		if i := strings.LastIndex(modelName, "/"); i >= 0 {
+			modelName = modelName[i+1:]
+		}
+		if !strings.HasPrefix(strings.ToLower(modelName), "chatgpt-web/") {
+			modelName = "chatgpt-web/" + modelName
+		}
+		m := bridge.New(baseURL, modelName, streamIdle)
+		cache[cacheKey] = m
+		return m, nil
+	}
 	providerType, err := pc.ProviderType(providerKey)
 	if err != nil {
 		return nil, fmt.Errorf("giải loại provider thất bại: %w", err)
