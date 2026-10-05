@@ -1,0 +1,14 @@
+services:
+  ainovel:
+    image: ghcr.io/ctkiet2006/kietnovel:latest
+    build:
+      context: .
+    volumes:
+      - ./config:/root/.ainovel
+      - ./workspace:/workspace
+      # Mỗi thư mục con trong ./novels là một bộ truyện độc lập.
+      # Đặt NOVEL_DIR trỏ tới bộ muốn viết, ví dụ:
+      #   NOVEL_DIR=./novels/tien-hiep-ky (xem README mục 6).
+      - ./novels:/workspace/novels
+    stdin_open: true
+    tty: true
