@@ -208,3 +208,54 @@ func TestDoRequestPrefersFinalAnswer(t *testing.T) {
 		t.Fatalf("phải lấy final_answer, được %q", got)
 	}
 }
+
+func mkMsgs(n int, size int) []agentcore.Message {
+	msgs := []agentcore.Message{
+		{Role: agentcore.RoleSystem, Content: []agentcore.ContentBlock{agentcore.TextBlock("system prompt")}},
+	}
+	for i := 0; i < n; i++ {
+		msgs = append(msgs, agentcore.Message{
+			Role:    agentcore.RoleUser,
+			Content: []agentcore.ContentBlock{agentcore.TextBlock(strings.Repeat("x", size))},
+		})
+	}
+	return msgs
+}
+
+// trimMessages phải giữ system + cắt cũ nhất, và buildPrompt không bao giờ
+// vượt perTurnBudget dù lịch sử dài cỡ nào.
+func TestTrimMessagesWithinBudget(t *testing.T) {
+	msgs := mkMsgs(30, 3000) // ~90k chars ≈ 30k tokens ước cao
+	trimmed := trimMessages(msgs, 22000)
+	if trimmed[0].Role != agentcore.RoleSystem {
+		t.Fatalf("phải giữ system prompt đầu")
+	}
+	if len(trimmed) >= len(msgs) {
+		t.Fatalf("phải cắt bớt, được %d/%d", len(trimmed), len(msgs))
+	}
+	prompt := buildPrompt(msgs, toolSpecsForTest(), nil)
+	if estimateTokens(prompt) > perTurnBudget {
+		t.Fatalf("prompt vượt budget: %d > %d", estimateTokens(prompt), perTurnBudget)
+	}
+}
+
+// compactSchema phải giữ câu ràng buộc loại trừ để model không gộp sai
+// (novel_context cấm gộp chapter với volume/arc).
+func TestCompactSchemaKeepsExclusiveNote(t *testing.T) {
+	params := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"chapter": map[string]any{"type": "integer", "description": "Số chương."},
+			"volume":  map[string]any{"type": "integer", "description": "Số quyển; phải truyền kèm arc và không dùng cùng lúc với chapter"},
+			"mode":    map[string]any{"type": "string", "description": "Chế độ", "enum": []string{"write", "append"}},
+		},
+		"required": []string{"chapter"},
+	}
+	got := compactSchema(params)
+	if !strings.Contains(got, "không dùng cùng lúc với chapter") {
+		t.Fatalf("mất ràng buộc loại trừ: %q", got)
+	}
+	if !strings.Contains(got, "write|append") {
+		t.Fatalf("mất enum: %q", got)
+	}
+}

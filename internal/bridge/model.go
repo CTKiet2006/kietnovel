@@ -271,8 +271,10 @@ func toolCatalog(tools []agentcore.ToolSpec) string {
 	return sb.String()
 }
 
-// compactSchema trích required + type từng property từ JSON schema,
-// bỏ description dài. Không parse được thì trả {} để model tự đoán.
+// compactSchema trích required + type + enum từng property từ JSON schema,
+// bỏ description dài nhưng giữ câu ràng buộc loại trừ (chứa "không"/"cấm"/
+// "mutually exclusive"/"不能") để model không gọi sai kiểu novel_context
+// gộp chapter với volume/arc. Không parse được thì trả {} để model tự đoán.
 func compactSchema(params any) string {
 	raw, err := json.Marshal(params)
 	if err != nil {
@@ -280,7 +282,9 @@ func compactSchema(params any) string {
 	}
 	var sch struct {
 		Properties map[string]struct {
-			Type string `json:"type"`
+			Type        string   `json:"type"`
+			Description string   `json:"description"`
+			Enum        []string `json:"enum"`
 		} `json:"properties"`
 		Required []string `json:"required"`
 	}
@@ -294,6 +298,7 @@ func compactSchema(params any) string {
 		req[r] = true
 	}
 	i := 0
+	var notes []string
 	for name, p := range sch.Properties {
 		if i > 0 {
 			sb.WriteString(",")
@@ -303,13 +308,60 @@ func compactSchema(params any) string {
 			typ = "string"
 		}
 		fmt.Fprintf(&sb, "%s:%s", name, typ)
+		if len(p.Enum) > 0 && len(p.Enum) <= 12 {
+			fmt.Fprintf(&sb, "=%s", strings.Join(p.Enum, "|"))
+		}
 		if req[name] {
 			sb.WriteString("*")
 		}
 		i++
+		if note := exclusiveNote(p.Description); note != "" {
+			notes = append(notes, name+": "+note)
+		}
 	}
 	sb.WriteString("} (*=bắt buộc)")
+	for _, n := range notes {
+		sb.WriteString("\n  ! " + n)
+	}
 	return sb.String()
+}
+
+// exclusiveNote trích câu ràng buộc loại trừ trong description (câu chứa
+// từ cấm/gộp/loại trừ). Cắt gọn dưới 120 ký tự.
+func exclusiveNote(desc string) string {
+	d := strings.TrimSpace(desc)
+	if d == "" {
+		return ""
+	}
+	lower := strings.ToLower(d)
+	markers := []string{"không dùng cùng", "không truyền cùng", "không dùng chung", "không kết hợp", "cấm", "mutually exclusive", "不能", "不得", "不得与", "不可与", "必须与", "phải truyền kèm", "must be passed with"}
+	hit := ""
+	for _, mk := range markers {
+		if strings.Contains(lower, strings.ToLower(mk)) {
+			hit = mk
+			break
+		}
+	}
+	if hit == "" {
+		return ""
+	}
+	// Lấy câu chứa marker (tách theo . ; ! ? 。).
+	sents := strings.FieldsFunc(d, func(r rune) bool {
+		return r == '.' || r == ';' || r == '!' || r == '?' || r == '。' || r == '\n'
+	})
+	for _, s := range sents {
+		s = strings.TrimSpace(s)
+		if s != "" && strings.Contains(strings.ToLower(s), strings.ToLower(hit)) {
+			if len(s) > 120 {
+				s = s[:120] + "..."
+			}
+			return s
+		}
+	}
+	if len(d) > 120 {
+		d = d[:120] + "..."
+	}
+	return d
 }
 
 const toolcallSystemHint = `Bạn đang viết truyện qua cầu text-only, KHÔNG có function-calling native.
@@ -319,19 +371,78 @@ Tên tool và arguments phải khớp catalog dưới đây. Khi không cần to
 Catalog công cụ:
 `
 
+// perTurnBudget là trần tokens cho MỘT lượt gửi qua browser (Luna Free đo
+// ~28k). Window context dài (200k) vẫn giữ để nén dần theo truyện, nhưng
+// payload mỗi lượt không bao giờ vượt trần này — server giữ lịch sử qua
+// rolling checkpoint nên cắt payload không mất truyện.
+const perTurnBudget = 22000
+
+// estimateTokens ước thô tokens từ bytes (~3 bytes/token, ước cao cho
+// tiếng Việt dấu để không bao giờ vượt budget thật của bridge).
+func estimateTokens(s string) int {
+	return len(s)/3 + 1
+}
+
+// trimMessages cắt lịch sử cũ khi vượt budget: luôn giữ system prompt,
+// rồi lấy từ tin nhắn mới nhất ngược lên cho tới khi vừa budget.
+// Server giữ lịch sử qua checkpoint nên cắt payload không mất truyện.
+func trimMessages(messages []agentcore.Message, budget int) []agentcore.Message {
+	if budget <= 0 {
+		return messages
+	}
+	var system, rest []agentcore.Message
+	for _, msg := range messages {
+		if msg.Role == agentcore.RoleSystem {
+			system = append(system, msg)
+		} else {
+			rest = append(rest, msg)
+		}
+	}
+	sysCost := 0
+	for _, msg := range system {
+		sysCost += estimateTokens(msg.TextContent() + msg.ThinkingContent())
+	}
+	kept := rest
+	for {
+		cost := sysCost
+		for _, msg := range kept {
+			cost += estimateTokens(msg.TextContent() + msg.ThinkingContent())
+			for _, tc := range msg.ToolCalls() {
+				cost += estimateTokens(string(tc.Args))
+			}
+		}
+		if cost <= budget || len(kept) <= 1 {
+			break
+		}
+		kept = kept[1:]
+	}
+	return append(system, kept...)
+}
+
 // buildPrompt gộp messages + catalog tool (nếu có) thành prompt gửi bridge.
+// Lịch sử chat cắt theo perTurnBudget, catalog tool luôn giữ đủ.
 func buildPrompt(messages []agentcore.Message, tools []agentcore.ToolSpec, opts []agentcore.CallOption) string {
-	base := flattenMessages(messages)
-	var sb strings.Builder
-	sb.WriteString(base)
+	var tail string
 	if len(tools) > 0 {
-		sb.WriteString("\n\n" + toolcallSystemHint + toolCatalog(tools))
+		tail = "\n\n" + toolcallSystemHint + toolCatalog(tools)
 	} else {
 		cfg := agentcore.ResolveCallConfig(opts)
 		if cfg.ResponseFormat != nil {
-			sb.WriteString("\n\nCHỈ trả về JSON object thuần, không markdown fence, không giải thích.")
+			tail = "\n\nCHỈ trả về JSON object thuần, không markdown fence, không giải thích."
 		}
 	}
+	// Trừ hao tail khỏi budget rồi mới cắt lịch sử, để catalog tool không
+	// bao giờ bị cắt mất.
+	budget := perTurnBudget - estimateTokens(tail) - 500
+	trimmed := trimMessages(messages, budget)
+	base := flattenMessages(trimmed)
+	dropped := len(messages) - len(trimmed)
+	var sb strings.Builder
+	sb.WriteString(base)
+	if dropped > 0 {
+		fmt.Fprintf(&sb, "\n\n[Lịch sử cũ (%d tin nhắn) đã lược để vừa giới hạn 1 lượt gửi; xem tóm tắt/store để biết diễn biến trước đó.]\n", dropped)
+	}
+	sb.WriteString(tail)
 	return strings.TrimSpace(sb.String())
 }
 

@@ -23,10 +23,11 @@ const (
 	BridgeURL = "http://127.0.0.1:17841/v1"
 	// DefaultModel is the model identifier for free-tier ChatGPT Web.
 	DefaultModel = "chatgpt-web/gpt-5.6-luna"
-	// DefaultContextWindow là budget browser transport thực của Luna Free
-	// (~28k tokens/lượt, đo bởi bridge). 1.05M chỉ là context nội bộ của
-	// ChatGPT Web, không phải budget gửi qua browser mỗi lượt.
-	DefaultContextWindow = 24_000
+	// DefaultContextWindow là window context dài để nén dần theo truyện
+	// (tóm tắt/store). Mỗi lượt gửi qua browser vẫn bị cắt ở perTurnBudget
+	// trong internal/bridge (~22k, dưới budget 28k của Luna Free) nên
+	// truyện dài không bao giờ vượt giới hạn 1 lượt của bridge.
+	DefaultContextWindow = 200_000
 )
 
 // bridgeDir returns ~/.kietnovel/bridge/.

@@ -164,7 +164,7 @@ func RunSetup() (Config, error) {
 					pc.APIKey = "local"
 					pc.BaseURL = sp.baseURL
 					modelName = "chatgpt-web/gpt-5.6-luna"
-					pc.Models = []ModelConfig{{Name: modelName, ContextWindow: 24000}}
+					pc.Models = []ModelConfig{{Name: modelName, ContextWindow: 200000}}
 					printStepDone("API Key", "Không cần (ChatGPT Web)")
 					printStepDone("Base URL", sp.baseURL)
 					printStepDone("Model", modelName)
