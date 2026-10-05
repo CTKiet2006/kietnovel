@@ -6,20 +6,6 @@
 
 Công cụ sáng tác tiểu thuyết AI bán tự động: Engine xác định chạy trọn một bộ truyện, model chỉ được gọi đúng chỗ cần phán đoán — Engine điều phối 3 agent tự chủ Architect / Writer / Editor theo bảng quyết định, Arbiter ngữ nghĩa chỉ thức dậy khi cần. Từ một câu ý tưởng tới tiểu thuyết hoàn chỉnh.
 
-```text
-┌─ Tổng quan ──────────────────┐┌─ Dòng sự kiện thời gian thực (Activity Stream) ───────────────┐
-│ Trạng thái   Đang sáng tác   ││ 15:02:10 ⚙ WRITER (Đang viết Chương 1)                         │
-│ Giai đoạn    Viết chính văn  ││   ├ novel_context (chương 1)                                   │
-│ Đã xong      0 chương        ││   ├ draft_chapter (chương 1, 3.200 từ)                         │
-│ Đã dàn ý     9 chương        ││   ├ check_consistency (đối chiếu phục bút & thế giới quan)     │
-│ Dung lượng   0 từ            ││   └ commit_chapter (hoàn tất chương 1)                         │
-│ Vai trò      WRITER (Chạy)   ││ 15:04:15 ✓ EDITOR: Đã thẩm định đạt 88/100 (Accept)            │
-│ Ngữ cảnh     [████░░░] 24%   ││ 15:04:18 ⚙ ARCHITECT: Mở rộng Arc tiếp theo (expand_next_arc)   │
-└──────────────────────────────┘└───────────────────────────────────────────────────────────────┘
-│ ❯ Cho nhân vật chính gặp tai nạn bất ngờ ở ngã tư để kích hoạt phục bút về quá khứ...         │
-└───────────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
 ## Điểm Nổi Bật Của Bản Việt Hóa & Đa Ngôn Ngữ (v1.6.3)
 
 - 🌐 **Giao diện TUI đa ngôn ngữ (vi / en / zh)**: Từ Setup Wizard cài đặt ban đầu, màn hình chào mừng, thanh trạng thái, Activity stream trực tiếp, bảng quản lý Provider/Model (`/config`, `/model`) đến thông báo lỗi và phím tắt — tất cả dịch theo ngôn ngữ đang chọn, chuẩn mực và tự nhiên. Đổi giữa chừng bằng lệnh `/language`.
@@ -256,55 +242,15 @@ Gõ `/` trong TUI để mở bảng chọn lệnh:
 | `/delete [tên]` | Xoá truyện — hai bước, bước hai phải gõ `y`, không khôi phục được |
 | `/language [vi\|en\|zh]` | Xem hoặc đổi ngôn ngữ giao diện; lựa chọn được lưu vào cấu hình |
 
-### Trực Quan Hóa Các Tính Năng UI
+### Can thiệp thời gian thực (Steer)
 
-#### 1. Màn hình Đồng sáng tác (/cocreate)
-Giúp bạn và AI cùng lên khung thế giới quan, nhân vật và hướng đi trước khi viết hoặc giữa các chặng:
-
-```text
-┌─ Đồng sáng tác ý tưởng (Co-Create) ────────────────────────────────────────────┐
-│ AI: Chào bạn! Bạn muốn viết về đề tài gì? Đô thị huyền bí, tu chân, hay trinh │
-│     thám hồi hộp? Nhân vật chính là người như thế nào?                         │
-│                                                                                │
-│ Bạn: Trinh thám tâm lý, nhân vật nữ làm ca đêm ở bến xe vắng, nghe thấy tiếng │
-│      chuông điện thoại lạ từ phòng trực tầng ba.                               │
-│                                                                                │
-│ AI: Hướng đi rất hấp dẫn! Đang cập nhật bản thảo chỉ đạo sáng tác:             │
-│     ## Chủ đề: Kinh dị tâm lý / Án mạng bí ẩn tại trạm xe đêm                 │
-│     ## Nhân vật: Ngọc (nữ trực tổng đài, ít nói, tuân thủ nghiêm ngặt quy tắc) │
-│                                                                                │
-│  gợi ý: [1] Cài cắm thêm một bí mật gia đình  [2] Tập trung vào yếu tố giật gân│
-│ [Ctrl+S]: Bắt đầu sáng tác  |  [Ctrl+C]: Lưu bản nháp  |  [Esc]: Quay lại      │
-└────────────────────────────────────────────────────────────────────────────────┘
-```
-
-#### 2. Can thiệp thời gian thực (Steer)
-Trong lúc AI đang viết, bạn có thể nhập trực tiếp ý kiến sửa đổi vào ô nhập liệu bên dưới bất cứ lúc nào mà không cần tạm dừng hay khởi động lại:
+Trong lúc AI đang viết, bạn có thể nhập trực tiếp ý kiến sửa đổi vào ô nhập lệnh bên dưới bất cứ lúc nào mà không cần tạm dừng hay khởi động lại:
 
 ```text
-┌────────────────────────────────────────────────────────────────────────────────┐
-│ 15:02:10 ⚙ WRITER (Đang viết Chương 1)                                         │
-│   ├ novel_context (chương 1)                                                   │
-│   ├ draft_chapter (chương 1, 3.200 từ)                                         │
-├────────────────────────────────────────────────────────────────────────────────┤
-│ ❯ Cho nhân vật phụ A hy sinh ở cuối chương này để tạo bước ngoặt cảm xúc lớn   │
-└────────────────────────────────────────────────────────────────────────────────┘
+❯ Cho nhân vật phụ A hy sinh ở cuối chương này để tạo bước ngoặt cảm xúc lớn
 ```
+
 Sau khi nhấn `Enter`, Arbiter sẽ tự động đánh giá phạm vi ảnh hưởng và điều phối Writer/Editor cập nhật mạch truyện ngay lập tức.
-
-#### 3. Đọc truyện trực tiếp trong TUI (/read)
-Gõ `/read` để đọc chương hiện tại hoặc `/read 5` để đọc lại chương 5 với định dạng sạch sẽ, phân trang mượt mà ngay trong cửa sổ dòng lệnh:
-
-```text
-┌─ Đang đọc: Chương 1 - Hai giờ bốn mươi bảy (3.420 từ) ─────────────────────────┐
-│ Hai giờ bốn mươi bảy phút, máy trong phòng trực reo lên.                       │
-│                                                                                │
-│ Tiếng chuông của đường dây nội bộ không giống tiếng chuông ngoài sảnh. Nó ngắn,│
-│ hai tiếng, lặp lại ba lần, rồi ngừng. Ngọc biết mẩu đó thuộc dãy tầng ba...    │
-├────────────────────────────────────────────────────────────────────────────────┤
-│ [↑/↓ hoặc j/k]: Cuộn trang  |  [q hoặc Esc]: Quay lại màn hình chính           │
-└────────────────────────────────────────────────────────────────────────────────┘
-```
 
 ### Chế độ chạy ngầm (Headless)
 
