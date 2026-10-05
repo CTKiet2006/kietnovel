@@ -259,3 +259,27 @@ func TestCompactSchemaKeepsExclusiveNote(t *testing.T) {
 		t.Fatalf("mất enum: %q", got)
 	}
 }
+
+// Tool result novel_context một cái đã 40k+ chars — truncateToolResults
+// phải cắt ruột tin cũ, giữ tin mới nhất đầy đủ hơn.
+func TestTruncateToolResults(t *testing.T) {
+	big := strings.Repeat("n", 40000)
+	msgs := []agentcore.Message{
+		{Role: agentcore.RoleSystem, Content: []agentcore.ContentBlock{agentcore.TextBlock("sys")}},
+		{Role: agentcore.RoleTool, Content: []agentcore.ContentBlock{agentcore.TextBlock("old:" + big)}},
+		{Role: agentcore.RoleTool, Content: []agentcore.ContentBlock{agentcore.TextBlock("new:" + big)}},
+	}
+	out := truncateToolResults(msgs, 22000)
+	// Tin cũ phải bị cắt sâu, tin mới giữ nhiều hơn.
+	if l := len(out[1].TextContent()); l > minToolResultChars+200 {
+		t.Fatalf("tool cũ chưa cắt sâu: %d chars", l)
+	}
+	if l := len(out[2].TextContent()); l <= minToolResultChars+200 {
+		t.Fatalf("tool mới nhất bị cắt quá sâu: %d chars", l)
+	}
+	// buildPrompt với 3 novel_context 40k vẫn phải vừa budget.
+	prompt := buildPrompt(msgs, toolSpecsForTest(), nil)
+	if estimateTokens(prompt) > perTurnBudget {
+		t.Fatalf("prompt vượt budget: %d > %d", estimateTokens(prompt), perTurnBudget)
+	}
+}

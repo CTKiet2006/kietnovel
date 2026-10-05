@@ -419,8 +419,64 @@ func trimMessages(messages []agentcore.Message, budget int) []agentcore.Message 
 	return append(system, kept...)
 }
 
-// buildPrompt gộp messages + catalog tool (nếu có) thành prompt gửi bridge.
-// Lịch sử chat cắt theo perTurnBudget, catalog tool luôn giữ đủ.
+// maxToolResultChars là trần ký tự cho ruột tool result cũ khi flatten.
+// novel_context một cái đã 40k+ chars — giữ nguyên là vỡ budget dù đã cắt
+// tin nhắn. Tool result mới nhất giữ đầy đủ hơn, cũ hơn cắt sâu.
+const maxToolResultChars = 6000
+const minToolResultChars = 400
+
+// truncateToolResults cắt ruột các tool message cũ từ cũ tới mới cho tới
+// khi vừa budget. Tin mới nhất được giữ nhiều nhất. Dữ liệu gốc vẫn nằm
+// trong store, model đọc lại được qua tool nên cắt không mất truyện.
+func truncateToolResults(messages []agentcore.Message, budget int) []agentcore.Message {
+	out := make([]agentcore.Message, len(messages))
+	copy(out, messages)
+	cost := func() int {
+		c := 0
+		for _, msg := range out {
+			c += estimateTokens(msg.TextContent() + msg.ThinkingContent())
+			for _, tc := range msg.ToolCalls() {
+				c += estimateTokens(string(tc.Args))
+			}
+		}
+		return c
+	}
+	// Tìm index tool message mới nhất — giữ nó đầy đủ nhất.
+	lastTool := -1
+	for i, msg := range out {
+		if msg.Role == agentcore.RoleTool {
+			lastTool = i
+		}
+	}
+	// Cắt từ cũ tới mới, chừa tin mới nhất ra.
+	for i := range out {
+		if cost() <= budget {
+			break
+		}
+		if out[i].Role != agentcore.RoleTool || i == lastTool {
+			continue
+		}
+		out[i] = shrinkToolMsg(out[i], minToolResultChars)
+	}
+	// Vẫn vượt thì cắt cả tin mới nhất xuống trần.
+	if cost() > budget && lastTool >= 0 {
+		out[lastTool] = shrinkToolMsg(out[lastTool], maxToolResultChars)
+	}
+	return out
+}
+
+// shrinkToolMsg cắt text các block của tool message xuống còn cap ký tự.
+func shrinkToolMsg(msg agentcore.Message, cap int) agentcore.Message {
+	cp := msg
+	cp.Content = make([]agentcore.ContentBlock, len(msg.Content))
+	copy(cp.Content, msg.Content)
+	for j, b := range cp.Content {
+		if len(b.Text) > cap {
+			cp.Content[j].Text = b.Text[:cap] + "\n[...lược bớt, đọc lại qua tool nếu cần...]"
+		}
+	}
+	return cp
+}
 func buildPrompt(messages []agentcore.Message, tools []agentcore.ToolSpec, opts []agentcore.CallOption) string {
 	var tail string
 	if len(tools) > 0 {
@@ -432,9 +488,11 @@ func buildPrompt(messages []agentcore.Message, tools []agentcore.ToolSpec, opts 
 		}
 	}
 	// Trừ hao tail khỏi budget rồi mới cắt lịch sử, để catalog tool không
-	// bao giờ bị cắt mất.
+	// bao giờ bị cắt mất. Sau cắt tin nhắn, cắt tiếp ruột tool result cũ
+	// (novel_context một cái đã 40k+ chars — không cắt ruột thì vẫn vỡ).
 	budget := perTurnBudget - estimateTokens(tail) - 500
 	trimmed := trimMessages(messages, budget)
+	trimmed = truncateToolResults(trimmed, budget)
 	base := flattenMessages(trimmed)
 	dropped := len(messages) - len(trimmed)
 	var sb strings.Builder
