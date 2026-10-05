@@ -24,22 +24,64 @@ func NewSaveFoundationTool(store *store.Store) *SaveFoundationTool {
 
 func (t *SaveFoundationTool) Name() string { return "save_foundation" }
 func (t *SaveFoundationTool) Description() string {
-	return "保存小说基础设定（premise/outline/characters/world_rules/compass 等）。**这是这些设定的持久化入口**：未经工具调用保存的内容不会进入 store，只在消息里输出 Markdown/JSON 等于丢失。type 可选 premise / outline / layered_outline / characters / world_rules / append_volume / update_compass / complete_book。premise 时 content 必须是 Markdown 字符串；其他类型 content 优先直接传 JSON 数组或对象。append_volume 追加新卷（content 为不带卷弧 index 的 VolumeOutline JSON，序号由系统生成；顶层带 \"final\": true 即宣告收官卷——全书在该卷收束，所有章节写完后自动完结，无需再调 complete_book）；update_compass 更新终局方向（content 为 StoryCompass JSON）；complete_book 宣告全书完结（content 传空对象 {}，直接推 Phase=Complete；工具会校验：大纲内章节已全部写完、无返工队列、compass 无未收束 open_threads——确认长线已收束须先 update_compass 清空 open_threads 落盘，想提前收束用 append_volume 的 final 收官卷）。append_volume / complete_book 必须带 reason 参数（一句话判定理由，对照完结判定清单，记入裁定审计）。scale 可选，仅允许 short / mid / long。"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Lưu các thiết lập cơ bản của tiểu thuyết (premise/outline/characters/world_rules/compass...). ĐÂY LÀ CỔNG LƯU TRỮ DUY NHẤT: nội dung chỉ nói trong tin nhắn mà không gọi tool sẽ bị mất. " +
+			"type gồm: premise, outline, layered_outline, characters, world_rules, append_volume, update_compass, complete_book. " +
+			"Với premise: content phải là chuỗi Markdown; các loại khác content truyền trực tiếp mảng hoặc đối tượng JSON. " +
+			"append_volume: thêm quyển mới; update_compass: cập nhật hướng đi kết truyện; complete_book: tuyên bố hoàn thành toàn bộ tác phẩm. " +
+			"append_volume / complete_book bắt buộc truyền tham số reason."
+	case "en":
+		return "Save novel foundation settings (premise/outline/characters/world_rules/compass, etc.). THIS IS THE PERSISTENCE GATEWAY: contents output in chat without calling this tool will be lost. " +
+			"type choices: premise, outline, layered_outline, characters, world_rules, append_volume, update_compass, complete_book. " +
+			"For premise: content must be a Markdown string; other types pass JSON arrays or objects directly. " +
+			"append_volume: appends a new volume; update_compass: updates finale trajectory; complete_book: declares book completion. " +
+			"append_volume / complete_book require the reason parameter."
+	default:
+		return "保存小说基础设定（premise/outline/characters/world_rules/compass 等）。**这是这些设定的持久化入口**：未经工具调用保存的内容不会进入 store，只在消息里输出 Markdown/JSON 等于丢失。type 可选 premise / outline / layered_outline / characters / world_rules / append_volume / update_compass / complete_book。premise 时 content 必须是 Markdown 字符串；其他类型 content 优先直接传 JSON 数组或对象。append_volume 追加新卷（content 为不带卷弧 index 的 VolumeOutline JSON，序号由系统生成；顶层带 \"final\": true 即宣告收官卷——全书在该卷收束，所有章节写完后自动完结，无需再调 complete_book）；update_compass 更新终局方向（content 为 StoryCompass JSON）；complete_book 宣告全书完结（content 传空对象 {}，直接推 Phase=Complete；工具会校验：大纲内章节已全部写完、无返工队列、compass 无未收束 open_threads——确认长线已收束须先 update_compass 清空 open_threads 落盘，想提前收束用 append_volume 的 final 收官卷）。append_volume / complete_book 必须带 reason 参数（一句话判定理由，对照完结判定清单，记入裁定审计）。scale 可选，仅允许 short / mid / long。"
+	}
 }
-func (t *SaveFoundationTool) Label() string { return "保存设定" }
+func (t *SaveFoundationTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Lưu thiết lập"
+	case "en":
+		return "Save foundation"
+	default:
+		return "保存设定"
+	}
+}
 
 // A writing tool (it updates Outline/Progress/Characters across domains); concurrency is forbidden.
 func (t *SaveFoundationTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *SaveFoundationTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
 func (t *SaveFoundationTool) Schema() map[string]any {
+	typeDesc := "设定类型"
+	contentDesc := "内容。premise 传 Markdown 字符串；其他类型直接传 JSON 数组或对象即可，也兼容传 JSON 字符串。"
+	scaleDesc := "规划级别"
+	reasonDesc := "卷末判定理由（append_volume / complete_book 时必填）：对照完结判定清单，一句话说明为何续卷、宣告收官或完结"
+
+	switch toolLang(t.store) {
+	case "vi":
+		typeDesc = "Loại thiết lập (premise, outline, layered_outline, characters, world_rules, append_volume, update_compass, complete_book)"
+		contentDesc = "Nội dung. premise truyền chuỗi Markdown; các loại khác truyền mảng hoặc đối tượng JSON"
+		scaleDesc = "Cấp độ quy hoạch (short, mid, long)"
+		reasonDesc = "Lý do phán định (bắt buộc khi append_volume / complete_book)"
+	case "en":
+		typeDesc = "Setting type (premise, outline, layered_outline, characters, world_rules, append_volume, update_compass, complete_book)"
+		contentDesc = "Content payload. premise takes Markdown string; other types take JSON array or object directly"
+		scaleDesc = "Planning scale (short, mid, long)"
+		reasonDesc = "Adjudication reason (required for append_volume / complete_book)"
+	}
+
 	return schema.Object(
-		schema.Property("type", schema.Enum("设定类型", "premise", "outline", "layered_outline", "characters", "world_rules", "append_volume", "update_compass", "complete_book")).Required(),
+		schema.Property("type", schema.Enum(typeDesc, "premise", "outline", "layered_outline", "characters", "world_rules", "append_volume", "update_compass", "complete_book")).Required(),
 		schema.Property("content", map[string]any{
-			"description": "内容。premise 传 Markdown 字符串；其他类型直接传 JSON 数组或对象即可，也兼容传 JSON 字符串。",
+			"description": contentDesc,
 		}).Required(),
-		schema.Property("scale", schema.Enum("规划级别", "short", "mid", "long")),
-		schema.Property("reason", schema.String("卷末判定理由（append_volume / complete_book 时必填）：对照完结判定清单，一句话说明为何续卷、宣告收官或完结")),
+		schema.Property("scale", schema.Enum(scaleDesc, "short", "mid", "long")),
+		schema.Property("reason", schema.String(reasonDesc)),
 	)
 }
 

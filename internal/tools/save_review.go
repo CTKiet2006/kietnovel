@@ -27,11 +27,31 @@ func NewSaveReviewTool(store *store.Store) *SaveReviewTool {
 
 func (t *SaveReviewTool) Name() string { return "save_review" }
 func (t *SaveReviewTool) Description() string {
-	return "保存审阅结果并更新流程状态。verdict 为 accept/polish/rewrite 之一。" +
-		"Editor 依据完整上下文作出 verdict，工具只校验事实并原子更新 Progress。" +
-		"返回结构化事实：verdict / affected_chapters / next_flow / next_chapter"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Lưu kết quả thẩm định và cập nhật trạng thái quy trình. verdict gồm accept/polish/rewrite. " +
+			"Editor đưa ra verdict dựa trên toàn bộ ngữ cảnh, công cụ chỉ kiểm tra sự kiện và cập nhật nguyên tử vào Progress. " +
+			"Trả về các sự kiện có cấu trúc: verdict / affected_chapters / next_flow / next_chapter"
+	case "en":
+		return "Save review results and update flow state. verdict is one of accept/polish/rewrite. " +
+			"Editor decides verdict based on full context; tool validates facts and atomically updates Progress. " +
+			"Returns structured facts: verdict / affected_chapters / next_flow / next_chapter"
+	default:
+		return "保存审阅结果并更新流程状态。verdict 为 accept/polish/rewrite 之一。" +
+			"Editor 依据完整上下文作出 verdict，工具只校验事实并原子更新 Progress。" +
+			"返回结构化事实：verdict / affected_chapters / next_flow / next_chapter"
+	}
 }
-func (t *SaveReviewTool) Label() string { return "保存审阅" }
+func (t *SaveReviewTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Lưu thẩm định"
+	case "en":
+		return "Save review"
+	default:
+		return "保存审阅"
+	}
+}
 
 // A writing tool (it updates both reviews/ and Progress's PendingRewrites/Flow); concurrency is forbidden.
 func (t *SaveReviewTool) ReadOnly(_ json.RawMessage) bool        { return false }
@@ -39,30 +59,95 @@ func (t *SaveReviewTool) ConcurrencySafe(_ json.RawMessage) bool { return false 
 func (t *SaveReviewTool) StrictSchema() bool                     { return true }
 
 func (t *SaveReviewTool) Schema() map[string]any {
+	typeDesc := "问题维度；可使用评审提示中的基础维度，也可写更准确的具体维度"
+	sevDesc := "严重程度"
+	descDesc := "问题描述"
+	evDesc := "证据：原文片段、具体情节或状态数据"
+	sugDesc := "修改建议；无需建议时为 null"
+	chapDesc := "该问题证据实际所在的章节；弧评审必须落在任务给定区间"
+	reqDesc := "该问题是否应立即触发所列章节返工，由 Editor 结合整体阅读体验判断"
+
+	dimDesc := "评价维度；由当前评审任务和 rubric 决定"
+	scoreDesc := "评分（0-100）"
+	comDesc := "该维度的简要结论和证据；每个维度必填"
+
+	revChapDesc := "审阅的章节号（全局审阅填最新章节号）"
+	scopeDesc := "审阅范围"
+	dimsDesc := "分维度评分；基础 rubric 由 Editor 提示提供，可按任务补充更具体维度"
+	issuesDesc := "发现的问题"
+	cStatDesc := "章节契约完成度；不适用时为 null"
+	cMissDesc := "未完成或违背的 contract 条目；无则为空数组"
+	cNoteDesc := "对 contract 履行情况的简要说明；无则为 null"
+	verdDesc := "审阅结论"
+	sumDesc := "审阅总结"
+
+	switch toolLang(t.store) {
+	case "vi":
+		typeDesc = "Chiều kích vấn đề"
+		sevDesc = "Mức độ nghiêm trọng (critical, error, warning)"
+		descDesc = "Mô tả vấn đề"
+		evDesc = "Bằng chứng: trích đoạn nguyên văn, tình tiết cụ thể hoặc dữ liệu trạng thái"
+		sugDesc = "Đề xuất sửa đổi; null nếu không cần"
+		chapDesc = "Các chương thực tế phát hiện vấn đề này"
+		reqDesc = "Vấn đề này có kích hoạt viết lại ngay lập tức hay không"
+		dimDesc = "Chiều kích đánh giá"
+		scoreDesc = "Điểm số (0-100)"
+		comDesc = "Kết luận vắn tắt và bằng chứng cho chiều kích này"
+		revChapDesc = "Số chương được thẩm định"
+		scopeDesc = "Phạm vi thẩm định (chapter, global, arc)"
+		dimsDesc = "Điểm số theo từng chiều kích"
+		issuesDesc = "Danh sách vấn đề phát hiện được"
+		cStatDesc = "Mức độ hoàn thành cam kết chương (contract); null nếu không áp dụng"
+		cMissDesc = "Các điều khoản cam kết chưa đạt hoặc vi phạm; mảng rỗng nếu không có"
+		cNoteDesc = "Ghi chú giải thích tình hình thực hiện cam kết; null nếu không có"
+		verdDesc = "Kết luận thẩm định (accept, polish, rewrite)"
+		sumDesc = "Tổng kết thẩm định"
+	case "en":
+		typeDesc = "Issue dimension"
+		sevDesc = "Severity (critical, error, warning)"
+		descDesc = "Issue description"
+		evDesc = "Evidence: prose snippet, specific plot beat, or state data"
+		sugDesc = "Revision suggestion; null if not needed"
+		chapDesc = "Chapters where this issue is located"
+		reqDesc = "Whether this issue should immediately trigger a rewrite"
+		dimDesc = "Evaluation dimension"
+		scoreDesc = "Score (0-100)"
+		comDesc = "Summary and evidence for this dimension"
+		revChapDesc = "Reviewed chapter number"
+		scopeDesc = "Review scope (chapter, global, arc)"
+		dimsDesc = "Dimensional scores"
+		issuesDesc = "Identified issues"
+		cStatDesc = "Chapter contract fulfillment status; null if inapplicable"
+		cMissDesc = "Unfulfilled or breached contract clauses; empty array if none"
+		cNoteDesc = "Contract fulfillment notes; null if none"
+		verdDesc = "Review verdict (accept, polish, rewrite)"
+		sumDesc = "Review summary"
+	}
+
 	issueSchema := schema.Object(
-		schema.Property("type", schema.String("问题维度；可使用评审提示中的基础维度，也可写更准确的具体维度")).Required(),
-		schema.Property("severity", schema.Enum("严重程度", "critical", "error", "warning")).Required(),
-		schema.Property("description", schema.String("问题描述")).Required(),
-		schema.Property("evidence", schema.String("证据：原文片段、具体情节或状态数据")).Required(),
-		schema.Property("suggestion", llmcontract.Nullable(schema.String("修改建议；无需建议时为 null"))).Required(),
-		schema.Property("chapters", schema.Array("该问题证据实际所在的章节；弧评审必须落在任务给定区间", schema.Int("章节号"))).Required(),
-		schema.Property("requires_change", schema.Bool("该问题是否应立即触发所列章节返工，由 Editor 结合整体阅读体验判断")).Required(),
+		schema.Property("type", schema.String(typeDesc)).Required(),
+		schema.Property("severity", schema.Enum(sevDesc, "critical", "error", "warning")).Required(),
+		schema.Property("description", schema.String(descDesc)).Required(),
+		schema.Property("evidence", schema.String(evDesc)).Required(),
+		schema.Property("suggestion", llmcontract.Nullable(schema.String(sugDesc))).Required(),
+		schema.Property("chapters", schema.Array(chapDesc, schema.Int(""))).Required(),
+		schema.Property("requires_change", schema.Bool(reqDesc)).Required(),
 	)
 	dimensionSchema := schema.Object(
-		schema.Property("dimension", schema.String("评价维度；由当前评审任务和 rubric 决定")).Required(),
-		schema.Property("score", schema.Int("评分（0-100）")).Required(),
-		schema.Property("comment", schema.String("该维度的简要结论和证据；每个维度必填")).Required(),
+		schema.Property("dimension", schema.String(dimDesc)).Required(),
+		schema.Property("score", schema.Int(scoreDesc)).Required(),
+		schema.Property("comment", schema.String(comDesc)).Required(),
 	)
 	return schema.Object(
-		schema.Property("chapter", schema.Int("审阅的章节号（全局审阅填最新章节号）")).Required(),
-		schema.Property("scope", schema.Enum("审阅范围", "chapter", "global", "arc")).Required(),
-		schema.Property("dimensions", schema.Array("分维度评分；基础 rubric 由 Editor 提示提供，可按任务补充更具体维度", dimensionSchema)).Required(),
-		schema.Property("issues", schema.Array("发现的问题", issueSchema)).Required(),
-		schema.Property("contract_status", llmcontract.Nullable(schema.Enum("章节契约完成度；不适用时为 null", "met", "partial", "missed"))).Required(),
-		schema.Property("contract_misses", schema.Array("未完成或违背的 contract 条目；无则为空数组", schema.String(""))).Required(),
-		schema.Property("contract_notes", llmcontract.Nullable(schema.String("对 contract 履行情况的简要说明；无则为 null"))).Required(),
-		schema.Property("verdict", schema.Enum("审阅结论", "accept", "polish", "rewrite")).Required(),
-		schema.Property("summary", schema.String("审阅总结")).Required(),
+		schema.Property("chapter", schema.Int(revChapDesc)).Required(),
+		schema.Property("scope", schema.Enum(scopeDesc, "chapter", "global", "arc")).Required(),
+		schema.Property("dimensions", schema.Array(dimsDesc, dimensionSchema)).Required(),
+		schema.Property("issues", schema.Array(issuesDesc, issueSchema)).Required(),
+		schema.Property("contract_status", llmcontract.Nullable(schema.Enum(cStatDesc, "met", "partial", "missed"))).Required(),
+		schema.Property("contract_misses", schema.Array(cMissDesc, schema.String(""))).Required(),
+		schema.Property("contract_notes", llmcontract.Nullable(schema.String(cNoteDesc))).Required(),
+		schema.Property("verdict", schema.Enum(verdDesc, "accept", "polish", "rewrite")).Required(),
+		schema.Property("summary", schema.String(sumDesc)).Required(),
 	)
 }
 

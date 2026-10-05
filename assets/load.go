@@ -100,7 +100,7 @@ func LoadWithLanguage(language, style string, opts LoadOptions) Bundle {
 	return Bundle{
 		References: loadReferencesForLanguage(style, lang, opts),
 		Prompts:    loadPromptsForLanguage(lang),
-		Styles:     loadStyles(opts),
+		Styles:     loadStylesForLanguage(lang, opts),
 		Voice:      resolveAppendable(mustRead(voiceFS, voiceFile), "voice.md", opts),
 		Language:   lang,
 	}
@@ -260,11 +260,24 @@ func loadReferencesForLanguage(style, lang string, opts LoadOptions) tools.Refer
 	}
 	if style != "" && style != "default" {
 		genreDir := "references/genres/" + style + "/"
-		if data, err := referencesFS.ReadFile(genreDir + "style-references.md"); err == nil {
-			refs.StyleReference = string(data)
+		cleanLang := strings.ToLower(strings.TrimSpace(lang))
+		if cleanLang != "" && cleanLang != "zh" {
+			if data, err := referencesFS.ReadFile(genreDir + fmt.Sprintf("style-references_%s.md", cleanLang)); err == nil && len(data) > 0 {
+				refs.StyleReference = string(data)
+			}
+			if data, err := referencesFS.ReadFile(genreDir + fmt.Sprintf("arc-templates_%s.md", cleanLang)); err == nil && len(data) > 0 {
+				refs.ArcTemplates = string(data)
+			}
 		}
-		if data, err := referencesFS.ReadFile(genreDir + "arc-templates.md"); err == nil {
-			refs.ArcTemplates = string(data)
+		if refs.StyleReference == "" {
+			if data, err := referencesFS.ReadFile(genreDir + "style-references.md"); err == nil {
+				refs.StyleReference = string(data)
+			}
+		}
+		if refs.ArcTemplates == "" {
+			if data, err := referencesFS.ReadFile(genreDir + "arc-templates.md"); err == nil {
+				refs.ArcTemplates = string(data)
+			}
 		}
 		// Genre style references: whole-file replacement on the same name (this book > global); when a custom style
 		// has no builtin reference, only the override may supply it, with no fallback to default (a wrong reference is worse than none).
@@ -397,6 +410,10 @@ const simulationGuidance = `## 仿写画像
 // loadStyles enumerates the builtin style presets, then overlays styles/*.md from the override dir in
 // the order global → this book (whole-file replacement on the same name; a new file name is a new style; a style is a whole voice, not merged).
 func loadStyles(opts LoadOptions) map[string]string {
+	return loadStylesForLanguage("zh", opts)
+}
+
+func loadStylesForLanguage(lang string, opts LoadOptions) map[string]string {
 	styles := make(map[string]string)
 	entries, err := stylesFS.ReadDir("styles")
 	if err != nil {
@@ -407,11 +424,23 @@ func loadStyles(opts LoadOptions) map[string]string {
 			continue
 		}
 		name := strings.TrimSuffix(e.Name(), ".md")
+		if strings.HasSuffix(name, "_vi") || strings.HasSuffix(name, "_en") || strings.HasSuffix(name, "_zh") {
+			continue
+		}
 		data, err := stylesFS.ReadFile("styles/" + e.Name())
 		if err != nil {
 			continue
 		}
 		styles[name] = string(data)
+	}
+	cleanLang := strings.ToLower(strings.TrimSpace(lang))
+	if cleanLang != "" && cleanLang != "zh" {
+		for name := range styles {
+			langFile := fmt.Sprintf("styles/%s_%s.md", name, cleanLang)
+			if data, err := stylesFS.ReadFile(langFile); err == nil && len(data) > 0 {
+				styles[name] = string(data)
+			}
+		}
 	}
 	for _, dir := range []string{opts.HomeStyleDir, opts.BookStyleDir} {
 		overlayStyles(styles, dir)

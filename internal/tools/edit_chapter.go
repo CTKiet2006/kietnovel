@@ -34,8 +34,17 @@ func NewEditChapterTool(s *store.Store) *EditChapterTool {
 	}
 }
 
-func (t *EditChapterTool) Name() string  { return "edit_chapter" }
-func (t *EditChapterTool) Label() string { return "编辑章节" }
+func (t *EditChapterTool) Name() string { return "edit_chapter" }
+func (t *EditChapterTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Sửa đổi chương"
+	case "en":
+		return "Edit chapter"
+	default:
+		return "编辑章节"
+	}
+}
 
 // ReadOnly explicitly declares this a writing tool (together with ConcurrencySafeTool it keeps it from being scheduled concurrently).
 func (t *EditChapterTool) ReadOnly(_ json.RawMessage) bool { return false }
@@ -45,25 +54,65 @@ func (t *EditChapterTool) ReadOnly(_ json.RawMessage) bool { return false }
 func (t *EditChapterTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
 // ActivityDescription supplies the activity description of the current tool for the UI / log.
-func (t *EditChapterTool) ActivityDescription(_ json.RawMessage) string { return "编辑章节草稿" }
+func (t *EditChapterTool) ActivityDescription(_ json.RawMessage) string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Sửa đổi bản nháp chương"
+	case "en":
+		return "Edit chapter draft"
+	default:
+		return "编辑章节草稿"
+	}
+}
 
 func (t *EditChapterTool) Description() string {
-	return "仅对已完成且进入 PendingRewrites 队列的章节草稿做定点字符串替换（打磨场景首选，比 draft_chapter 整章重写省 token）。" +
-		"新章初稿禁止使用本工具；初稿有硬伤请调用 draft_chapter(mode=\"write\") 整章覆盖。" +
-		"找到 old_string 并替换为 new_string，要求精确匹配且唯一（多处匹配需 replace_all=true）。" +
-		"old_string 必须从最近一次 read_chapter(source=\"draft\") 的返回中逐字复制，禁止凭记忆重构原文；" +
-		"注意返回值是 JSON 字符串，\\n 须还原为真实换行。draft_chapter 改写过草稿后必须先重新 read_chapter 再编辑。" +
-		"匹配失败的报错会附上草稿中最接近的候选片段，请从候选逐字复制后重试。" +
-		"写入 drafts/{ch}.draft.md；drafts 不存在时自动从 chapters 播种。" +
-		"章节已完成且不在 PendingRewrites 队列中时拒绝执行。每次调用只改一处，多处修改请多次调用。"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Chỉ dùng để thay thế chuỗi định vị trên bản nháp của chương đã hoàn thành và đang nằm trong hàng đợi PendingRewrites (lựa chọn hàng đầu khi gọt giũa, tiết kiệm token hơn draft_chapter viết lại cả chương). " +
+			"Cấm dùng công cụ này khi viết bản thảo đầu tiên của chương mới. " +
+			"Tìm old_string và thay bằng new_string, yêu cầu khớp chính xác và duy nhất (nhiều nơi cần replace_all=true). " +
+			"old_string phải copy chính xác từng chữ từ kết quả read_chapter(source=\"draft\")."
+	case "en":
+		return "Perform targeted string replacement on completed chapter drafts currently in the PendingRewrites queue (preferred for polishing, saves tokens vs draft_chapter). " +
+			"Forbidden for initial chapter drafts. " +
+			"Locates old_string and replaces with new_string, requiring exact and unique match (multiple occurrences require replace_all=true). " +
+			"old_string must be copied verbatim from read_chapter(source=\"draft\")."
+	default:
+		return "仅对已完成且进入 PendingRewrites 队列的章节草稿做定点字符串替换（打磨场景首选，比 draft_chapter 整章重写省 token）。" +
+			"新章初稿禁止使用本工具；初稿有硬伤请调用 draft_chapter(mode=\"write\") 整章覆盖。" +
+			"找到 old_string 并替换为 new_string，要求精确匹配且唯一（多处匹配需 replace_all=true）。" +
+			"old_string 必须从最近一次 read_chapter(source=\"draft\") 的返回中逐字复制，禁止凭记忆重构原文；" +
+			"注意返回值是 JSON 字符串，\\n 须还原为真实换行。draft_chapter 改写过草稿后必须先重新 read_chapter 再编辑。" +
+			"匹配失败的报错会附上草稿中最接近的候选片段，请从候选逐字复制后重试。" +
+			"写入 drafts/{ch}.draft.md；drafts 不存在时自动从 chapters 播种。" +
+			"章节已完成且不在 PendingRewrites 队列中时拒绝执行。每次调用只改一处，多处修改请多次调用。"
+	}
 }
 
 func (t *EditChapterTool) Schema() map[string]any {
+	chapDesc := "章节号"
+	oldDesc := "要替换的原文精确片段，多行需包含换行；不加 replace_all 时必须在草稿中唯一出现"
+	newDesc := "替换后的新文本"
+	repAllDesc := "替换所有匹配（默认 false）"
+
+	switch toolLang(t.store) {
+	case "vi":
+		chapDesc = "Số chương"
+		oldDesc = "Đoạn văn bản gốc chính xác cần thay thế, nhiều dòng cần bao gồm ký tự xuống dòng; bắt buộc phải xuất hiện duy nhất trong bản nháp nếu không bật replace_all"
+		newDesc = "Văn bản mới sau khi thay thế"
+		repAllDesc = "Thay thế tất cả các vị trí trùng khớp (mặc định false)"
+	case "en":
+		chapDesc = "Chapter number"
+		oldDesc = "Exact snippet to replace; must be unique in draft unless replace_all=true"
+		newDesc = "Replacement text"
+		repAllDesc = "Replace all occurrences (default false)"
+	}
+
 	return schema.Object(
-		schema.Property("chapter", schema.Int("章节号")).Required(),
-		schema.Property("old_string", schema.String("要替换的原文精确片段，多行需包含换行；不加 replace_all 时必须在草稿中唯一出现")).Required(),
-		schema.Property("new_string", schema.String("替换后的新文本")).Required(),
-		schema.Property("replace_all", schema.Bool("替换所有匹配（默认 false）")),
+		schema.Property("chapter", schema.Int(chapDesc)).Required(),
+		schema.Property("old_string", schema.String(oldDesc)).Required(),
+		schema.Property("new_string", schema.String(newDesc)).Required(),
+		schema.Property("replace_all", schema.Bool(repAllDesc)),
 	)
 }
 

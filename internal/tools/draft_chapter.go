@@ -24,22 +24,48 @@ func NewDraftChapterTool(store *store.Store) *DraftChapterTool {
 
 func (t *DraftChapterTool) Name() string { return "draft_chapter" }
 func (t *DraftChapterTool) Description() string {
-	return "写入章节正文。mode=write 覆盖写入整章，mode=append 追加到现有草稿（续写/修改）"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Ghi nội dung chương. mode=write để ghi đè toàn bộ chương, mode=append để nối thêm vào bản nháp hiện có (viết tiếp/sửa đổi)"
+	case "en":
+		return "Write chapter prose. mode=write overwrites the full chapter, mode=append appends to existing draft (continue/edit)"
+	default:
+		return "写入章节正文。mode=write 覆盖写入整章，mode=append 追加到现有草稿（续写/修改）"
+	}
 }
-func (t *DraftChapterTool) Label() string { return "写入章节" }
+func (t *DraftChapterTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Ghi chương"
+	case "en":
+		return "Draft chapter"
+	default:
+		return "写入章节"
+	}
+}
 
 // A writing tool; concurrency is forbidden (read-modify-write race).
 func (t *DraftChapterTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *DraftChapterTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
 func (t *DraftChapterTool) Schema() map[string]any {
-	// mode is marked required for compatibility with OpenAI strict tool calling -- strict mode
-	// requires every properties entry to appear in the required list. The old "omit mode and take the write
-	// default" behaviour now needs the model to pass mode="write" explicitly; Execute's default branch is unchanged.
+	chapterDesc := "章节号"
+	contentDesc := "章节正文"
+	modeDesc := "写入模式"
+	switch toolLang(t.store) {
+	case "vi":
+		chapterDesc = "Số chương"
+		contentDesc = "Nội dung chính văn của chương"
+		modeDesc = "Chế độ ghi (write hoặc append)"
+	case "en":
+		chapterDesc = "Chapter number"
+		contentDesc = "Chapter prose content"
+		modeDesc = "Write mode (write or append)"
+	}
 	return schema.Object(
-		schema.Property("chapter", schema.Int("章节号")).Required(),
-		schema.Property("content", schema.String("章节正文")).Required(),
-		schema.Property("mode", schema.Enum("写入模式", "write", "append")).Required(),
+		schema.Property("chapter", schema.Int(chapterDesc)).Required(),
+		schema.Property("content", schema.String(contentDesc)).Required(),
+		schema.Property("mode", schema.Enum(modeDesc, "write", "append")).Required(),
 	)
 }
 

@@ -19,16 +19,39 @@ func NewResolveOutlineFeedbackTool(store *store.Store) *ResolveOutlineFeedbackTo
 	return &ResolveOutlineFeedbackTool{store: store}
 }
 
-func (t *ResolveOutlineFeedbackTool) Name() string  { return "resolve_outline_feedback" }
-func (t *ResolveOutlineFeedbackTool) Label() string { return "确认大纲无需调整" }
+func (t *ResolveOutlineFeedbackTool) Name() string { return "resolve_outline_feedback" }
+func (t *ResolveOutlineFeedbackTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Xác nhận dàn ý không cần sửa"
+	case "en":
+		return "Confirm outline unchanged"
+	default:
+		return "确认大纲无需调整"
+	}
+}
 func (t *ResolveOutlineFeedbackTool) Description() string {
-	return "确认已审查全部 writer_feedback，且现有后续计划仍然适用。只有无需修改大纲时调用；需要修改时使用 revise_outline 或结构工具。"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Xác nhận đã rà soát toàn bộ writer_feedback, và kế hoạch tiếp theo hiện tại vẫn hoàn toàn phù hợp. Chỉ gọi khi không cần sửa đổi dàn ý; nếu cần sửa hãy dùng revise_outline."
+	case "en":
+		return "Confirm all writer_feedback has been reviewed and current subsequent plans remain suitable. Call only when no outline revisions are needed; use revise_outline if changes are required."
+	default:
+		return "确认已审查全部 writer_feedback，且现有后续计划仍然适用。只有无需修改大纲时调用；需要修改时使用 revise_outline 或结构工具。"
+	}
 }
 func (t *ResolveOutlineFeedbackTool) ReadOnly(json.RawMessage) bool        { return false }
 func (t *ResolveOutlineFeedbackTool) ConcurrencySafe(json.RawMessage) bool { return false }
 func (t *ResolveOutlineFeedbackTool) StrictSchema() bool                   { return true }
 func (t *ResolveOutlineFeedbackTool) Schema() map[string]any {
-	return schema.Object(schema.Property("reason", schema.String("现有计划仍然适用的理由")).Required())
+	reasonDesc := "现有计划仍然适用的理由"
+	switch toolLang(t.store) {
+	case "vi":
+		reasonDesc = "Lý do vì sao kế hoạch hiện tại vẫn hoàn toàn phù hợp"
+	case "en":
+		reasonDesc = "Reason why current outline remains suitable"
+	}
+	return schema.Object(schema.Property("reason", schema.String(reasonDesc)).Required())
 }
 
 func (t *ResolveOutlineFeedbackTool) Execute(_ context.Context, args json.RawMessage) (json.RawMessage, error) {

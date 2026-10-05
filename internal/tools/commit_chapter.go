@@ -58,10 +58,28 @@ type commitArgs struct {
 
 func (t *CommitChapterTool) Name() string { return "commit_chapter" }
 func (t *CommitChapterTool) Description() string {
-	return "提交章节终稿。加载草稿正文保存为终稿，更新时间线、伏笔、关系、角色状态和进度。" +
-		"返回结构化事实：next_chapter / review_required / arc_end / volume_end / needs_expansion / book_complete / flow 等"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Nộp bản cuối của chương. Tải nội dung bản nháp lưu thành bản chính thức, cập nhật dòng thời gian, phục bút, quan hệ, trạng thái nhân vật và tiến độ. " +
+			"Trả về các sự kiện có cấu trúc: next_chapter / review_required / arc_end / volume_end / needs_expansion / book_complete / flow..."
+	case "en":
+		return "Commit final chapter. Loads draft prose to save as final, updates timeline, foreshadowing, relationships, character states, and progress. " +
+			"Returns structured facts: next_chapter / review_required / arc_end / volume_end / needs_expansion / book_complete / flow, etc."
+	default:
+		return "提交章节终稿。加载草稿正文保存为终稿，更新时间线、伏笔、关系、角色状态和进度。" +
+			"返回结构化事实：next_chapter / review_required / arc_end / volume_end / needs_expansion / book_complete / flow 等"
+	}
 }
-func (t *CommitChapterTool) Label() string { return "提交章节" }
+func (t *CommitChapterTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Nộp chương"
+	case "en":
+		return "Commit chapter"
+	default:
+		return "提交章节"
+	}
+}
 
 // A writing tool (a recoverable saga crossing domains: full payload -> final version/state -> progress -> checkpoint); concurrency is forbidden.
 func (t *CommitChapterTool) ReadOnly(_ json.RawMessage) bool        { return false }
@@ -69,8 +87,16 @@ func (t *CommitChapterTool) ConcurrencySafe(_ json.RawMessage) bool { return fal
 func (t *CommitChapterTool) StrictSchema() bool                     { return true }
 
 func (t *CommitChapterTool) Schema() map[string]any {
-	props := []schema.Prop{schema.Property("chapter", schema.Int("章节号")).Required()}
-	props = append(props, chapterfacts.Properties(true)...)
+	lang := toolLang(t.store)
+	chapterDesc := "章节号"
+	switch lang {
+	case "vi":
+		chapterDesc = "Số chương"
+	case "en":
+		chapterDesc = "Chapter number"
+	}
+	props := []schema.Prop{schema.Property("chapter", schema.Int(chapterDesc)).Required()}
+	props = append(props, chapterfacts.PropertiesForLanguage(true, lang)...)
 	return schema.Object(props...)
 }
 

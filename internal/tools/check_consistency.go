@@ -23,17 +23,40 @@ func NewCheckConsistencyTool(store *store.Store) *CheckConsistencyTool {
 
 func (t *CheckConsistencyTool) Name() string { return "check_consistency" }
 func (t *CheckConsistencyTool) Description() string {
-	return "加载已写草稿和对照数据（世界规则、伏笔、关系、别名、最近摘要），供你检查一致性。必须在 draft_chapter 之后调用"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Tải bản nháp đã viết và dữ liệu đối chiếu (quy tắc thế giới, phục bút, quan hệ, bí danh, tóm tắt gần đây) để kiểm tra tính nhất quán. Bắt buộc gọi sau draft_chapter"
+	case "en":
+		return "Load written draft and reference data (world rules, foreshadowing, relationships, aliases, recent summaries) to verify consistency. Must be called after draft_chapter"
+	default:
+		return "加载已写草稿和对照数据（世界规则、伏笔、关系、别名、最近摘要），供你检查一致性。必须在 draft_chapter 之后调用"
+	}
 }
-func (t *CheckConsistencyTool) Label() string { return "一致性检查" }
+func (t *CheckConsistencyTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Kiểm tra tính nhất quán"
+	case "en":
+		return "Check consistency"
+	default:
+		return "一致性检查"
+	}
+}
 
 // A read-only tool (it only appends a checkpoint event and changes no state), so it can be scheduled concurrently.
 func (t *CheckConsistencyTool) ReadOnly(_ json.RawMessage) bool        { return true }
 func (t *CheckConsistencyTool) ConcurrencySafe(_ json.RawMessage) bool { return true }
 
 func (t *CheckConsistencyTool) Schema() map[string]any {
+	chapterDesc := "要检查的章节号"
+	switch toolLang(t.store) {
+	case "vi":
+		chapterDesc = "Số chương cần kiểm tra"
+	case "en":
+		chapterDesc = "Chapter number to verify"
+	}
 	return schema.Object(
-		schema.Property("chapter", schema.Int("要检查的章节号")).Required(),
+		schema.Property("chapter", schema.Int(chapterDesc)).Required(),
 	)
 }
 

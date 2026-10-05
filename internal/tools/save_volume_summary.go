@@ -25,20 +25,54 @@ func NewSaveVolumeSummaryTool(store *store.Store) *SaveVolumeSummaryTool {
 
 func (t *SaveVolumeSummaryTool) Name() string { return "save_volume_summary" }
 func (t *SaveVolumeSummaryTool) Description() string {
-	return "保存卷级摘要（长篇模式，卷结束时调用）"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Lưu tóm tắt cấp độ quyển (chế độ trường thiên, gọi khi kết thúc quyển)"
+	case "en":
+		return "Save volume-level summary (longform mode, called at volume conclusion)"
+	default:
+		return "保存卷级摘要（长篇模式，卷结束时调用）"
+	}
 }
-func (t *SaveVolumeSummaryTool) Label() string { return "保存卷摘要" }
+func (t *SaveVolumeSummaryTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Lưu tóm tắt quyển"
+	case "en":
+		return "Save volume summary"
+	default:
+		return "保存卷摘要"
+	}
+}
 
 // A writing tool; concurrency is forbidden.
 func (t *SaveVolumeSummaryTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *SaveVolumeSummaryTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
 func (t *SaveVolumeSummaryTool) Schema() map[string]any {
+	volDesc := "卷号"
+	titleDesc := "卷标题"
+	sumDesc := "卷摘要（500字以内）"
+	keyEventsDesc := "卷内关键事件"
+
+	switch toolLang(t.store) {
+	case "vi":
+		volDesc = "Số thứ tự quyển"
+		titleDesc = "Tiêu đề quyển"
+		sumDesc = "Tóm tắt quyển (dưới 500 từ)"
+		keyEventsDesc = "Các sự kiện then chốt trong quyển"
+	case "en":
+		volDesc = "Volume index"
+		titleDesc = "Volume title"
+		sumDesc = "Volume summary (under 500 words)"
+		keyEventsDesc = "Key volume events"
+	}
+
 	return schema.Object(
-		schema.Property("volume", schema.Int("卷号")).Required(),
-		schema.Property("title", schema.String("卷标题")).Required(),
-		schema.Property("summary", schema.String("卷摘要（500字以内）")).Required(),
-		schema.Property("key_events", schema.Array("卷内关键事件", schema.String(""))).Required(),
+		schema.Property("volume", schema.Int(volDesc)).Required(),
+		schema.Property("title", schema.String(titleDesc)).Required(),
+		schema.Property("summary", schema.String(sumDesc)).Required(),
+		schema.Property("key_events", schema.Array(keyEventsDesc, schema.String(""))).Required(),
 	)
 }
 

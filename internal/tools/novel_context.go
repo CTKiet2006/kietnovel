@@ -95,22 +95,59 @@ func NewContextTool(
 
 func (t *ContextTool) Name() string { return "novel_context" }
 func (t *ContextTool) Description() string {
-	return "获取小说当前状态和创作上下文。" +
-		"不传 chapter：返回 progress_status（phase/flow/next_chapter/pending_rewrites 等进度字段）+ 精简规划概览，用于判断下一步该做什么；" +
-		"长篇 Architect 可传 volume + arc 聚焦读取指定弧：已展开弧包含章节详情，骨架弧包含 title/goal/estimated_chapters。" +
-		"传 chapter=N：额外返回该章的前情摘要、伏笔、角色状态、风格规则等写作上下文"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Lấy trạng thái hiện tại của tiểu thuyết và ngữ cảnh sáng tác. " +
+			"Không truyền chapter: trả về progress_status (phase/flow/next_chapter/pending_rewrites...) + tổng quan quy hoạch tinh gọn, dùng để quyết định bước tiếp theo; " +
+			"Architect trường thiên có thể truyền volume + arc để đọc trọng tâm một arc chỉ định: arc đã mở rộng gồm chi tiết chương, arc khung sườn gồm title/goal/estimated_chapters. " +
+			"Truyền chapter=N: trả về thêm ngữ cảnh sáng tác của chương đó (tóm tắt tiền tình, phục bút, trạng thái nhân vật, quy tắc văn phong...)"
+	case "en":
+		return "Fetch novel status and creative context. " +
+			"Omit chapter: returns progress_status (phase/flow/next_chapter/pending_rewrites, etc.) + compact planning overview, used to determine next steps; " +
+			"Longform Architect can pass volume + arc to focus on a designated arc: expanded arcs contain chapter details, skeleton arcs contain title/goal/estimated_chapters. " +
+			"Pass chapter=N: additionally returns writing context for that chapter (prior summaries, foreshadowing, character states, voice rules, etc.)"
+	default:
+		return "获取小说当前状态和创作上下文。" +
+			"不传 chapter：返回 progress_status（phase/flow/next_chapter/pending_rewrites 等进度字段）+ 精简规划概览，用于判断下一步该做什么；" +
+			"长篇 Architect 可传 volume + arc 聚焦读取指定弧：已展开弧包含章节详情，骨架弧包含 title/goal/estimated_chapters。" +
+			"传 chapter=N：额外返回该章的前情摘要、伏笔、角色状态、风格规则等写作上下文"
+	}
 }
-func (t *ContextTool) Label() string { return "加载上下文" }
+func (t *ContextTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Tải ngữ cảnh"
+	case "en":
+		return "Load context"
+	default:
+		return "加载上下文"
+	}
+}
 
 // A pure read tool, so it can be scheduled concurrently.
 func (t *ContextTool) ReadOnly(_ json.RawMessage) bool        { return true }
 func (t *ContextTool) ConcurrencySafe(_ json.RawMessage) bool { return true }
 
 func (t *ContextTool) Schema() map[string]any {
+	chapterDesc := "章节号。不传则返回进度状态和基础设定（Architect 用）；传入则额外返回该章的写作上下文（Writer/Editor 用）"
+	volumeDesc := "长篇 Architect 可选：聚焦读取的卷序号；已展开弧返回章节详情，骨架弧返回规划目标；必须与 arc 同时传入，不能与 chapter 同时使用"
+	arcDesc := "长篇 Architect 可选：聚焦读取的卷内弧序号；已展开弧返回章节详情，骨架弧返回规划目标；必须与 volume 同时传入，不能与 chapter 同时使用"
+
+	switch toolLang(t.store) {
+	case "vi":
+		chapterDesc = "Số chương. Không truyền thì trả về trạng thái tiến độ và thiết lập cơ bản (dùng cho Architect); truyền vào thì trả về thêm ngữ cảnh sáng tác của chương đó (dùng cho Writer/Editor)"
+		volumeDesc = "Tùy chọn cho Architect trường thiên: số thứ tự quyển cần đọc trọng tâm; arc đã mở rộng trả về chi tiết chương, arc khung sườn trả về mục tiêu quy hoạch; phải truyền kèm arc và không dùng cùng lúc với chapter"
+		arcDesc = "Tùy chọn cho Architect trường thiên: số thứ tự arc trong quyển cần đọc trọng tâm; arc đã mở rộng trả về chi tiết chương, arc khung sườn trả về mục tiêu quy hoạch; phải truyền kèm volume và không dùng cùng lúc với chapter"
+	case "en":
+		chapterDesc = "Chapter number. Omit to receive progress status and foundation settings (for Architect); pass to additionally receive writing context for that chapter (for Writer/Editor)"
+		volumeDesc = "Optional for Longform Architect: volume index to focus on; expanded arcs return chapter details, skeleton arcs return planning goals; must be passed with arc, mutually exclusive with chapter"
+		arcDesc = "Optional for Longform Architect: arc index within volume to focus on; expanded arcs return chapter details, skeleton arcs return planning goals; must be passed with volume, mutually exclusive with chapter"
+	}
+
 	return schema.Object(
-		schema.Property("chapter", schema.Int("章节号。不传则返回进度状态和基础设定（Architect 用）；传入则额外返回该章的写作上下文（Writer/Editor 用）")),
-		schema.Property("volume", schema.Int("长篇 Architect 可选：聚焦读取的卷序号；已展开弧返回章节详情，骨架弧返回规划目标；必须与 arc 同时传入，不能与 chapter 同时使用")),
-		schema.Property("arc", schema.Int("长篇 Architect 可选：聚焦读取的卷内弧序号；已展开弧返回章节详情，骨架弧返回规划目标；必须与 volume 同时传入，不能与 chapter 同时使用")),
+		schema.Property("chapter", schema.Int(chapterDesc)),
+		schema.Property("volume", schema.Int(volumeDesc)),
+		schema.Property("arc", schema.Int(arcDesc)),
 	)
 }
 

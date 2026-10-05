@@ -27,38 +27,109 @@ func NewSaveArcSummaryTool(store *store.Store) *SaveArcSummaryTool {
 
 func (t *SaveArcSummaryTool) Name() string { return "save_arc_summary" }
 func (t *SaveArcSummaryTool) Description() string {
-	return "保存弧级摘要、角色状态快照和写作规则（长篇模式，弧结束时调用）"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Lưu tóm tắt cấp độ arc, snapshot trạng thái nhân vật và quy tắc sáng tác (chế độ trường thiên, gọi khi kết thúc arc)"
+	case "en":
+		return "Save arc-level summary, character state snapshots, and writing rules (longform mode, called at arc conclusion)"
+	default:
+		return "保存弧级摘要、角色状态快照和写作规则（长篇模式，弧结束时调用）"
+	}
 }
-func (t *SaveArcSummaryTool) Label() string { return "保存弧摘要" }
+func (t *SaveArcSummaryTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Lưu tóm tắt arc"
+	case "en":
+		return "Save arc summary"
+	default:
+		return "保存弧摘要"
+	}
+}
 
 // A writing tool; concurrency is forbidden.
 func (t *SaveArcSummaryTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *SaveArcSummaryTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
 func (t *SaveArcSummaryTool) Schema() map[string]any {
+	nameDesc := "角色名"
+	statusDesc := "当前状态（存活/受伤/失踪等）"
+	powerDesc := "能力变化"
+	motDesc := "当前动机"
+	relDesc := "关键关系变化"
+	voiceRulesDesc := "2-3 条语言特征规则（每条 ≤30 字）"
+	proseDesc := "3-5 条叙述风格规则（每条 ≤50 字，要具体可执行）"
+	diaDesc := "核心角色的对话特征规则"
+	taboosDesc := "本小说需避免的写法"
+	volDesc := "卷号"
+	arcDesc := "弧号"
+	titleDesc := "弧标题"
+	sumDesc := "弧摘要（500字以内）"
+	keyEventsDesc := "弧内关键事件"
+	snapDesc := "角色状态快照"
+	styleRulesDesc := "写作规则"
+
+	switch toolLang(t.store) {
+	case "vi":
+		nameDesc = "Tên nhân vật"
+		statusDesc = "Trạng thái hiện tại (còn sống / bị thương / mất tích...)"
+		powerDesc = "Biến chuyển năng lực / sức mạnh"
+		motDesc = "Động cơ hành động hiện tại"
+		relDesc = "Biến chuyển quan hệ then chốt"
+		voiceRulesDesc = "2-3 quy tắc đặc trưng ngôn ngữ nhân vật"
+		proseDesc = "3-5 quy tắc văn phong tự sự (cụ thể, khả thi)"
+		diaDesc = "Quy tắc đặc trưng đối thoại của các nhân vật nòng cốt"
+		taboosDesc = "Các điều cấm kỵ cần tránh trong truyện"
+		volDesc = "Số thứ tự quyển"
+		arcDesc = "Số thứ tự arc"
+		titleDesc = "Tiêu đề arc"
+		sumDesc = "Tóm tắt arc (dưới 500 từ)"
+		keyEventsDesc = "Các sự kiện then chốt trong arc"
+		snapDesc = "Snapshot trạng thái nhân vật"
+		styleRulesDesc = "Bộ quy tắc văn phong"
+	case "en":
+		nameDesc = "Character name"
+		statusDesc = "Current status (alive / injured / missing, etc.)"
+		powerDesc = "Ability / power progression"
+		motDesc = "Current motivation"
+		relDesc = "Key relationship changes"
+		voiceRulesDesc = "2-3 character voice rules"
+		proseDesc = "3-5 narrative style rules"
+		diaDesc = "Dialogue rules for core cast"
+		taboosDesc = "Stylistic taboos to avoid"
+		volDesc = "Volume index"
+		arcDesc = "Arc index"
+		titleDesc = "Arc title"
+		sumDesc = "Arc summary (under 500 words)"
+		keyEventsDesc = "Key arc events"
+		snapDesc = "Character state snapshots"
+		styleRulesDesc = "Style rules"
+	}
+
 	snapshotSchema := schema.Object(
-		schema.Property("name", schema.String("角色名")).Required(),
-		schema.Property("status", schema.String("当前状态（存活/受伤/失踪等）")).Required(),
-		schema.Property("power", schema.String("能力变化")),
-		schema.Property("motivation", schema.String("当前动机")).Required(),
-		schema.Property("relations", schema.String("关键关系变化")),
+		schema.Property("name", schema.String(nameDesc)).Required(),
+		schema.Property("status", schema.String(statusDesc)).Required(),
+		schema.Property("power", schema.String(powerDesc)),
+		schema.Property("motivation", schema.String(motDesc)).Required(),
+		schema.Property("relations", schema.String(relDesc)),
 	)
 	voiceSchema := schema.Object(
-		schema.Property("name", schema.String("角色名")).Required(),
-		schema.Property("rules", schema.Array("2-3 条语言特征规则（每条 ≤30 字）", schema.String(""))).Required(),
+		schema.Property("name", schema.String(nameDesc)).Required(),
+		schema.Property("rules", schema.Array(voiceRulesDesc, schema.String(""))).Required(),
 	)
 	styleRulesSchema := schema.Object(
-		schema.Property("prose", schema.Array("3-5 条叙述风格规则（每条 ≤50 字，要具体可执行）", schema.String(""))).Required(),
-		schema.Property("dialogue", schema.Array("核心角色的对话特征规则", voiceSchema)).Required(),
-		schema.Property("taboos", schema.Array("本小说需避免的写法", schema.String(""))),
+		schema.Property("prose", schema.Array(proseDesc, schema.String(""))).Required(),
+		schema.Property("dialogue", schema.Array(diaDesc, voiceSchema)).Required(),
+		schema.Property("taboos", schema.Array(taboosDesc, schema.String(""))),
 	)
+	styleRulesSchema["description"] = styleRulesDesc
 	return schema.Object(
-		schema.Property("volume", schema.Int("卷号")).Required(),
-		schema.Property("arc", schema.Int("弧号")).Required(),
-		schema.Property("title", schema.String("弧标题")).Required(),
-		schema.Property("summary", schema.String("弧摘要（500字以内）")).Required(),
-		schema.Property("key_events", schema.Array("弧内关键事件", schema.String(""))).Required(),
-		schema.Property("character_snapshots", schema.Array("角色状态快照", snapshotSchema)).Required(),
+		schema.Property("volume", schema.Int(volDesc)).Required(),
+		schema.Property("arc", schema.Int(arcDesc)).Required(),
+		schema.Property("title", schema.String(titleDesc)).Required(),
+		schema.Property("summary", schema.String(sumDesc)).Required(),
+		schema.Property("key_events", schema.Array(keyEventsDesc, schema.String(""))).Required(),
+		schema.Property("character_snapshots", schema.Array(snapDesc, snapshotSchema)).Required(),
 		schema.Property("style_rules", styleRulesSchema).Required(),
 	)
 }

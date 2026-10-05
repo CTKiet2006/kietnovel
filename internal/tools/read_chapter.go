@@ -20,22 +20,62 @@ func NewReadChapterTool(store *store.Store) *ReadChapterTool {
 
 func (t *ReadChapterTool) Name() string { return "read_chapter" }
 func (t *ReadChapterTool) Description() string {
-	return "读取章节原文。可读终稿、草稿，或提取角色对话片段"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Đọc nguyên văn chương truyện. Có thể đọc bản cuối, bản nháp, hoặc trích xuất các phân đoạn đối thoại của nhân vật"
+	case "en":
+		return "Read chapter source text. Can read final prose, draft, or extract character dialogue snippets"
+	default:
+		return "读取章节原文。可读终稿、草稿，或提取角色对话片段"
+	}
 }
-func (t *ReadChapterTool) Label() string { return "读取章节" }
+func (t *ReadChapterTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Đọc chương"
+	case "en":
+		return "Read chapter"
+	default:
+		return "读取章节"
+	}
+}
 
 // A pure read tool, so it can be scheduled concurrently (an editor reviewing often reads several chapters at once).
 func (t *ReadChapterTool) ReadOnly(_ json.RawMessage) bool        { return true }
 func (t *ReadChapterTool) ConcurrencySafe(_ json.RawMessage) bool { return true }
 
 func (t *ReadChapterTool) Schema() map[string]any {
+	chapterDesc := "章节号（读单章时必填）"
+	fromDesc := "起始章节号（读范围时使用）"
+	toDesc := "结束章节号（读范围时使用）"
+	sourceDesc := "来源"
+	charDesc := "角色名（提取对话片段时使用）"
+	maxRunesDesc := "每章最大字符数（范围读取时截取，默认 2000）"
+
+	switch toolLang(t.store) {
+	case "vi":
+		chapterDesc = "Số chương (bắt buộc khi đọc đơn chương)"
+		fromDesc = "Số chương bắt đầu (khi đọc theo dải chương)"
+		toDesc = "Số chương kết thúc (khi đọc theo dải chương)"
+		sourceDesc = "Nguồn đọc (final hoặc draft)"
+		charDesc = "Tên nhân vật (khi trích xuất các câu thoại)"
+		maxRunesDesc = "Số ký tự tối đa mỗi chương (khi đọc theo dải, mặc định 2000)"
+	case "en":
+		chapterDesc = "Chapter number (required when reading a single chapter)"
+		fromDesc = "Start chapter number (for range reading)"
+		toDesc = "End chapter number (for range reading)"
+		sourceDesc = "Source (final or draft)"
+		charDesc = "Character name (for extracting dialogue snippets)"
+		maxRunesDesc = "Max characters per chapter (for range reading, default 2000)"
+	}
+
 	return schema.Object(
-		schema.Property("chapter", schema.Int("章节号（读单章时必填）")),
-		schema.Property("from", schema.Int("起始章节号（读范围时使用）")),
-		schema.Property("to", schema.Int("结束章节号（读范围时使用）")),
-		schema.Property("source", schema.Enum("来源", "final", "draft")).Required(),
-		schema.Property("character", schema.String("角色名（提取对话片段时使用）")),
-		schema.Property("max_runes", schema.Int("每章最大字符数（范围读取时截取，默认 2000）")),
+		schema.Property("chapter", schema.Int(chapterDesc)),
+		schema.Property("from", schema.Int(fromDesc)),
+		schema.Property("to", schema.Int(toDesc)),
+		schema.Property("source", schema.Enum(sourceDesc, "final", "draft")).Required(),
+		schema.Property("character", schema.String(charDesc)),
+		schema.Property("max_runes", schema.Int(maxRunesDesc)),
 	)
 }
 

@@ -23,30 +23,94 @@ func NewPlanChapterTool(store *store.Store) *PlanChapterTool {
 
 func (t *PlanChapterTool) Name() string { return "plan_chapter" }
 func (t *PlanChapterTool) Description() string {
-	return "保存章节写作构思。Agent 自主决定规划粒度，不强制场景拆分"
+	switch toolLang(t.store) {
+	case "vi":
+		return "Lưu ý đồ sáng tác của chương. Agent tự chủ quyết định độ chi tiết quy hoạch, không ép buộc phân chia phân cảnh"
+	case "en":
+		return "Save chapter writing outline and beats. Agent autonomously decides planning granularity without forcing rigid scene splits"
+	default:
+		return "保存章节写作构思。Agent 自主决定规划粒度，不强制场景拆分"
+	}
 }
-func (t *PlanChapterTool) Label() string { return "规划章节" }
+func (t *PlanChapterTool) Label() string {
+	switch toolLang(t.store) {
+	case "vi":
+		return "Quy hoạch chương"
+	case "en":
+		return "Plan chapter"
+	default:
+		return "规划章节"
+	}
+}
 
 // A writing tool; concurrency is forbidden.
 func (t *PlanChapterTool) ReadOnly(_ json.RawMessage) bool        { return false }
 func (t *PlanChapterTool) ConcurrencySafe(_ json.RawMessage) bool { return false }
 
 func (t *PlanChapterTool) Schema() map[string]any {
+	chapterDesc := "章节号"
+	titleDesc := "暂定章节标题；写作后可按正文调整"
+	goalDesc := "本章目标"
+	conflictDesc := "核心冲突"
+	hookDesc := "章末钩子"
+	emotionArcDesc := "情绪曲线"
+	notesDesc := "自由备忘（任何你觉得写作时需要记住的东西）"
+	requiredBeatsDesc := "本章必须完成的推进项"
+	forbiddenMovesDesc := "本章明确不能发生的推进"
+	continuityChecksDesc := "本章需特别核对的连续性点"
+	evaluationFocusDesc := "Editor 重点检查项"
+	emotionTargetDesc := "可选：本章希望读者主要感受到的情绪"
+	payoffPointsDesc := "可选：关键章希望回应的情节点或兑现点"
+	hookGoalDesc := "可选：章末希望驱动的追读欲望或悬念目标"
+
+	switch toolLang(t.store) {
+	case "vi":
+		chapterDesc = "Số chương"
+		titleDesc = "Tiêu đề dự kiến của chương; có thể điều chỉnh sau khi viết chính văn"
+		goalDesc = "Mục tiêu cốt lõi của chương"
+		conflictDesc = "Xung đột chính"
+		hookDesc = "Móc câu treo kịch tính cuối chương"
+		emotionArcDesc = "Đường cong cảm xúc"
+		notesDesc = "Ghi chú tự do (bất cứ điều gì cần nhớ khi viết)"
+		requiredBeatsDesc = "Các nhịp tình tiết bắt buộc phải hoàn thành trong chương"
+		forbiddenMovesDesc = "Các hành động/diễn biến bị cấm tuyệt đối trong chương này"
+		continuityChecksDesc = "Các điểm kiểm tra tính liên tục đối chiếu với các chương trước"
+		evaluationFocusDesc = "Trọng tâm kiểm tra của Editor"
+		emotionTargetDesc = "Tùy chọn: Cảm xúc chủ đạo muốn độc giả cảm nhận"
+		payoffPointsDesc = "Tùy chọn: Điểm thỏa mãn / tháo gỡ cảm xúc then chốt"
+		hookGoalDesc = "Tùy chọn: Mục tiêu khơi gợi cảm giác tò mò / thúc đẩy đọc tiếp cuối chương"
+	case "en":
+		chapterDesc = "Chapter number"
+		titleDesc = "Tentative chapter title; can be adjusted after writing prose"
+		goalDesc = "Core chapter goal"
+		conflictDesc = "Primary conflict"
+		hookDesc = "End-of-chapter hook"
+		emotionArcDesc = "Emotional arc"
+		notesDesc = "Free-form notes (anything to keep in mind during drafting)"
+		requiredBeatsDesc = "Required narrative beats to accomplish in this chapter"
+		forbiddenMovesDesc = "Forbidden developments that must not occur in this chapter"
+		continuityChecksDesc = "Continuity points to explicitly verify against prior chapters"
+		evaluationFocusDesc = "Key review checklist items for Editor"
+		emotionTargetDesc = "Optional: Dominant emotional experience intended for the reader"
+		payoffPointsDesc = "Optional: Key narrative or emotional payoffs delivered"
+		hookGoalDesc = "Optional: Target suspense or curiosity driver for the chapter hook"
+	}
+
 	return schema.Object(
-		schema.Property("chapter", schema.Int("章节号")).Required(),
-		schema.Property("title", schema.String("暂定章节标题；写作后可按正文调整")).Required(),
-		schema.Property("goal", schema.String("本章目标")).Required(),
-		schema.Property("conflict", schema.String("核心冲突")).Required(),
-		schema.Property("hook", schema.String("章末钩子")).Required(),
-		schema.Property("emotion_arc", schema.String("情绪曲线")),
-		schema.Property("notes", schema.String("自由备忘（任何你觉得写作时需要记住的东西）")),
-		schema.Property("required_beats", schema.Array("本章必须完成的推进项", schema.String(""))),
-		schema.Property("forbidden_moves", schema.Array("本章明确不能发生的推进", schema.String(""))),
-		schema.Property("continuity_checks", schema.Array("本章需特别核对的连续性点", schema.String(""))),
-		schema.Property("evaluation_focus", schema.Array("Editor 重点检查项", schema.String(""))),
-		schema.Property("emotion_target", schema.String("可选：本章希望读者主要感受到的情绪")),
-		schema.Property("payoff_points", schema.Array("可选：关键章希望回应的情节点或兑现点", schema.String(""))),
-		schema.Property("hook_goal", schema.String("可选：章末希望驱动的追读欲望或悬念目标")),
+		schema.Property("chapter", schema.Int(chapterDesc)).Required(),
+		schema.Property("title", schema.String(titleDesc)).Required(),
+		schema.Property("goal", schema.String(goalDesc)).Required(),
+		schema.Property("conflict", schema.String(conflictDesc)).Required(),
+		schema.Property("hook", schema.String(hookDesc)).Required(),
+		schema.Property("emotion_arc", schema.String(emotionArcDesc)),
+		schema.Property("notes", schema.String(notesDesc)),
+		schema.Property("required_beats", schema.Array(requiredBeatsDesc, schema.String(""))),
+		schema.Property("forbidden_moves", schema.Array(forbiddenMovesDesc, schema.String(""))),
+		schema.Property("continuity_checks", schema.Array(continuityChecksDesc, schema.String(""))),
+		schema.Property("evaluation_focus", schema.Array(evaluationFocusDesc, schema.String(""))),
+		schema.Property("emotion_target", schema.String(emotionTargetDesc)),
+		schema.Property("payoff_points", schema.Array(payoffPointsDesc, schema.String(""))),
+		schema.Property("hook_goal", schema.String(hookGoalDesc)),
 	)
 }
 

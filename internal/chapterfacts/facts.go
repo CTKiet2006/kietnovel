@@ -9,55 +9,106 @@ import (
 	"github.com/voocel/agentcore/schema"
 )
 
-// Properties returns the JSON Schema fields shared by complete chapter facts.
+// Properties returns the JSON Schema fields shared by complete chapter facts (default Chinese).
 func Properties(includeFeedback bool) []schema.Prop {
-	textList := func(description string) map[string]any {
-		return schema.Array(description, schema.String(description))
+	return PropertiesForLanguage(includeFeedback, "zh")
+}
+
+// PropertiesForLanguage returns the localized JSON Schema fields for chapter facts.
+func PropertiesForLanguage(includeFeedback bool, lang string) []schema.Prop {
+	cleanLang := strings.ToLower(strings.TrimSpace(lang))
+
+	textListDesc := func(zh, vi, en string) func(string) map[string]any {
+		return func(override string) map[string]any {
+			desc := zh
+			switch cleanLang {
+			case "vi":
+				desc = vi
+			case "en":
+				desc = en
+			}
+			if override != "" {
+				desc = override
+			}
+			return schema.Array(desc, schema.String(desc))
+		}
 	}
+
+	timeDesc, eventDesc, relADesc, relBDesc, relDesc := "故事内时间", "事件", "角色 A", "角色 B", "本章结束时关系"
+	fsIdDesc, fsActDesc, fsDescDesc := "伏笔 ID", "操作", "plant 描述，其它操作为 null"
+	stEntityDesc, stFieldDesc, stOldDesc, stNewDesc, stReasonDesc := "实体", "属性", "变化前值", "变化后值", "原因"
+	titleDesc, summaryDesc, hookDesc, strandDesc := "最终标题", "章节摘要", "章末钩子", "主导叙事线"
+	tlEventsDesc, fsUpdatesDesc, relChangesDesc, stChangesDesc, castDesc := "时间线事件", "伏笔操作", "关系变化", "状态变化", "新配角"
+	castNameDesc, castRoleDesc := "姓名", "定位"
+	devDesc, sugDesc, fbDesc := "偏离大纲的描述", "对后续大纲的调整建议", "对后续大纲的建议对象；必须直接传 JSON object，不要传字符串化 JSON"
+
+	switch cleanLang {
+	case "vi":
+		timeDesc, eventDesc, relADesc, relBDesc, relDesc = "Thời gian trong truyện", "Sự kiện", "Nhân vật A", "Nhân vật B", "Quan hệ khi kết thúc chương"
+		fsIdDesc, fsActDesc, fsDescDesc = "Mã phục bút", "Thao tác", "Mô tả khi plant, thao tác khác là null"
+		stEntityDesc, stFieldDesc, stOldDesc, stNewDesc, stReasonDesc = "Thực thể", "Thuộc tính", "Giá trị cũ", "Giá trị mới", "Nguyên nhân"
+		titleDesc, summaryDesc, hookDesc, strandDesc = "Tiêu đề chính thức", "Tóm tắt chương", "Móc câu cuối chương", "Tuyến tự sự chủ đạo"
+		tlEventsDesc, fsUpdatesDesc, relChangesDesc, stChangesDesc, castDesc = "Sự kiện dòng thời gian", "Cập nhật phục bút", "Thay đổi quan hệ", "Thay đổi trạng thái", "Nhân vật phụ mới"
+		castNameDesc, castRoleDesc = "Họ tên", "Định vị vai trò"
+		devDesc, sugDesc, fbDesc = "Mô tả điểm lệch dàn ý", "Đề xuất điều chỉnh dàn ý tiếp theo", "Đối tượng đề xuất cho dàn ý tiếp theo; truyền trực tiếp JSON object"
+	case "en":
+		timeDesc, eventDesc, relADesc, relBDesc, relDesc = "In-story time", "Event", "Character A", "Character B", "Relationship at chapter end"
+		fsIdDesc, fsActDesc, fsDescDesc = "Foreshadow ID", "Action", "Description for plant, null for other actions"
+		stEntityDesc, stFieldDesc, stOldDesc, stNewDesc, stReasonDesc = "Entity", "Field", "Old value", "New value", "Reason"
+		titleDesc, summaryDesc, hookDesc, strandDesc = "Final title", "Chapter summary", "End-of-chapter hook", "Dominant narrative strand"
+		tlEventsDesc, fsUpdatesDesc, relChangesDesc, stChangesDesc, castDesc = "Timeline events", "Foreshadowing updates", "Relationship changes", "State changes", "New cast intros"
+		castNameDesc, castRoleDesc = "Name", "Role"
+		devDesc, sugDesc, fbDesc = "Deviation description", "Suggestions for outline adjustment", "Outline feedback object; pass JSON object directly"
+	}
+
+	charList := textListDesc("涉及角色", "Nhân vật liên quan", "Characters involved")("")
+	castList := textListDesc("出场角色", "Nhân vật xuất hiện", "Characters present")("")
+	eventsList := textListDesc("关键事件", "Sự kiện then chốt", "Key events")("")
+
 	timeline := schema.Object(
-		schema.Property("time", schema.String("故事内时间")).Required(),
-		schema.Property("event", schema.String("事件")).Required(),
-		schema.Property("characters", textList("涉及角色")).Required(),
+		schema.Property("time", schema.String(timeDesc)).Required(),
+		schema.Property("event", schema.String(eventDesc)).Required(),
+		schema.Property("characters", charList).Required(),
 	)
 	foreshadow := schema.Object(
-		schema.Property("id", schema.String("伏笔 ID")).Required(),
-		schema.Property("action", schema.Enum("操作", "plant", "advance", "resolve")).Required(),
-		schema.Property("description", llmcontract.Nullable(schema.String("plant 描述，其它操作为 null"))).Required(),
+		schema.Property("id", schema.String(fsIdDesc)).Required(),
+		schema.Property("action", schema.Enum(fsActDesc, "plant", "advance", "resolve")).Required(),
+		schema.Property("description", llmcontract.Nullable(schema.String(fsDescDesc))).Required(),
 	)
 	relationship := schema.Object(
-		schema.Property("character_a", schema.String("角色 A")).Required(),
-		schema.Property("character_b", schema.String("角色 B")).Required(),
-		schema.Property("relation", schema.String("本章结束时关系")).Required(),
+		schema.Property("character_a", schema.String(relADesc)).Required(),
+		schema.Property("character_b", schema.String(relBDesc)).Required(),
+		schema.Property("relation", schema.String(relDesc)).Required(),
 	)
 	stateChange := schema.Object(
-		schema.Property("entity", schema.String("实体")).Required(),
-		schema.Property("field", schema.String("属性")).Required(),
-		schema.Property("old_value", llmcontract.Nullable(schema.String("变化前值"))).Required(),
-		schema.Property("new_value", schema.String("变化后值")).Required(),
-		schema.Property("reason", llmcontract.Nullable(schema.String("原因"))).Required(),
+		schema.Property("entity", schema.String(stEntityDesc)).Required(),
+		schema.Property("field", schema.String(stFieldDesc)).Required(),
+		schema.Property("old_value", llmcontract.Nullable(schema.String(stOldDesc))).Required(),
+		schema.Property("new_value", schema.String(stNewDesc)).Required(),
+		schema.Property("reason", llmcontract.Nullable(schema.String(stReasonDesc))).Required(),
 	)
 	props := []schema.Prop{
-		schema.Property("title", schema.String("最终标题")).Required(),
-		schema.Property("summary", schema.String("章节摘要")).Required(),
-		schema.Property("characters", textList("出场角色")).Required(),
-		schema.Property("key_events", textList("关键事件")).Required(),
-		schema.Property("timeline_events", schema.Array("时间线事件", timeline)).Required(),
-		schema.Property("foreshadow_updates", schema.Array("伏笔操作", foreshadow)).Required(),
-		schema.Property("relationship_changes", schema.Array("关系变化", relationship)).Required(),
-		schema.Property("state_changes", schema.Array("状态变化", stateChange)).Required(),
-		schema.Property("cast_intros", schema.Array("新配角", schema.Object(
-			schema.Property("name", schema.String("姓名")).Required(),
-			schema.Property("brief_role", schema.String("定位")).Required(),
+		schema.Property("title", schema.String(titleDesc)).Required(),
+		schema.Property("summary", schema.String(summaryDesc)).Required(),
+		schema.Property("characters", castList).Required(),
+		schema.Property("key_events", eventsList).Required(),
+		schema.Property("timeline_events", schema.Array(tlEventsDesc, timeline)).Required(),
+		schema.Property("foreshadow_updates", schema.Array(fsUpdatesDesc, foreshadow)).Required(),
+		schema.Property("relationship_changes", schema.Array(relChangesDesc, relationship)).Required(),
+		schema.Property("state_changes", schema.Array(stChangesDesc, stateChange)).Required(),
+		schema.Property("cast_intros", schema.Array(castDesc, schema.Object(
+			schema.Property("name", schema.String(castNameDesc)).Required(),
+			schema.Property("brief_role", schema.String(castRoleDesc)).Required(),
 		))).Required(),
-		schema.Property("hook_type", llmcontract.Nullable(schema.Enum("章末钩子", domain.HookTypes()...))).Required(),
-		schema.Property("dominant_strand", llmcontract.Nullable(schema.Enum("主导叙事线", domain.DominantStrands()...))).Required(),
+		schema.Property("hook_type", llmcontract.Nullable(schema.Enum(hookDesc, domain.HookTypes()...))).Required(),
+		schema.Property("dominant_strand", llmcontract.Nullable(schema.Enum(strandDesc, domain.DominantStrands()...))).Required(),
 	}
 	if includeFeedback {
 		feedback := schema.Object(
-			schema.Property("deviation", schema.String("偏离大纲的描述")).Required(),
-			schema.Property("suggestion", schema.String("对后续大纲的调整建议")).Required(),
+			schema.Property("deviation", schema.String(devDesc)).Required(),
+			schema.Property("suggestion", schema.String(sugDesc)).Required(),
 		)
-		feedback["description"] = "对后续大纲的建议对象；必须直接传 JSON object，不要传字符串化 JSON"
+		feedback["description"] = fbDesc
 		props = append(props, schema.Property("feedback", llmcontract.Nullable(feedback)).Required())
 	}
 	return props
