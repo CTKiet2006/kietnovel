@@ -73,6 +73,7 @@ type setupProvider struct {
 	baseURL        string // base_url điền sẵn
 	needType       bool   // Proxy tùy chỉnh cần hỏi thêm type và base_url
 	apiKeyOptional bool   // true nghĩa là API Key được phép để trống
+	selfContained  bool   // true = provider tự hoàn chỉnh, bỏ qua bước API key / base URL / model
 }
 
 // ProviderPreset là mục danh mục provider dùng chung cho dẫn lần đầu và /config lúc runtime.
@@ -82,9 +83,11 @@ type ProviderPreset struct {
 	BaseURL        string
 	NeedType       bool
 	APIKeyOptional bool
+	SelfContained  bool
 }
 
 var setupProviders = []setupProvider{
+	{name: "chatgpt-web", label: "ChatGPT Web (Free — đăng nhập tài khoản ChatGPT, không cần API key)", baseURL: "http://127.0.0.1:17841/v1", apiKeyOptional: true, selfContained: true},
 	{name: "openrouter", label: "OpenRouter", baseURL: "https://openrouter.ai/api/v1"},
 	{name: "anthropic", label: "Anthropic"},
 	{name: "gemini", label: "Gemini"},
@@ -105,6 +108,7 @@ func ProviderPresets() []ProviderPreset {
 		out = append(out, ProviderPreset{
 			Name: preset.name, Label: preset.label, BaseURL: preset.baseURL,
 			NeedType: preset.needType, APIKeyOptional: preset.apiKeyOptional,
+			SelfContained: preset.selfContained,
 		})
 	}
 	return out
@@ -153,6 +157,20 @@ func RunSetup() (Config, error) {
 				providerName = sp.name
 				pc = ProviderConfig{}
 				printStepDone("Provider", sp.label)
+				// Provider tự hoàn chỉnh (chatgpt-web): điền sẵn toàn bộ, nhảy thẳng bước ngôn ngữ.
+				if sp.selfContained {
+					pc.Type = "openai"
+					pc.API = "responses"
+					pc.APIKey = "local"
+					pc.BaseURL = sp.baseURL
+					modelName = "chatgpt-web/gpt-5.6-luna"
+					pc.Models = []ModelConfig{{Name: modelName, ContextWindow: 1050000}}
+					printStepDone("API Key", "Không cần (ChatGPT Web)")
+					printStepDone("Base URL", sp.baseURL)
+					printStepDone("Model", modelName)
+					step = 5
+					continue
+				}
 				// Proxy tùy chỉnh: hỏi thêm tên và loại giao thức API.
 				if sp.needType {
 					providerName, err = runTextInput("Tên Provider", "my-proxy", canBack)

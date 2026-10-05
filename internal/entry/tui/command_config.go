@@ -176,6 +176,12 @@ func (s *modelConfigState) applyProviderChoice(choice configProviderChoice) {
 	s.providerType = "" // Provider dựng sẵn ngầm định giao thức theo tên
 	s.baseURL = choice.preset.BaseURL
 	s.apiKeyOptional = choice.preset.APIKeyOptional
+	// chatgpt-web: điền sẵn giao thức + endpoint + model để khách chỉ cần bấm lưu.
+	if s.provider == "chatgpt-web" {
+		s.providerType = "openai"
+		s.api = "responses"
+		s.models = []bootstrap.ModelConfig{{Name: "chatgpt-web/gpt-5.6-luna", ContextWindow: 1050000}}
+	}
 	s.step = configStepHub
 }
 

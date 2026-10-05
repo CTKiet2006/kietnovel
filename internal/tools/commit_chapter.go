@@ -343,6 +343,24 @@ func (t *CommitChapterTool) Execute(_ context.Context, args json.RawMessage) (js
 			}
 		}
 		if len(a.ForeshadowUpdates) > 0 {
+			// Auto-heal: convert any advance on an unplanted foreshadow to plant
+			ledger, _ := t.store.World.LoadForeshadowLedger()
+			known := make(map[string]bool, len(ledger))
+			for _, e := range ledger {
+				known[e.ID] = true
+			}
+			for i := range a.ForeshadowUpdates {
+				u := &a.ForeshadowUpdates[i]
+				if u.Action == "plant" {
+					known[u.ID] = true
+				} else if u.Action == "advance" && !known[u.ID] {
+					u.Action = "plant"
+					if strings.TrimSpace(u.Description) == "" {
+						u.Description = u.ID
+					}
+					known[u.ID] = true
+				}
+			}
 			if err := t.store.World.UpdateForeshadow(a.Chapter, a.ForeshadowUpdates); err != nil {
 				return nil, fmt.Errorf("update foreshadow: %w: %w", errs.ErrStoreWrite, err)
 			}

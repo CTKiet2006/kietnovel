@@ -105,11 +105,18 @@ func (t *DraftChapterTool) Execute(_ context.Context, args json.RawMessage) (jso
 		}
 		inRewriteQueue := progress != nil && slices.Contains(progress.PendingRewrites, a.Chapter)
 		if !inRewriteQueue {
+			reason := fmt.Sprintf("第 %d 章已提交完成，不能覆盖", a.Chapter)
+			switch toolLang(t.store) {
+			case "vi":
+				reason = fmt.Sprintf("Chương %d đã nộp hoàn thành, không thể ghi đè", a.Chapter)
+			case "en":
+				reason = fmt.Sprintf("Chapter %d is already committed, cannot overwrite", a.Chapter)
+			}
 			return json.Marshal(map[string]any{
 				"chapter":   a.Chapter,
 				"skipped":   true,
 				"completed": true,
-				"reason":    fmt.Sprintf("第 %d 章已提交完成，不能覆盖", a.Chapter),
+				"reason":    reason,
 			})
 		}
 	}
@@ -137,7 +144,7 @@ func (t *DraftChapterTool) Execute(_ context.Context, args json.RawMessage) (jso
 			"chapter":    a.Chapter,
 			"mode":       "append",
 			"word_count": domain.WordCount(full),
-			"next_step":  "先 read_chapter(source=draft) 回读草稿，再调用 check_consistency，最后 commit_chapter",
+			"next_step":  nextStepHint(t.store),
 		})
 	default: // write
 		if err := t.store.Drafts.SaveDraft(a.Chapter, a.Content); err != nil {
@@ -154,7 +161,7 @@ func (t *DraftChapterTool) Execute(_ context.Context, args json.RawMessage) (jso
 			"chapter":    a.Chapter,
 			"mode":       "write",
 			"word_count": domain.WordCount(a.Content),
-			"next_step":  "先 read_chapter(source=draft) 回读草稿，再调用 check_consistency，最后 commit_chapter",
+			"next_step":  nextStepHint(t.store),
 		})
 	}
 }

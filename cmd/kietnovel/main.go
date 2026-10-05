@@ -9,6 +9,7 @@ import (
 
 	"github.com/CTKiet2006/kietnovel/assets"
 	"github.com/CTKiet2006/kietnovel/internal/bootstrap"
+	"github.com/CTKiet2006/kietnovel/internal/chatgptweb"
 	"github.com/CTKiet2006/kietnovel/internal/entry/headless"
 	"github.com/CTKiet2006/kietnovel/internal/entry/startup"
 	"github.com/CTKiet2006/kietnovel/internal/entry/tui"
@@ -146,6 +147,15 @@ func runWithConfig(cfg bootstrap.Config, opts cliOptions, args []string) {
 	// FillDefaults phải chạy trước khi tải asset: OutputDir là trường runtime, giá trị mặc định chuẩn hóa ở đây —
 	// nếu không, dưới cấu hình mặc định thì override văn phong cấp sách <thư mục sách>/style/ không bao giờ được tải.
 	cfg.FillDefaults()
+
+	// ChatGPT Web bridge: tự động khởi chạy khi provider là chatgpt-web.
+	if strings.ToLower(strings.TrimSpace(cfg.Provider)) == "chatgpt-web" {
+		if err := chatgptweb.EnsureReady(func(msg string) {
+			fmt.Fprintf(os.Stderr, "  %s\n", msg)
+		}); err != nil {
+			die("ChatGPT Web: %v", err)
+		}
+	}
 	// Ngôn ngữ giao diện TUI. Phải đặt trước mọi thứ gọi i18n.T, và trước khi dựng
 	// TUI, vì bảng dịch được tra khi render chứ không lúc khởi tạo struct.
 	// Giao diện và ngôn ngữ sáng tác là hai lựa chọn riêng. ui_language trống thì

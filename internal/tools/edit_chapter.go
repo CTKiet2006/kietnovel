@@ -146,14 +146,28 @@ func (t *EditChapterTool) Execute(ctx context.Context, args json.RawMessage) (js
 		return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, err)
 	}
 	if !completed {
-		return nil, fmt.Errorf("第 %d 章尚未完成，初稿禁止使用 edit_chapter；有硬伤请调用 draft_chapter(mode=\"write\", chapter=%d) 整章覆盖: %w", a.Chapter, a.Chapter, errs.ErrToolPrecondition)
+		switch toolLang(t.store) {
+		case "vi":
+			return nil, fmt.Errorf("Chương %d đang trong giai đoạn sơ thảo, cấm dùng edit_chapter. Nếu bản nháp đã xong, hãy gọi NGAY commit_chapter(chapter=%d) để nộp chương; chỉ khi nội dung có lỗi cứng mới dùng draft_chapter(mode=\"write\", chapter=%d) để ghi đè: %w", a.Chapter, a.Chapter, a.Chapter, errs.ErrToolPrecondition)
+		case "en":
+			return nil, fmt.Errorf("Chapter %d is a first draft; edit_chapter is forbidden. Call commit_chapter(chapter=%d) to submit; only call draft_chapter(mode=\"write\", chapter=%d) if flawed: %w", a.Chapter, a.Chapter, a.Chapter, errs.ErrToolPrecondition)
+		default:
+			return nil, fmt.Errorf("第 %d 章尚未完成，初稿禁止使用 edit_chapter；有硬伤请调用 draft_chapter(mode=\"write\", chapter=%d) 整章覆盖: %w", a.Chapter, a.Chapter, errs.ErrToolPrecondition)
+		}
 	}
 	progress, err := t.store.Progress.Load()
 	if err != nil {
 		return nil, fmt.Errorf("load progress: %w: %w", errs.ErrStoreRead, err)
 	}
 	if progress == nil || !slices.Contains(progress.PendingRewrites, a.Chapter) {
-		return nil, fmt.Errorf("第 %d 章已完成且不在 PendingRewrites 队列中，不能编辑；需修改请先由 editor 评审触发重写/打磨: %w", a.Chapter, errs.ErrToolPrecondition)
+		switch toolLang(t.store) {
+		case "vi":
+			return nil, fmt.Errorf("Chương %d đã hoàn thành và không nằm trong hàng đợi PendingRewrites, không thể sửa; muốn đổi phải chờ editor review kích hoạt viết lại/gọt giũa trước: %w", a.Chapter, errs.ErrToolPrecondition)
+		case "en":
+			return nil, fmt.Errorf("Chapter %d is completed and not in the PendingRewrites queue, cannot edit; ask the editor review to trigger a rewrite/polish first: %w", a.Chapter, errs.ErrToolPrecondition)
+		default:
+			return nil, fmt.Errorf("第 %d 章已完成且不在 PendingRewrites 队列中，不能编辑；需修改请先由 editor 评审触发重写/打磨: %w", a.Chapter, errs.ErrToolPrecondition)
+		}
 	}
 	if err := EnsureChapterExpanded(t.store, a.Chapter); err != nil {
 		return nil, err
@@ -192,7 +206,7 @@ func (t *EditChapterTool) Execute(ctx context.Context, args json.RawMessage) (js
 		return result, nil
 	}
 	passthrough["chapter"] = a.Chapter
-	passthrough["next_step"] = "edit 已落盘。仍有硬伤可再次 edit_chapter；否则 check_consistency 后 commit_chapter"
+	passthrough["next_step"] = editNextStepHint(t.store)
 	return json.Marshal(passthrough)
 }
 
@@ -213,7 +227,14 @@ func (t *EditChapterTool) ensureDraft(chapter int) error {
 		return fmt.Errorf("load chapter: %w: %w", errs.ErrStoreRead, err)
 	}
 	if text == "" {
-		return fmt.Errorf("第 %d 章无草稿也无终稿，请先调 draft_chapter(mode=write, chapter=%d) 创建初稿: %w", chapter, chapter, errs.ErrToolPrecondition)
+		switch toolLang(t.store) {
+		case "vi":
+			return fmt.Errorf("Chương %d chưa có bản nháp lẫn bản chính, hãy gọi draft_chapter(mode=write, chapter=%d) để tạo bản thảo trước: %w", chapter, chapter, errs.ErrToolPrecondition)
+		case "en":
+			return fmt.Errorf("Chapter %d has neither draft nor final text, call draft_chapter(mode=write, chapter=%d) to create the first draft: %w", chapter, chapter, errs.ErrToolPrecondition)
+		default:
+			return fmt.Errorf("第 %d 章无草稿也无终稿，请先调 draft_chapter(mode=write, chapter=%d) 创建初稿: %w", chapter, chapter, errs.ErrToolPrecondition)
+		}
 	}
 	if err := t.store.Drafts.SaveDraft(chapter, text); err != nil {
 		return fmt.Errorf("seed draft from chapter: %w: %w", errs.ErrStoreWrite, err)

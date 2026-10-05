@@ -37,11 +37,34 @@ func (t *CommitChapterTool) validateCommitArgs(a commitArgs) error {
 				}
 				at, known := plantedAt[update.ID]
 				if !known {
-					return fmt.Errorf("foreshadow_updates[%d] references unknown id %q: %w", i, update.ID, errs.ErrToolPrecondition)
+					if update.Action == "advance" {
+						// Auto-heal: model advanced a foreshadow not yet explicitly planted.
+						// Treat it as planted in the current chapter so writer is not rejected.
+						declared[update.ID] = struct{}{}
+						plantedAt[update.ID] = a.Chapter
+						continue
+					}
+					switch toolLang(t.store) {
+					case "vi":
+						return fmt.Errorf("foreshadow_updates[%d] trỏ tới id chưa từng gieo %q: hãy đổi action thành \"plant\" kèm description, hoặc gieo nó ở chương trước rồi mới advance/resolve: %w", i, update.ID, errs.ErrToolPrecondition)
+					case "en":
+						return fmt.Errorf("foreshadow_updates[%d] references unknown id %q: change action to \"plant\" with a description, or plant it in an earlier chapter before advance/resolve: %w", i, update.ID, errs.ErrToolPrecondition)
+					default:
+						return fmt.Errorf("foreshadow_updates[%d] references unknown id %q: %w", i, update.ID, errs.ErrToolPrecondition)
+					}
 				}
 				if at > a.Chapter {
-					return fmt.Errorf("foreshadow_updates[%d] 伏笔 %q 种植于第 %d 章，不能在第 %d 章推进或回收: %w",
-						i, update.ID, at, a.Chapter, errs.ErrToolPrecondition)
+					switch toolLang(t.store) {
+					case "vi":
+						return fmt.Errorf("foreshadow_updates[%d] phục bút %q mới gieo ở chương %d, không thể advance/resolve ở chương %d: hãy bỏ nó khỏi payload chương này: %w",
+							i, update.ID, at, a.Chapter, errs.ErrToolPrecondition)
+					case "en":
+						return fmt.Errorf("foreshadow_updates[%d] foreshadow %q is planted in chapter %d, cannot advance/resolve in chapter %d: drop it from this chapter payload: %w",
+							i, update.ID, at, a.Chapter, errs.ErrToolPrecondition)
+					default:
+						return fmt.Errorf("foreshadow_updates[%d] 伏笔 %q 种植于第 %d 章，不能在第 %d 章推进或回收: %w",
+							i, update.ID, at, a.Chapter, errs.ErrToolPrecondition)
+					}
 				}
 			}
 		}

@@ -157,7 +157,7 @@ func (pc ProviderConfig) StreamIdleTimeoutValue() (time.Duration, error) {
 // phải cho cùng kết quả — không thì bị chặn ở tầng cấu hình dù chạy được ở tầng LLM.
 func (pc ProviderConfig) RequiresAPIKey(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "ollama", "bedrock":
+	case "ollama", "bedrock", "chatgpt-web":
 		return false
 	}
 	return pc.Type == ""

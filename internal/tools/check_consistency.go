@@ -73,9 +73,17 @@ func (t *CheckConsistencyTool) Execute(_ context.Context, args json.RawMessage) 
 
 	result := map[string]any{"chapter": a.Chapter}
 	var warnings []string
+	lang := toolLang(t.store)
 	warn := func(scope string, err error) {
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s 读取失败: %v", scope, err))
+			switch lang {
+			case "vi":
+				warnings = append(warnings, fmt.Sprintf("%s đọc thất bại: %v", scope, err))
+			case "en":
+				warnings = append(warnings, fmt.Sprintf("%s read failed: %v", scope, err))
+			default:
+				warnings = append(warnings, fmt.Sprintf("%s 读取失败: %v", scope, err))
+			}
 		}
 	}
 
