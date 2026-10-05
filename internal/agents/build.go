@@ -207,9 +207,26 @@ func BuildWorkers(
 		}
 	}
 	architectThinking, _ := ResolveThinkingForModel(architectModel, roleThinking(cfg, "architect"))
+	archShortDesc := "短篇规划师：为单卷、单冲突、高密度故事生成紧凑设定与扁平大纲"
+	archLongDesc := "长篇规划师：为连载型、可持续升级的故事生成分层设定与卷弧大纲"
+	writerDesc := "创作者：自主完成一章的构思、写作、自审和提交"
+	editorDesc := "审阅者：阅读原文，从结构和审美两个层面发现问题"
+	switch strings.ToLower(strings.TrimSpace(bundle.Language)) {
+	case "vi":
+		archShortDesc = "Quy hoạch truyện ngắn: Xây dựng thiết lập cô đọng và dàn ý phẳng cho truyện đơn quyển, đơn xung đột, mật độ cao"
+		archLongDesc = "Quy hoạch trường thiên: Xây dựng thiết lập phân tầng và dàn ý quyển/arc cho truyện dài kỳ có thể nâng cấp liên tục"
+		writerDesc = "Người sáng tác: Tự chủ hoàn thành khâu lên ý tưởng, viết chính văn, tự duyệt và nộp chương"
+		editorDesc = "Người thẩm định: Đọc nguyên văn, phát hiện vấn đề từ hai cấp độ cấu trúc và thẩm mỹ"
+	case "en":
+		archShortDesc = "Short-form architect: Generates compact settings and flat outlines for single-volume, high-density stories"
+		archLongDesc = "Long-form architect: Generates layered settings and volume/arc outlines for serialized, upgradable stories"
+		writerDesc = "Writer: Autonomously conceptualizes, writes, self-audits, and commits chapters"
+		editorDesc = "Editor: Reads source prose, identifying structural and aesthetic issues"
+	}
+
 	architectShort := subagent.Config{
 		Name:                  "architect_short",
-		Description:           "短篇规划师：为单卷、单冲突、高密度故事生成紧凑设定与扁平大纲",
+		Description:           archShortDesc,
 		Model:                 architectModel,
 		SystemPrompt:          bundle.Prompts.ArchitectShort,
 		Tools:                 architectTools,
@@ -227,7 +244,7 @@ func BuildWorkers(
 	}
 	architectLong := subagent.Config{
 		Name:                  "architect_long",
-		Description:           "长篇规划师：为连载型、可持续升级的故事生成分层设定与卷弧大纲",
+		Description:           archLongDesc,
 		Model:                 architectModel,
 		SystemPrompt:          bundle.Prompts.ArchitectLong,
 		Tools:                 architectLongTools,
@@ -251,7 +268,7 @@ func BuildWorkers(
 
 	writer := subagent.Config{
 		Name:             "writer",
-		Description:      "创作者：自主完成一章的构思、写作、自审和提交",
+		Description:      writerDesc,
 		Model:            writerModel,
 		SystemPrompt:     writerPrompt,
 		Tools:            writerTools,
@@ -297,7 +314,7 @@ func BuildWorkers(
 
 	editor := subagent.Config{
 		Name:                  "editor",
-		Description:           "审阅者：阅读原文，从结构和审美两个层面发现问题",
+		Description:           editorDesc,
 		Model:                 editorModel,
 		SystemPrompt:          bundle.Prompts.Editor,
 		Tools:                 editorTools,

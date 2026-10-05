@@ -96,7 +96,18 @@ func (t *AuditFoundationTool) Execute(_ context.Context, args json.RawMessage) (
 		"issues":           audit.Issues,
 	}
 	if !audit.Ready {
-		result["next_action"] = "按 issues 修正对应基础设定，重新调用 novel_context 后再次审查"
+		nextAction := "按 issues 修正对应基础设定，重新调用 novel_context 后再次审查"
+		lang := ""
+		if t.store != nil && t.store.BookLanguage != nil {
+			lang, _ = t.store.BookLanguage.Load()
+		}
+		switch strings.ToLower(strings.TrimSpace(lang)) {
+		case "vi":
+			nextAction = "Sửa đổi các thiết lập cơ bản tương ứng theo issues, gọi lại novel_context rồi thẩm định lại"
+		case "en":
+			nextAction = "Fix corresponding foundation settings according to issues, call novel_context again and re-audit"
+		}
+		result["next_action"] = nextAction
 		return json.Marshal(result)
 	}
 

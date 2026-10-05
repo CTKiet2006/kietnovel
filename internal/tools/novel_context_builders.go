@@ -3,6 +3,7 @@ package tools
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/rules"
@@ -478,7 +479,18 @@ func (t *ContextTool) buildChapterWorkingMemory(envelope *chapterContextEnvelope
 		if volumes, err := t.store.Outline.LoadLayeredOutline(); err == nil {
 			if fv := domain.FinaleVolume(volumes); fv > 0 {
 				if b, boundaryErr := t.store.Outline.CheckArcBoundary(state.chapter); boundaryErr == nil && b != nil && b.Volume == fv {
-					envelope.Working["finale"] = "本卷为全书收官卷：不再新开长线或埋新伏笔，优先回收既有伏笔、收拢关系线，按大纲把故事推向终局。"
+					finaleMsg := "本卷为全书收官卷：不再新开长线或埋新伏笔，优先回收既有伏笔、收拢关系线，按大纲把故事推向终局。"
+					lang := ""
+					if t.store != nil && t.store.BookLanguage != nil {
+						lang, _ = t.store.BookLanguage.Load()
+					}
+					switch strings.ToLower(strings.TrimSpace(lang)) {
+					case "vi":
+						finaleMsg = "Quyển này là quyển kết của toàn bộ truyện: không mở thêm tuyến dài hạn hoặc gài phục bút mới, ưu tiên thu hồi các phục bút đã có, thu gọn các tuyến quan hệ, đưa câu chuyện đến hồi kết theo dàn ý."
+					case "en":
+						finaleMsg = "This volume is the final volume of the book: do not introduce new long-term threads or foreshadowing; prioritize resolving existing seeds and character arcs, driving the story to its conclusion per the outline."
+					}
+					envelope.Working["finale"] = finaleMsg
 				} else {
 					reads.require("arc_boundary", boundaryErr)
 				}

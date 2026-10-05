@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/CTKiet2006/kietnovel/internal/domain"
 	"github.com/CTKiet2006/kietnovel/internal/errs"
@@ -90,10 +91,22 @@ func (t *PlanChapterTool) Execute(_ context.Context, args json.RawMessage) (json
 		return nil, fmt.Errorf("checkpoint chapter plan: %w", err)
 	}
 
+	nextStep := "立即调用 draft_chapter(chapter=本章节号, content=完整正文字符串) 写入正文，不要重复规划同一章"
+	lang := ""
+	if t.store != nil && t.store.BookLanguage != nil {
+		lang, _ = t.store.BookLanguage.Load()
+	}
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "vi":
+		nextStep = "Gọi ngay draft_chapter(chapter=số chương, content=nội dung chương đầy đủ) để viết chính văn, không lặp lại kế hoạch của cùng một chương"
+	case "en":
+		nextStep = "Call draft_chapter(chapter=chapter_number, content=full_prose_string) to write prose immediately; do not replan the same chapter"
+	}
+
 	return json.Marshal(map[string]any{
 		"planned":   true,
 		"chapter":   plan.Chapter,
-		"next_step": "立即调用 draft_chapter(chapter=本章节号, content=完整正文字符串) 写入正文，不要重复规划同一章",
+		"next_step": nextStep,
 	})
 }
 

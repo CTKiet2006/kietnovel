@@ -98,7 +98,7 @@ func LoadWithLanguage(language, style string, opts LoadOptions) Bundle {
 		voiceFile = "voice_zh.md"
 	}
 	return Bundle{
-		References: loadReferences(style, opts),
+		References: loadReferencesForLanguage(style, lang, opts),
 		Prompts:    loadPromptsForLanguage(lang),
 		Styles:     loadStyles(opts),
 		Voice:      resolveAppendable(mustRead(voiceFS, voiceFile), "voice.md", opts),
@@ -237,22 +237,26 @@ func readOverride(dir, name string) string {
 var styleNameRe = regexp.MustCompile(`^[a-z0-9-]+$`)
 
 func loadReferences(style string, opts LoadOptions) tools.References {
+	return loadReferencesForLanguage(style, "zh", opts)
+}
+
+func loadReferencesForLanguage(style, lang string, opts LoadOptions) tools.References {
 	if style == "" {
 		style = "default"
 	}
 	refs := tools.References{
-		ChapterGuide:      mustRead(referencesFS, "references/chapter-guide.md"),
-		HookTechniques:    mustRead(referencesFS, "references/hook-techniques.md"),
-		QualityChecklist:  mustRead(referencesFS, "references/quality-checklist.md"),
-		OutlineTemplate:   mustRead(referencesFS, "references/outline-template.md"),
-		CharacterTemplate: mustRead(referencesFS, "references/character-template.md"),
-		ChapterTemplate:   mustRead(referencesFS, "references/chapter-template.md"),
-		Consistency:       mustRead(referencesFS, "references/consistency.md"),
-		ContentExpansion:  mustRead(referencesFS, "references/content-expansion.md"),
-		DialogueWriting:   mustRead(referencesFS, "references/dialogue-writing.md"),
-		LongformPlanning:  mustRead(referencesFS, "references/longform-planning.md"),
-		Differentiation:   mustRead(referencesFS, "references/differentiation.md"),
-		AntiAITone:        resolveAppendable(mustRead(referencesFS, "references/anti-ai-tone.md"), "anti-ai-tone.md", opts),
+		ChapterGuide:      referenceForLanguage("chapter-guide", lang),
+		HookTechniques:    referenceForLanguage("hook-techniques", lang),
+		QualityChecklist:  referenceForLanguage("quality-checklist", lang),
+		OutlineTemplate:   referenceForLanguage("outline-template", lang),
+		CharacterTemplate: referenceForLanguage("character-template", lang),
+		ChapterTemplate:   referenceForLanguage("chapter-template", lang),
+		Consistency:       referenceForLanguage("consistency", lang),
+		ContentExpansion:  referenceForLanguage("content-expansion", lang),
+		DialogueWriting:   referenceForLanguage("dialogue-writing", lang),
+		LongformPlanning:  referenceForLanguage("longform-planning", lang),
+		Differentiation:   referenceForLanguage("differentiation", lang),
+		AntiAITone:        resolveAppendable(referenceForLanguage("anti-ai-tone", lang), "anti-ai-tone.md", opts),
 	}
 	if style != "" && style != "default" {
 		genreDir := "references/genres/" + style + "/"
@@ -274,6 +278,16 @@ func loadReferences(style string, opts LoadOptions) tools.References {
 	return refs
 }
 
+func referenceForLanguage(baseName, lang string) string {
+	if lang != "" && lang != "zh" {
+		langPath := fmt.Sprintf("references/%s_%s.md", baseName, lang)
+		if data, err := referencesFS.ReadFile(langPath); err == nil && len(data) > 0 {
+			return string(data)
+		}
+	}
+	return mustRead(referencesFS, fmt.Sprintf("references/%s.md", baseName))
+}
+
 func promptForLanguage(baseName, lang string) string {
 	if lang != "" && lang != "zh" {
 		langPath := fmt.Sprintf("prompts/%s_%s.md", baseName, lang)
@@ -290,10 +304,10 @@ func loadPrompts() Prompts {
 
 func loadPromptsForLanguage(lang string) Prompts {
 	return Prompts{
-		ArchitectShort:   WithSimulationGuidance(promptForLanguage("architect-short", lang), "architect"),
-		ArchitectLong:    WithSimulationGuidance(promptForLanguage("architect-long", lang), "architect"),
-		Writer:           WithSimulationGuidance(promptForLanguage("writer", lang), "writer"),
-		Editor:           WithSimulationGuidance(promptForLanguage("editor", lang), "editor"),
+		ArchitectShort:   WithSimulationGuidanceForLanguage(promptForLanguage("architect-short", lang), "architect", lang),
+		ArchitectLong:    WithSimulationGuidanceForLanguage(promptForLanguage("architect-long", lang), "architect", lang),
+		Writer:           WithSimulationGuidanceForLanguage(promptForLanguage("writer", lang), "writer", lang),
+		Editor:           WithSimulationGuidanceForLanguage(promptForLanguage("editor", lang), "editor", lang),
 		ImportSegment:    mustRead(promptsFS, "prompts/import-segment.md"),
 		ImportAnalyze:    mustRead(promptsFS, "prompts/import-analyze.md"),
 		ImportSynthesize: mustRead(promptsFS, "prompts/import-synthesize.md"),
@@ -311,7 +325,35 @@ func loadPromptsForLanguage(lang string) Prompts {
 // WithSimulationGuidance appends the simulation-profile guidance to core prompts. Exported so eval and
 // other external callers can reuse it for variant overrides, keeping an overridden prompt equivalent to the baseline Load produces (same wrapping path).
 func WithSimulationGuidance(prompt, role string) string {
-	return prompt + "\n\n" + strings.ReplaceAll(simulationGuidance, "{{role}}", role)
+	return WithSimulationGuidanceForLanguage(prompt, role, "zh")
+}
+
+// WithSimulationGuidanceForLanguage appends localized simulation-profile guidance to core prompts.
+func WithSimulationGuidanceForLanguage(prompt, role, lang string) string {
+	return prompt + "\n\n" + strings.ReplaceAll(simulationGuidanceForLanguage(lang), "{{role}}", role)
+}
+
+func simulationGuidanceForLanguage(lang string) string {
+	switch strings.ToLower(strings.TrimSpace(lang)) {
+	case "vi":
+		return `## Hồ sơ mô phỏng (Simulation Profile)
+
+Khi trong planning_memory hoặc working_memory của novel_context xuất hiện simulation_profile, bắt buộc phải coi đó là định hướng mô phỏng văn phong của tác phẩm. {{role}} cần đọc kỹ các mục style, lexicon, plot_design, hook_design, pacing_density, reader_engagement và role_guidance.
+
+Nguyên tắc sử dụng: học hỏi cấu trúc, nhịp điệu, móc câu, cách giải phóng thông tin và kỹ thuật cuốn hút độc giả; không sao chép nguyên văn câu từ, nhân vật, địa danh, thiết lập riêng hay tình tiết cố định từ bản gốc. Nếu simulation_profile xung đột với yêu cầu tường minh của người dùng, ưu tiên tuân thủ yêu cầu của người dùng.`
+	case "en":
+		return `## Simulation Profile
+
+When simulation_profile is present in planning_memory or working_memory within novel_context, treat it as the stylistic emulation guide for this work. {{role}} should inspect style, lexicon, plot_design, hook_design, pacing_density, reader_engagement, and role_guidance.
+
+Principles: emulate structure, pacing, hooks, information release, and engagement techniques; never copy verbatim sentences, character names, locations, unique settings, or stock plot points. If simulation_profile conflicts with explicit user instructions, user instructions take precedence.`
+	default:
+		return `## 仿写画像
+
+当 novel_context 的 planning_memory 或 working_memory 中存在 simulation_profile 时，必须把它视为当前作品的仿写方向约束。{{role}} 应读取其中的 style、lexicon、plot_design、hook_design、pacing_density、reader_engagement 和 role_guidance。
+
+使用原则：借鉴结构、节奏、钩子、信息释放和吸引读者的手法；不要复制原文句子、人物、地名、专有设定或固定桥段。若 simulation_profile 与用户显式要求冲突，优先服从用户要求。`
+	}
 }
 
 // OverridePrompt replaces the role prompt for the given prompt file in the bundle with raw, running it

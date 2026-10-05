@@ -145,7 +145,15 @@ func (t *ContextTool) Execute(_ context.Context, args json.RawMessage) (json.Raw
 		t.buildChapterContext(result, state, reads)
 		// episodic is a memo of what has already been written into the body, not material still to be written.
 		if epi, ok := result["episodic_memory"].(map[string]any); ok && len(epi) > 0 {
-			epi["_usage"] = "本容器为已写入正文的事实备忘（供一致性与衔接对照）；在新章正文中原样复述这些内容属于重复缺陷"
+			usageMsg := "本容器为已写入正文的事实备忘（供一致性与衔接对照）；在新章正文中原样复述这些内容属于重复缺陷"
+			lang := t.bookLanguage()
+			switch strings.ToLower(strings.TrimSpace(lang)) {
+			case "vi":
+				usageMsg = "Bộ nhớ này là dữ kiện ghi nhớ đã viết vào chính văn (dùng để đối chiếu tính nhất quán và tiếp nối mạch truyện); việc lặp lại nguyên văn những nội dung này trong chương mới bị coi là lỗi trùng lặp"
+			case "en":
+				usageMsg = "This container is a memory of committed facts (for consistency and continuity checks); repeating this verbatim in new chapters is considered a redundancy defect"
+			}
+			epi["_usage"] = usageMsg
 		}
 	} else {
 		// Architect path: return only state + structured data, without loading the full raw text
@@ -175,7 +183,7 @@ func (t *ContextTool) Execute(_ context.Context, args json.RawMessage) (json.Raw
 	}
 
 	// The tool layer only makes task-relevant semantic choices; the context volume is managed by each Worker against the real model window.
-	result["_loading_summary"] = buildLoadingSummary(result, a.Chapter)
+	result["_loading_summary"] = buildLoadingSummary(result, a.Chapter, t.bookLanguage())
 
 	data, err := json.Marshal(result)
 	if err != nil {
@@ -184,8 +192,17 @@ func (t *ContextTool) Execute(_ context.Context, args json.RawMessage) (json.Raw
 	return data, nil
 }
 
+func (t *ContextTool) bookLanguage() string {
+	if t.store != nil && t.store.BookLanguage != nil {
+		if l, err := t.store.BookLanguage.Load(); err == nil && l != "" {
+			return l
+		}
+	}
+	return ""
+}
+
 // buildLoadingSummary tallies the size of each data item in the assembled result and produces a one-line readable summary.
-func buildLoadingSummary(result map[string]any, chapter int) string {
+func buildLoadingSummary(result map[string]any, chapter int, lang string) string {
 	var parts []string
 	working, _ := result["working_memory"].(map[string]any)
 	episodic, _ := result["episodic_memory"].(map[string]any)
@@ -210,86 +227,120 @@ func buildLoadingSummary(result map[string]any, chapter int) string {
 	}
 
 	var items []string
+	isVi := strings.EqualFold(lang, "vi")
+	isEn := strings.EqualFold(lang, "en")
+
+	lbl := func(vi, en, zh string, count any) string {
+		if isVi {
+			return fmt.Sprintf("%s:%v", vi, count)
+		}
+		if isEn {
+			return fmt.Sprintf("%s:%v", en, count)
+		}
+		return fmt.Sprintf("%s:%v", zh, count)
+	}
+
+	tag := func(vi, en, zh string) string {
+		if isVi {
+			return vi
+		}
+		if isEn {
+			return en
+		}
+		return zh
+	}
 
 	if n := firstSliceLen(episodic["character_snapshots"], foundation["character_snapshots"]); n > 0 {
-		items = append(items, fmt.Sprintf("角色:%d(快照)", n))
+		items = append(items, lbl("nhân vật(snapshot)", "characters(snap)", "角色", fmt.Sprintf("%d(快照)", n)))
 	} else if n := firstSliceLen(episodic["characters"], foundation["characters"]); n > 0 {
-		items = append(items, fmt.Sprintf("角色:%d", n))
+		items = append(items, lbl("nhân vật", "characters", "角色", n))
 	}
 
 	if len(working) > 0 {
-		items = append(items, fmt.Sprintf("工作记忆:%d", len(working)))
+		items = append(items, lbl("bộ nhớ làm việc", "working_mem", "工作记忆", len(working)))
 	}
 	if len(episodic) > 0 {
-		items = append(items, fmt.Sprintf("情节记忆:%d", len(episodic)))
+		items = append(items, lbl("bộ nhớ tình tiết", "episodic_mem", "情节记忆", len(episodic)))
 	}
 	if len(planning) > 0 {
-		items = append(items, fmt.Sprintf("规划记忆:%d", len(planning)))
+		items = append(items, lbl("bộ nhớ quy hoạch", "planning_mem", "规划记忆", len(planning)))
 	}
 	if len(foundation) > 0 {
-		items = append(items, fmt.Sprintf("基础记忆:%d", len(foundation)))
+		items = append(items, lbl("bộ nhớ cơ bản", "foundation_mem", "基础记忆", len(foundation)))
 	}
 
 	if n := firstSliceLen(working["volume_summaries"], planning["volume_summaries"]); n > 0 {
-		items = append(items, fmt.Sprintf("卷摘要:%d", n))
+		items = append(items, lbl("tóm tắt quyển", "volume_summaries", "卷摘要", n))
 	}
 	if n := firstSliceLen(working["arc_summaries"], planning["arc_summaries"]); n > 0 {
-		items = append(items, fmt.Sprintf("弧摘要:%d", n))
+		items = append(items, lbl("tóm tắt arc", "arc_summaries", "弧摘要", n))
 	}
 	if n := sliceLen(working["recent_summaries"]); n > 0 {
-		items = append(items, fmt.Sprintf("章摘要:%d", n))
+		items = append(items, lbl("tóm tắt chương", "chapter_summaries", "章摘要", n))
 	}
 
 	if n := sliceLen(planning["layered_outline"]); n > 0 {
-		items = append(items, fmt.Sprintf("分层大纲:%d卷", n))
+		if isVi {
+			items = append(items, fmt.Sprintf("dàn ý phân tầng:%d quyển", n))
+		} else if isEn {
+			items = append(items, fmt.Sprintf("layered_outline:%d vols", n))
+		} else {
+			items = append(items, fmt.Sprintf("分层大纲:%d卷", n))
+		}
 	}
 
 	if n := sliceLen(working["timeline"]); n > 0 {
-		items = append(items, fmt.Sprintf("时间线:%d", n))
+		items = append(items, lbl("dòng thời gian", "timeline", "时间线", n))
 	}
 	if n := firstSliceLen(episodic["foreshadow_ledger"], foundation["foreshadow_ledger"]); n > 0 {
-		items = append(items, fmt.Sprintf("伏笔:%d", n))
+		items = append(items, lbl("phục bút", "foreshadow", "伏笔", n))
 	}
 	if n := sliceLen(episodic["relationship_state"]); n > 0 {
-		items = append(items, fmt.Sprintf("关系:%d", n))
+		items = append(items, lbl("quan hệ", "relationships", "关系", n))
 	}
 	if n := sliceLen(episodic["recent_state_changes"]); n > 0 {
-		items = append(items, fmt.Sprintf("状态变化:%d", n))
+		items = append(items, lbl("biến động trạng thái", "state_changes", "状态变化", n))
 	}
 	if _, ok := working["previous_tail"]; ok {
-		items = append(items, "前章尾部:ok")
+		items = append(items, tag("đuôi chương trước:ok", "previous_tail:ok", "前章尾部:ok"))
 	}
 	if _, ok := referencePack["style_rules"]; ok {
-		items = append(items, "风格规则:ok")
+		items = append(items, tag("quy tắc văn phong:ok", "style_rules:ok", "风格规则:ok"))
 	}
 	if n := sliceLen(episodic["related_chapters"]); n > 0 {
-		items = append(items, fmt.Sprintf("相关章:%d", n))
+		items = append(items, lbl("chương liên quan", "related_chapters", "相关章", n))
 	}
 	if selected, ok := result["selected_memory"].(map[string]any); ok && len(selected) > 0 {
 		if n := sliceLen(selected["story_threads"]); n > 0 {
-			items = append(items, fmt.Sprintf("线索召回:%d", n))
+			items = append(items, lbl("truy hồi manh mối", "threads_recalled", "线索召回", n))
 		}
 		if n := sliceLen(selected["review_lessons"]); n > 0 {
-			items = append(items, fmt.Sprintf("评审召回:%d", n))
+			items = append(items, lbl("truy hồi thẩm định", "reviews_recalled", "评审召回", n))
 		}
 	}
 
 	if refs, ok := referencePack["references"].(map[string]string); ok && len(refs) > 0 {
-		items = append(items, fmt.Sprintf("参考:%d项", len(refs)))
+		if isVi {
+			items = append(items, fmt.Sprintf("tham khảo:%d mục", len(refs)))
+		} else if isEn {
+			items = append(items, fmt.Sprintf("refs:%d", len(refs)))
+		} else {
+			items = append(items, fmt.Sprintf("参考:%d项", len(refs)))
+		}
 	}
 	if len(referencePack) > 0 {
-		items = append(items, fmt.Sprintf("参考包:%d", len(referencePack)))
+		items = append(items, lbl("gói tham khảo", "ref_pack", "参考包", len(referencePack)))
 	}
 	if _, ok := result["memory_policy"]; ok {
-		items = append(items, "记忆策略:ok")
+		items = append(items, tag("chiến lược bộ nhớ:ok", "memory_policy:ok", "记忆策略:ok"))
 	}
 	if _, ok := working["simulation_profile"]; ok {
-		items = append(items, "仿写画像:ok")
+		items = append(items, tag("hồ sơ mô phỏng:ok", "simulation_profile:ok", "仿写画像:ok"))
 	} else if _, ok := planning["simulation_profile"]; ok {
-		items = append(items, "仿写画像:ok")
+		items = append(items, tag("hồ sơ mô phỏng:ok", "simulation_profile:ok", "仿写画像:ok"))
 	}
 	if warnings, ok := result["_warnings"].([]string); ok && len(warnings) > 0 {
-		items = append(items, fmt.Sprintf("告警:%d", len(warnings)))
+		items = append(items, lbl("cảnh báo", "warnings", "告警", len(warnings)))
 	}
 	if len(items) > 0 {
 		parts = append(parts, strings.Join(items, " "))
@@ -553,10 +604,17 @@ func (t *ContextTool) buildRelatedChapters(
 		outlineText += " " + s
 	}
 
+	lang := t.bookLanguage()
 	// 1. Foreshadowing lookback: whether an active foreshadowing item's description relates to the current chapter's outline
 	for _, f := range foreshadow {
 		if strings.Contains(outlineText, f.ID) || containsAny(outlineText, strings.Fields(f.Description)) {
-			add(f.PlantedAt, fmt.Sprintf("伏笔%s(%s)埋设章", f.ID, utils.TruncateRunes(f.Description, 15)))
+			msg := fmt.Sprintf("伏笔%s(%s)埋设章", f.ID, utils.TruncateRunes(f.Description, 15))
+			if strings.EqualFold(lang, "vi") {
+				msg = fmt.Sprintf("Chương gài phục bút %s (%s)", f.ID, utils.TruncateRunes(f.Description, 15))
+			} else if strings.EqualFold(lang, "en") {
+				msg = fmt.Sprintf("Chapter planting seed %s (%s)", f.ID, utils.TruncateRunes(f.Description, 15))
+			}
+			add(f.PlantedAt, msg)
 		}
 		if len(results) >= maxResults {
 			break
@@ -579,7 +637,13 @@ func (t *ContextTool) buildRelatedChapters(
 				break
 			}
 			if ch, ok := appearances[name]; ok {
-				add(ch, fmt.Sprintf("角色'%s'最后出场章", name))
+				msg := fmt.Sprintf("角色'%s'最后出场章", name)
+				if strings.EqualFold(lang, "vi") {
+					msg = fmt.Sprintf("Chương xuất hiện gần nhất của nhân vật '%s'", name)
+				} else if strings.EqualFold(lang, "en") {
+					msg = fmt.Sprintf("Last appearance of '%s'", name)
+				}
+				add(ch, msg)
 			}
 		}
 	}
@@ -591,7 +655,13 @@ func (t *ContextTool) buildRelatedChapters(
 		}
 		ch := findLastStateChange(stateChanges, name, chapter)
 		if ch > 0 && ch <= chapter-recentWindow {
-			add(ch, fmt.Sprintf("'%s'状态变化章", name))
+			msg := fmt.Sprintf("'%s'状态变化章", name)
+			if strings.EqualFold(lang, "vi") {
+				msg = fmt.Sprintf("Chương biến động trạng thái của '%s'", name)
+			} else if strings.EqualFold(lang, "en") {
+				msg = fmt.Sprintf("State change of '%s'", name)
+			}
+			add(ch, msg)
 		}
 	}
 
@@ -608,7 +678,13 @@ func (t *ContextTool) buildRelatedChapters(
 			_, aIn := charSet[r.CharacterA]
 			_, bIn := charSet[r.CharacterB]
 			if aIn && bIn {
-				add(r.Chapter, fmt.Sprintf("%s-%s关系变化", r.CharacterA, r.CharacterB))
+				msg := fmt.Sprintf("%s-%s关系变化", r.CharacterA, r.CharacterB)
+				if strings.EqualFold(lang, "vi") {
+					msg = fmt.Sprintf("Biến động quan hệ %s-%s", r.CharacterA, r.CharacterB)
+				} else if strings.EqualFold(lang, "en") {
+					msg = fmt.Sprintf("Relationship change %s-%s", r.CharacterA, r.CharacterB)
+				}
+				add(r.Chapter, msg)
 			}
 		}
 	}
@@ -679,16 +755,26 @@ func (t *ContextTool) selectStoryThreads(state contextBuildState) []domain.Recal
 	// 1. Relevance recall: foreshadowing items overlapping the current chapter's focus words.
 	focusTerms := recallFocusTerms(state.currentEntry, state.chapterPlan)
 	focusText := strings.Join(focusTerms, " ")
+	lang := t.bookLanguage()
 	for _, entry := range state.foreshadow {
 		if !matchesRecallTerms(entry.ID+" "+entry.Description, focusTerms) && !strings.Contains(focusText, entry.ID) {
 			continue
+		}
+		reason := "当前章可能需要承接既有伏笔"
+		summary := fmt.Sprintf("伏笔“%s”埋于第%d章：%s", entry.ID, entry.PlantedAt, utils.TruncateRunes(entry.Description, 30))
+		if strings.EqualFold(lang, "vi") {
+			reason = "Chương hiện tại có thể cần tiếp nối phục bút đã có"
+			summary = fmt.Sprintf("Phục bút \"%s\" gài ở chương %d: %s", entry.ID, entry.PlantedAt, utils.TruncateRunes(entry.Description, 30))
+		} else if strings.EqualFold(lang, "en") {
+			reason = "Current chapter may need to advance active foreshadowing"
+			summary = fmt.Sprintf("Seed \"%s\" planted in chapter %d: %s", entry.ID, entry.PlantedAt, utils.TruncateRunes(entry.Description, 30))
 		}
 		add(domain.RecallItem{
 			Kind:    "story_thread",
 			Key:     entry.ID,
 			Chapter: entry.PlantedAt,
-			Reason:  "当前章可能需要承接既有伏笔",
-			Summary: fmt.Sprintf("伏笔“%s”埋于第%d章：%s", entry.ID, entry.PlantedAt, utils.TruncateRunes(entry.Description, 30)),
+			Reason:  reason,
+			Summary: summary,
 		})
 		if len(items) >= maxThreads {
 			return items
@@ -698,12 +784,21 @@ func (t *ContextTool) selectStoryThreads(state contextBuildState) []domain.Recal
 	// 2. Age backfill: foreshadowing items unrelated to the current chapter but left hanging a long time without being resolved (oldest first), filling the remaining slots.
 	//    This backfills the natural blind spot of relevance recall -- the thread that hangs alone for too long without ever hitting a keyword in this chapter.
 	for _, entry := range agingForeshadow(state.foreshadow, state.chapter, picked) {
+		reason := "伏笔久挂未回收，注意适时推进或回收"
+		summary := fmt.Sprintf("伏笔“%s”埋于第%d章，已 %d 章未回收：%s", entry.ID, entry.PlantedAt, state.chapter-entry.PlantedAt, utils.TruncateRunes(entry.Description, 30))
+		if strings.EqualFold(lang, "vi") {
+			reason = "Phục bút đã lâu chưa thu hồi, chú ý thúc đẩy hoặc thu hồi đúng lúc"
+			summary = fmt.Sprintf("Phục bút \"%s\" gài ở chương %d, đã %d chương chưa thu hồi: %s", entry.ID, entry.PlantedAt, state.chapter-entry.PlantedAt, utils.TruncateRunes(entry.Description, 30))
+		} else if strings.EqualFold(lang, "en") {
+			reason = "Foreshadowing pending for long, consider advancing or resolving"
+			summary = fmt.Sprintf("Seed \"%s\" planted in chapter %d, unresolved for %d chapters: %s", entry.ID, entry.PlantedAt, state.chapter-entry.PlantedAt, utils.TruncateRunes(entry.Description, 30))
+		}
 		add(domain.RecallItem{
 			Kind:    "story_thread",
 			Key:     entry.ID,
 			Chapter: entry.PlantedAt,
-			Reason:  "伏笔久挂未回收，注意适时推进或回收",
-			Summary: fmt.Sprintf("伏笔“%s”埋于第%d章，已 %d 章未回收：%s", entry.ID, entry.PlantedAt, state.chapter-entry.PlantedAt, utils.TruncateRunes(entry.Description, 30)),
+			Reason:  reason,
+			Summary: summary,
 		})
 		if len(items) >= maxThreads {
 			break
@@ -748,17 +843,27 @@ func (t *ContextTool) selectReviewLessons(chapter int, reads *contextReads) []do
 		items = append(items, item)
 	}
 
+	lang := t.bookLanguage()
 	appendReview := func(review *domain.ReviewEntry) bool {
 		if review == nil {
 			return false
 		}
 		for i, miss := range review.ContractMisses {
+			reason := "最近审阅指出 contract 漏项"
+			summary := fmt.Sprintf("第%d章 contract 漏项：%s", review.Chapter, miss)
+			if strings.EqualFold(lang, "vi") {
+				reason = "Đánh giá gần nhất chỉ ra thiếu sót trong khế ước"
+				summary = fmt.Sprintf("Khế ước chương %d bị thiếu: %s", review.Chapter, miss)
+			} else if strings.EqualFold(lang, "en") {
+				reason = "Recent review noted contract omission"
+				summary = fmt.Sprintf("Chapter %d contract omission: %s", review.Chapter, miss)
+			}
 			add(domain.RecallItem{
 				Kind:    "review_lesson",
 				Key:     fmt.Sprintf("review-%d-contract-%d", review.Chapter, i),
 				Chapter: review.Chapter,
-				Reason:  "最近审阅指出 contract 漏项",
-				Summary: fmt.Sprintf("第%d章 contract 漏项：%s", review.Chapter, miss),
+				Reason:  reason,
+				Summary: summary,
 			})
 			if len(items) >= 3 {
 				return true
@@ -767,12 +872,21 @@ func (t *ContextTool) selectReviewLessons(chapter int, reads *contextReads) []do
 		for i, issue := range review.Issues {
 			switch issue.Severity {
 			case "", "warning", "error", "critical":
+				reason := "最近审阅指出需要避免重复问题"
+				summary := fmt.Sprintf("第%d章审阅提醒：%s", review.Chapter, utils.TruncateRunes(issue.Description, 36))
+				if strings.EqualFold(lang, "vi") {
+					reason = "Đánh giá gần nhất chỉ ra cần tránh lặp lại vấn đề"
+					summary = fmt.Sprintf("Nhắc nhở thẩm định chương %d: %s", review.Chapter, utils.TruncateRunes(issue.Description, 36))
+				} else if strings.EqualFold(lang, "en") {
+					reason = "Recent review noted recurrence to avoid"
+					summary = fmt.Sprintf("Chapter %d review reminder: %s", review.Chapter, utils.TruncateRunes(issue.Description, 36))
+				}
 				add(domain.RecallItem{
 					Kind:    "review_lesson",
 					Key:     fmt.Sprintf("review-%d-issue-%d", review.Chapter, i),
 					Chapter: review.Chapter,
-					Reason:  "最近审阅指出需要避免重复问题",
-					Summary: fmt.Sprintf("第%d章审阅提醒：%s", review.Chapter, utils.TruncateRunes(issue.Description, 36)),
+					Reason:  reason,
+					Summary: summary,
 				})
 			}
 			if len(items) >= 3 {

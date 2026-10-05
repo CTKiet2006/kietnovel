@@ -43,7 +43,11 @@ func TestLoad_NoOverrides(t *testing.T) {
 	if b.Voice != mustRead(voiceFS, "voice.md") {
 		t.Fatal("无覆盖时 Voice 应与内置逐字节一致")
 	}
-	if b.References.AntiAITone != mustRead(referencesFS, "references/anti-ai-tone.md") {
+	expectedAntiAI := mustRead(referencesFS, "references/anti-ai-tone.md")
+	if b.Language == "vi" {
+		expectedAntiAI = mustRead(referencesFS, "references/anti-ai-tone_vi.md")
+	}
+	if b.References.AntiAITone != expectedAntiAI {
 		t.Fatal("无覆盖时 AntiAITone 应与内置逐字节一致")
 	}
 	if _, ok := b.Styles["default"]; !ok {
