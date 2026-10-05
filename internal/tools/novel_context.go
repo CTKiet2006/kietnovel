@@ -163,15 +163,18 @@ func (t *ContextTool) Execute(_ context.Context, args json.RawMessage) (json.Raw
 	if a.Chapter < 0 || a.Volume < 0 || a.Arc < 0 {
 		return nil, fmt.Errorf("chapter, volume and arc must be >= 0")
 	}
+	result := make(map[string]any)
+	reads := &contextReads{}
 	if a.Chapter > 0 && (a.Volume > 0 || a.Arc > 0) {
-		return nil, fmt.Errorf("chapter cannot be combined with volume or arc")
+		// Tự sửa thay vì văng lỗi: model (nhất là qua cầu JSON text-only)
+		// hay gộp chapter với volume/arc. Chapter là ngữ cảnh viết cụ thể
+		// nên ưu tiên, bỏ volume/arc kèm cảnh báo để model thấy.
+		reads.warnings = append(reads.warnings, fmt.Sprintf("novel_context: chapter=%d không gộp với volume/arc — đã tự bỏ volume=%d arc=%d, chỉ trả ngữ cảnh chương %d", a.Chapter, a.Volume, a.Arc, a.Chapter))
+		a.Volume, a.Arc = 0, 0
 	}
 	if (a.Volume > 0) != (a.Arc > 0) {
 		return nil, fmt.Errorf("volume and arc must be provided together")
 	}
-
-	result := make(map[string]any)
-	reads := &contextReads{}
 
 	if a.Chapter > 0 {
 		// Writer path: load the full foundation data + chapter context
