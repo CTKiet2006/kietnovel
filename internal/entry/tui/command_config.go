@@ -180,7 +180,7 @@ func (s *modelConfigState) applyProviderChoice(choice configProviderChoice) {
 	if s.provider == "chatgpt-web" {
 		s.providerType = "openai"
 		s.api = "responses"
-		s.models = []bootstrap.ModelConfig{{Name: "chatgpt-web/gpt-5.6-luna", ContextWindow: 1050000}}
+		s.models = []bootstrap.ModelConfig{{Name: "chatgpt-web/gpt-5.6-luna", ContextWindow: 24000}}
 	}
 	s.step = configStepHub
 }

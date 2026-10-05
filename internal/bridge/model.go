@@ -246,17 +246,69 @@ func (m *Model) doRequest(ctx context.Context, prompt string) (string, error) {
 	return text, nil
 }
 
-// toolCatalog dựng danh sách tool cho vào prompt khi bridge không forward
-// tools native. Model chỉ được trả đúng 1 JSON object.
+// toolCatalog dựng danh sách tool gọn cho vào prompt khi bridge không
+// forward tools native. Chỉ giữ tên + required fields + type, không nhét
+// full JSON schema (description dài từng property) để tiết kiệm budget
+// browser 28k của Luna Free.
 func toolCatalog(tools []agentcore.ToolSpec) string {
 	var sb strings.Builder
 	for _, t := range tools {
-		params, _ := json.Marshal(t.Parameters)
-		if string(params) == "" || string(params) == "null" {
-			params = []byte(`{"type":"object"}`)
+		sb.WriteString("- " + t.Name)
+		if t.Description != "" {
+			desc := strings.TrimSpace(t.Description)
+			// Cắt mô tả dài, giữ 1 dòng đầu.
+			if i := strings.Index(desc, "\n"); i >= 0 {
+				desc = strings.TrimSpace(desc[:i])
+			}
+			if len(desc) > 160 {
+				desc = desc[:160] + "..."
+			}
+			sb.WriteString(": " + desc)
 		}
-		fmt.Fprintf(&sb, "- %s: %s\n  args schema: %s\n", t.Name, t.Description, string(params))
+		sb.WriteString("\n  args: " + compactSchema(t.Parameters))
+		sb.WriteString("\n")
 	}
+	return sb.String()
+}
+
+// compactSchema trích required + type từng property từ JSON schema,
+// bỏ description dài. Không parse được thì trả {} để model tự đoán.
+func compactSchema(params any) string {
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return "{}"
+	}
+	var sch struct {
+		Properties map[string]struct {
+			Type string `json:"type"`
+		} `json:"properties"`
+		Required []string `json:"required"`
+	}
+	if err := json.Unmarshal(raw, &sch); err != nil || len(sch.Properties) == 0 {
+		return "{}"
+	}
+	var sb strings.Builder
+	sb.WriteString("{")
+	req := make(map[string]bool, len(sch.Required))
+	for _, r := range sch.Required {
+		req[r] = true
+	}
+	i := 0
+	for name, p := range sch.Properties {
+		if i > 0 {
+			sb.WriteString(",")
+		}
+		typ := p.Type
+		if typ == "" {
+			typ = "string"
+		}
+		fmt.Fprintf(&sb, "%s:%s", name, typ)
+		if req[name] {
+			sb.WriteString("*")
+		}
+		i++
+	}
+	sb.WriteString("} (*=bắt buộc)")
 	return sb.String()
 }
 
