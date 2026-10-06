@@ -229,7 +229,8 @@ func compactText(role agentcore.Role, toolName, text string) string {
 	switch toolName {
 	case "novel_context":
 		summary := extractJSONField(text, "_loading_summary")
-		return fmt.Sprintf("[session_compact: novel_context %dB | %s]", len(text), summary)
+		keep := extractNovelContextKeep(text)
+		return fmt.Sprintf("[session_compact: novel_context %dB | %s]\n%s", len(text), summary, keep)
 	case "read_chapter":
 		chars := utf8.RuneCountInString(text)
 		return fmt.Sprintf("[session_compact: read_chapter %d字 | 见 chapters/]", chars)
@@ -302,6 +303,73 @@ func compactFoundationArgs(tc *agentcore.ToolCall) *agentcore.ToolCall {
 	clone := *tc
 	clone.Args, _ = json.Marshal(args)
 	return &clone
+}
+
+// extractNovelContextKeep trích phần hành động được từ novel_context JSON:
+// dàn ý chương hiện tại + đuôi chương trước + contract. Placeholder cũ chỉ
+// giữ _loading_summary nên model đói nội dung, cứ gọi lại novel_context
+// hoài không sang draft. Giữ dưới ~2500 ký tự để không vỡ budget.
+func extractNovelContextKeep(jsonStr string) string {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(jsonStr), &m); err != nil {
+		return ""
+	}
+	var sb strings.Builder
+	write := func(label, s string, cap int) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		if len(s) > cap {
+			s = s[:cap] + "..."
+		}
+		sb.WriteString(label + ": " + s + "\n")
+	}
+	// working_memory: dàn ý chương, contract, đuôi chương trước, checkpoint.
+	if raw, ok := m["working_memory"]; ok {
+		var wm map[string]json.RawMessage
+		if json.Unmarshal(raw, &wm) == nil {
+			for _, k := range []string{"current_chapter_outline", "chapter_contract", "previous_tail", "checkpoint", "next_chapter_outline"} {
+				if v, ok := wm[k]; ok {
+					var s string
+					if json.Unmarshal(v, &s) == nil {
+						write(k, s, 800)
+					} else {
+						write(k, string(v), 800)
+					}
+				}
+			}
+			// chapter_plan: chỉ giữ khế ước + beats chính.
+			if v, ok := wm["chapter_plan"]; ok {
+				var cp map[string]json.RawMessage
+				if json.Unmarshal(v, &cp) == nil {
+					var beats []string
+					for _, k := range []string{"goal", "beats", "emotion_target", "hook_goal"} {
+						if b, ok := cp[k]; ok {
+							var s string
+							if json.Unmarshal(b, &s) == nil {
+								beats = append(beats, k+"="+s)
+							} else if len(b) < 600 {
+								beats = append(beats, k+"="+string(b))
+							}
+						}
+					}
+					if len(beats) > 0 {
+						write("chapter_plan", strings.Join(beats, "; "), 800)
+					}
+				}
+			}
+		}
+	}
+	// Cảnh báo tool (ví dụ tự bỏ volume/arc) phải lộ ra để model không gọi sai lại.
+	if raw, ok := m["_warnings"]; ok {
+		write("warnings", string(raw), 500)
+	}
+	out := strings.TrimSpace(sb.String())
+	if len(out) > 2500 {
+		out = out[:2500] + "..."
+	}
+	return out
 }
 
 // extractJSONField extracts the string value of a given field from a JSON string.
